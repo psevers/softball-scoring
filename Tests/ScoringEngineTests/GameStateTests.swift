@@ -1,0 +1,734 @@
+import Foundation
+import Testing
+@testable import SoftballScoring
+
+struct GameStateTests {
+    private let pitcherID = UUID()
+
+    @Test func initialStateStartsTopFirstWithEmptyCountAndBases() {
+        let state = GameState()
+        #expect(state.inning == 1)
+        #expect(state.half == .top)
+        #expect(state.outs == 0)
+        #expect(state.balls == 0)
+        #expect(state.strikes == 0)
+        #expect(state.baseRunnerSlots.allSatisfy { $0 == nil })
+        #expect(state.currentOpponentBatterSlot == 1)
+        #expect(!state.isAwaitingBallInPlayResult)
+    }
+
+    @Test func fourthBallCompletesWalkResetsCountAndAdvancesBatter() {
+        let state = replayPitches([.ball, .ball, .ball, .ball])
+        #expect(state.balls == 0)
+        #expect(state.strikes == 0)
+        #expect(state.firstBaseRunnerSlot == 1)
+        #expect(state.currentOpponentBatterSlot == 2)
+        #expect(state.pitchCount(for: pitcherID) == PitchCount(total: 4, balls: 4, strikes: 0))
+    }
+
+    @Test func twoStrikeFoulDoesNotCreateStrikeoutButCountsAsStrikePitch() {
+        let state = replayPitches([.calledStrike, .swingingStrike, .foul])
+        #expect(state.strikes == 2)
+        #expect(state.outs == 0)
+        #expect(state.currentOpponentBatterSlot == 1)
+        #expect(state.pitchCount(for: pitcherID) == PitchCount(total: 3, balls: 0, strikes: 3))
+    }
+
+    @Test func hitByPitchCountsAsPitchButNotBallOrStrikeAndAwardsFirst() {
+        let state = replayPitches([.hitByPitch])
+        #expect(state.firstBaseRunnerSlot == 1)
+        #expect(state.currentOpponentBatterSlot == 2)
+        #expect(state.pitchCount(for: pitcherID) == PitchCount(total: 1, balls: 0, strikes: 0))
+    }
+
+    @Test func loadedWalkAndHitByPitchForceOneRun() {
+        for result in [PitchResult.ball, .hitByPitch] {
+            var state = GameState()
+            state.half = .top
+            state.firstBaseRunnerSlot = 1
+            state.secondBaseRunnerSlot = 2
+            state.thirdBaseRunnerSlot = 3
+            state.currentOpponentBatterSlot = 4
+            state.balls = result == .ball ? 3 : 0
+
+            GameReducer.apply(
+                makePitchEvent(result, batterSlot: 4),
+                to: &state,
+                trackedTeamHomeAway: .home
+            )
+
+            #expect(state.awayScore == 1)
+            #expect(state.firstBaseRunnerSlot == 4)
+            #expect(state.secondBaseRunnerSlot == 1)
+            #expect(state.thirdBaseRunnerSlot == 2)
+        }
+    }
+
+    @Test func ballInPlayPitchCountsImmediatelyAndPausesPitching() {
+        let state = replayPitches([.ball, .calledStrike, .ballInPlay])
+        #expect(state.isAwaitingBallInPlayResult)
+        #expect(state.balls == 1)
+        #expect(state.strikes == 1)
+        #expect(state.pitchCount(for: pitcherID) == PitchCount(total: 3, balls: 1, strikes: 2))
+        #expect(state.currentOpponentBatterSlot == 1)
+    }
+
+    @Test func additionalPitchIsIgnoredWhileBallInPlayResultIsPending() {
+        var state = replayPitches([.ballInPlay])
+        let before = state
+        GameReducer.apply(makePitchEvent(.ball, batterSlot: 1, sequence: 2), to: &state, trackedTeamHomeAway: .home)
+        #expect(state == before)
+    }
+
+    @Test func singleWithEmptyBasesPutsBatterOnFirstAndCompletesPlateAppearance() {
+        var state = replayPitches([.ballInPlay])
+        applyPlay(
+            BallInPlayEvent(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ),
+            to: &state
+        )
+
+        #expect(state.firstBaseRunnerSlot == 1)
+        #expect(state.currentOpponentBatterSlot == 2)
+        #expect(state.balls == 0)
+        #expect(state.strikes == 0)
+        #expect(!state.isAwaitingBallInPlayResult)
+    }
+
+    @Test func doubleCanAdvanceRunnerFirstToThird() {
+        var state = GameState()
+        state.half = .top
+        state.firstBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .double,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .second),
+                .init(source: .first, destination: .third)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == nil)
+        applyPlay(play, to: &state)
+
+        #expect(state.secondBaseRunnerSlot == 2)
+        #expect(state.thirdBaseRunnerSlot == 1)
+        #expect(state.firstBaseRunnerSlot == nil)
+    }
+
+    @Test func grandSlamScoresFourAndClearsBases() {
+        var state = GameState()
+        state.half = .top
+        state.firstBaseRunnerSlot = 1
+        state.secondBaseRunnerSlot = 2
+        state.thirdBaseRunnerSlot = 3
+        state.currentOpponentBatterSlot = 4
+        setPendingBallInPlay(on: &state, batterSlot: 4)
+
+        let play = BallInPlayEvent(
+            outcome: .homeRun,
+            opponentBatterSlot: 4,
+            movements: [
+                .init(source: .batter, destination: .home),
+                .init(source: .first, destination: .home),
+                .init(source: .second, destination: .home),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 4,
+            thirdOutRunsCounted: nil
+        )
+        applyPlay(play, to: &state)
+
+        #expect(state.awayScore == 4)
+        #expect(state.baseRunnerSlots.allSatisfy { $0 == nil })
+        #expect(state.currentOpponentBatterSlot == 5)
+    }
+
+    @Test func homeRunValidatesFromEveryStartingBaseState() {
+        for occupancyMask in 0..<8 {
+            var state = GameState()
+            state.half = .top
+            state.firstBaseRunnerSlot = occupancyMask & 1 == 0 ? nil : 1
+            state.secondBaseRunnerSlot = occupancyMask & 2 == 0 ? nil : 2
+            state.thirdBaseRunnerSlot = occupancyMask & 4 == 0 ? nil : 3
+            state.currentOpponentBatterSlot = 4
+            setPendingBallInPlay(on: &state, batterSlot: 4)
+
+            let movements = state.occupiedRunnerSources.map {
+                RunnerMovementEvent(source: $0, destination: .home)
+            }
+            let play = BallInPlayEvent(
+                outcome: .homeRun,
+                opponentBatterSlot: 4,
+                movements: movements,
+                rbi: movements.count,
+                thirdOutRunsCounted: nil
+            )
+
+            #expect(
+                BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == nil,
+                "occupancy mask \(occupancyMask)"
+            )
+        }
+    }
+
+    @Test func validatorRejectsMissingUnexpectedAndDuplicateRunnerSources() {
+        var state = GameState()
+        state.half = .top
+        state.firstBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let missing = BallInPlayEvent(
+            outcome: .single,
+            opponentBatterSlot: 2,
+            movements: [.init(source: .batter, destination: .first)],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+        #expect(BallInPlayValidator.validate(missing, state: state, trackedTeamHomeAway: .home) == .missingRunner(.first))
+
+        var emptyState = GameState()
+        emptyState.half = .top
+        setPendingBallInPlay(on: &emptyState, batterSlot: 1)
+        let unexpected = BallInPlayEvent(
+            outcome: .single,
+            opponentBatterSlot: 1,
+            movements: [
+                .init(source: .batter, destination: .first),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 1,
+            thirdOutRunsCounted: nil
+        )
+        #expect(BallInPlayValidator.validate(unexpected, state: emptyState, trackedTeamHomeAway: .home) == .unexpectedRunner(.third))
+
+        let duplicate = BallInPlayEvent(
+            outcome: .single,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .first),
+                .init(source: .first, destination: .second),
+                .init(source: .first, destination: .third)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+        #expect(BallInPlayValidator.validate(duplicate, state: state, trackedTeamHomeAway: .home) == .duplicateRunner(.first))
+    }
+
+    @Test func runnerMayHoldAndCreditedHitBatterMayBeOut() {
+        var state = GameState()
+        state.half = .top
+        state.firstBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .single,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .first, destination: .first)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == nil)
+    }
+
+    @Test func playCannotCreateMoreThanThreeOuts() {
+        var state = GameState()
+        state.half = .top
+        state.outs = 2
+        state.firstBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .doublePlay,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .first, destination: .out)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == .tooManyOuts)
+    }
+
+    @Test func representativeTripleErrorOutAndSacrificeBuntOutcomesValidate() {
+        for (outcome, destination) in [
+            (BallInPlayOutcome.triple, RunnerDestination.third),
+            (.reachedOnError, .first),
+            (.lineOut, .out),
+            (.popOut, .out)
+        ] {
+            var state = GameState()
+            state.half = .top
+            setPendingBallInPlay(on: &state, batterSlot: 1)
+            let play = BallInPlayEvent(
+                outcome: outcome,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: destination)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            )
+            #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == nil)
+        }
+
+        var sacrificeState = GameState()
+        sacrificeState.half = .top
+        sacrificeState.firstBaseRunnerSlot = 1
+        sacrificeState.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &sacrificeState, batterSlot: 2)
+        let sacrifice = BallInPlayEvent(
+            outcome: .sacrificeBunt,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .first, destination: .second)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+        #expect(BallInPlayValidator.validate(sacrifice, state: sacrificeState, trackedTeamHomeAway: .home) == nil)
+    }
+
+    @Test func validatorRejectsTwoRunnersEndingOnSameBase() {
+        var state = GameState()
+        state.half = .top
+        state.firstBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .single,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .first),
+                .init(source: .first, destination: .first)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == .baseCollision(.first))
+    }
+
+    @Test func validatorRejectsRunnerMovingBackward() {
+        var state = GameState()
+        state.half = .top
+        state.secondBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .single,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .second),
+                .init(source: .second, destination: .first)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == .illegalDestination(.second, .first))
+    }
+
+    @Test func validatorRejectsTrailingRunnerPassingRunnerAhead() {
+        var state = GameState()
+        state.half = .top
+        state.firstBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .single,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .second),
+                .init(source: .first, destination: .first)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == .illegalDestination(.batter, .second))
+    }
+
+    @Test func validatorRequiresDispositionWhenRunAndThirdOutOccurTogether() {
+        var state = GameState()
+        state.half = .top
+        state.outs = 2
+        state.thirdBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .flyOut,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == .missingThirdOutRunCount)
+    }
+
+    @Test func runCanBeExplicitlySuppressedOnThirdOut() {
+        var state = GameState()
+        state.half = .top
+        state.outs = 2
+        state.thirdBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .flyOut,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: 0,
+            thirdOutClassification: .forceOrBatterRunner
+        )
+        applyPlay(play, to: &state)
+
+        #expect(state.awayScore == 0)
+        #expect(state.half == .bottom)
+        #expect(state.outs == 0)
+    }
+
+    @Test func runCanExplicitlyCountBeforeNonForceThirdOut() {
+        var state = GameState()
+        state.half = .top
+        state.outs = 2
+        state.secondBaseRunnerSlot = 1
+        state.thirdBaseRunnerSlot = 2
+        state.currentOpponentBatterSlot = 3
+        setPendingBallInPlay(on: &state, batterSlot: 3)
+
+        let play = BallInPlayEvent(
+            outcome: .single,
+            opponentBatterSlot: 3,
+            movements: [
+                .init(source: .batter, destination: .first),
+                .init(source: .second, destination: .out),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 1,
+            thirdOutRunsCounted: 1,
+            thirdOutClassification: .timingPlay
+        )
+        applyPlay(play, to: &state)
+
+        #expect(state.awayScore == 1)
+        #expect(state.half == .bottom)
+    }
+
+    @Test func doublePlayRecordsExactlyTwoOuts() {
+        var state = GameState()
+        state.half = .top
+        state.firstBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .doublePlay,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .first, destination: .out)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+        applyPlay(play, to: &state)
+        #expect(state.outs == 2)
+        #expect(state.baseRunnerSlots.allSatisfy { $0 == nil })
+    }
+
+    @Test func timingPlayCanCountOnlySomeHomeTouches() {
+        var state = GameState()
+        state.half = .top
+        state.outs = 1
+        state.secondBaseRunnerSlot = 1
+        state.thirdBaseRunnerSlot = 2
+        state.currentOpponentBatterSlot = 3
+        setPendingBallInPlay(on: &state, batterSlot: 3)
+
+        let play = BallInPlayEvent(
+            outcome: .doublePlay,
+            opponentBatterSlot: 3,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .second, destination: .out),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 1,
+            thirdOutRunsCounted: 1,
+            thirdOutClassification: .timingPlay
+        )
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == nil)
+        applyPlay(play, to: &state)
+        #expect(state.awayScore == 1)
+        #expect(state.half == .bottom)
+    }
+
+    @Test func rbiCannotExceedRunsThatCountOnThirdOut() {
+        var state = GameState()
+        state.half = .top
+        state.outs = 2
+        state.thirdBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .flyOut,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 1,
+            thirdOutRunsCounted: 0,
+            thirdOutClassification: .forceOrBatterRunner
+        )
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == .invalidRBI)
+    }
+
+    @Test func ordinaryBatterOutAsThirdOutCannotCountRun() {
+        var state = GameState()
+        state.half = .top
+        state.outs = 2
+        state.thirdBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .groundOut,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 1,
+            thirdOutRunsCounted: 1,
+            thirdOutClassification: .timingPlay
+        )
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == .invalidThirdOutRunCount)
+    }
+
+    @Test func forcedThirdOutCannotCountRun() {
+        var state = GameState()
+        state.half = .top
+        state.outs = 2
+        state.firstBaseRunnerSlot = 1
+        state.thirdBaseRunnerSlot = 2
+        state.currentOpponentBatterSlot = 3
+        setPendingBallInPlay(on: &state, batterSlot: 3)
+
+        let play = BallInPlayEvent(
+            outcome: .fieldersChoice,
+            opponentBatterSlot: 3,
+            movements: [
+                .init(source: .batter, destination: .first),
+                .init(source: .first, destination: .out),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 1,
+            thirdOutRunsCounted: 1,
+            thirdOutClassification: .forceOrBatterRunner
+        )
+
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == .invalidThirdOutRunCount)
+    }
+
+    @Test func batterRunnerThirdOutInDoublePlayCannotCountRun() {
+        var state = GameState()
+        state.half = .top
+        state.outs = 1
+        state.firstBaseRunnerSlot = 1
+        state.secondBaseRunnerSlot = 2
+        state.thirdBaseRunnerSlot = 3
+        state.currentOpponentBatterSlot = 4
+        setPendingBallInPlay(on: &state, batterSlot: 4)
+
+        let play = BallInPlayEvent(
+            outcome: .doublePlay,
+            opponentBatterSlot: 4,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .first, destination: .out),
+                .init(source: .second, destination: .third),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 1,
+            thirdOutRunsCounted: 1,
+            thirdOutClassification: .forceOrBatterRunner
+        )
+
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == .invalidThirdOutRunCount)
+    }
+
+    @Test func tagThirdOutAfterEarlierForceCanCountTimingRun() {
+        var state = GameState()
+        state.half = .top
+        state.outs = 1
+        state.firstBaseRunnerSlot = 1
+        state.secondBaseRunnerSlot = 2
+        state.thirdBaseRunnerSlot = 3
+        state.currentOpponentBatterSlot = 4
+        setPendingBallInPlay(on: &state, batterSlot: 4)
+
+        let play = BallInPlayEvent(
+            outcome: .doublePlay,
+            opponentBatterSlot: 4,
+            movements: [
+                .init(source: .batter, destination: .first),
+                .init(source: .first, destination: .out),
+                .init(source: .second, destination: .out),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 1,
+            thirdOutRunsCounted: 1,
+            thirdOutClassification: .timingPlay
+        )
+
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == nil)
+    }
+
+    @Test func creditedHitBatterTaggedAdvancingCanEndTimingPlay() {
+        var state = GameState()
+        state.half = .top
+        state.outs = 2
+        state.thirdBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .single,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 1,
+            thirdOutRunsCounted: 1,
+            thirdOutClassification: .timingPlay
+        )
+
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == nil)
+        applyPlay(play, to: &state)
+        #expect(state.awayScore == 1)
+        #expect(state.half == .bottom)
+    }
+
+    @Test func sacrificeFlyRequiresRunnerToScore() {
+        var state = GameState()
+        state.half = .top
+        state.thirdBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .sacrificeFly,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .third, destination: .third)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == .outcomeMismatch)
+    }
+
+    @Test func sacrificeFlyIsRejectedWithTwoOuts() {
+        var state = GameState()
+        state.half = .top
+        state.outs = 2
+        state.thirdBaseRunnerSlot = 1
+        state.currentOpponentBatterSlot = 2
+        setPendingBallInPlay(on: &state, batterSlot: 2)
+
+        let play = BallInPlayEvent(
+            outcome: .sacrificeFly,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: 0,
+            thirdOutClassification: .forceOrBatterRunner
+        )
+        #expect(BallInPlayValidator.validate(play, state: state, trackedTeamHomeAway: .home) == .outcomeMismatch)
+    }
+
+    @Test func thirdOutTransitionsHalfAndClearsBases() {
+        let strikeout = [PitchResult.calledStrike, .calledStrike, .calledStrike]
+        let state = replayPitches(strikeout + strikeout + strikeout)
+        #expect(state.inning == 1)
+        #expect(state.half == .bottom)
+        #expect(state.outs == 0)
+        #expect(state.baseRunnerSlots.allSatisfy { $0 == nil })
+        #expect(state.currentOpponentBatterSlot == 4)
+        #expect(state.pitchCount(for: pitcherID).total == 9)
+    }
+
+    @Test func defensivePitchEventsDoNotApplyDuringTrackedTeamsOffensiveHalf() {
+        var state = GameState()
+        state.half = .top
+        let event = makePitchEvent(.ball, batterSlot: 1)
+        GameReducer.apply(event, to: &state, trackedTeamHomeAway: .away)
+        #expect(state == GameState())
+    }
+
+    private func replayPitches(_ results: [PitchResult]) -> GameState {
+        var state = GameState()
+        state.half = .top // tracked team is home, so opponent bats top
+        for (index, result) in results.enumerated() {
+            let event = makePitchEvent(result, batterSlot: state.currentOpponentBatterSlot, sequence: index + 1)
+            GameReducer.apply(event, to: &state, trackedTeamHomeAway: .home)
+        }
+        return state
+    }
+
+    private func makePitchEvent(_ result: PitchResult, batterSlot: Int, sequence: Int = 1) -> DecodedGameEvent {
+        DecodedGameEvent(
+            sequenceNumber: sequence,
+            timestamp: Date(timeIntervalSince1970: TimeInterval(sequence)),
+            body: .pitch(PitchEvent(result: result, pitcherID: pitcherID, opponentBatterSlot: batterSlot))
+        )
+    }
+
+    private func setPendingBallInPlay(on state: inout GameState, batterSlot: Int) {
+        let event = makePitchEvent(.ballInPlay, batterSlot: batterSlot)
+        GameReducer.apply(event, to: &state, trackedTeamHomeAway: .home)
+    }
+
+    private func applyPlay(_ play: BallInPlayEvent, to state: inout GameState) {
+        GameReducer.apply(
+            DecodedGameEvent(sequenceNumber: 99, timestamp: .now, body: .ballInPlay(play)),
+            to: &state,
+            trackedTeamHomeAway: .home
+        )
+    }
+}
