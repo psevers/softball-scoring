@@ -12,7 +12,7 @@
 
 - Variable batting orders with exactly nine independent defensive assignments.
 - Scrollable lineup setup with a persistently reachable Start Game action.
-- Innings-based or time-limited game setup, persisted format display, and informational countdown.
+- Innings-based or 30–90 minute wheel-selected game setup, persisted format display, and informational countdown.
 
 ## Next
 

@@ -14,23 +14,34 @@ struct NewGameFlowView: View {
     @State private var seasonID: UUID?
     @State private var gameFormat: GameFormat = .innings
     @State private var regulationInnings = 7
-    @State private var timeLimitMinutes = 75
+    @State private var timeLimitMinutes = GameSetupValidation.defaultTimeLimitMinutes
     @State private var lineup: [LineupDraftEntry] = []
     @State private var startingPitcherID: UUID?
     @State private var saveErrorMessage: String?
-    @FocusState private var isTimeLimitFocused: Bool
 
     private var activePlayers: [Player] { players.filter(\.isActive) }
     private var selectedSeason: Season? { seasons.first { $0.id == seasonID } }
     private var canContinue: Bool {
-        !opponentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && selectedSeason != nil
-            && (gameFormat != .timeLimit || timeLimitMinutes > 0)
+        GameSetupValidation.canContinue(
+            opponentName: opponentName,
+            seasonID: selectedSeason?.id,
+            format: gameFormat,
+            timeLimitMinutes: timeLimitMinutes
+        )
     }
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    ScorebookPageHeader(
+                        title: "Game Card",
+                        subtitle: "Set the matchup, format, and batting order",
+                        systemImage: "pencil.and.scribble"
+                    )
+                }
+                .listRowBackground(Color.clear)
+
                 Section("Game") {
                     TextField("Opponent", text: $opponentName)
                         .textInputAutocapitalization(.words)
@@ -74,15 +85,7 @@ struct NewGameFlowView: View {
                     case .innings:
                         Stepper("Regulation innings: \(regulationInnings)", value: $regulationInnings, in: 1...12)
                     case .timeLimit:
-                        LabeledContent("Time limit") {
-                            TextField("Minutes", value: $timeLimitMinutes, format: .number)
-                                .keyboardType(.numberPad)
-                                .focused($isTimeLimitFocused)
-                                .multilineTextAlignment(.trailing)
-                                .frame(minWidth: 72)
-                            Text("minutes")
-                                .foregroundStyle(.secondary)
-                        }
+                        ScorebookDurationPicker(minutes: $timeLimitMinutes)
                     }
                 }
 
@@ -102,16 +105,13 @@ struct NewGameFlowView: View {
                     Text("Add the full batting order, then assign the nine defensive positions. Batting-only players can remain without a position.")
                 }
             }
+            .accessibilityIdentifier("game.setup.form")
             .scorebookFormBackground()
             .navigationTitle("New Game")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { isTimeLimitFocused = false }
                 }
             }
             .alert("Could Not Start Game", isPresented: Binding(
@@ -125,11 +125,6 @@ struct NewGameFlowView: View {
             .onAppear {
                 if seasonID == nil {
                     seasonID = seasons.first(where: \.isActive)?.id ?? seasons.first?.id
-                }
-            }
-            .onChange(of: gameFormat) { _, newValue in
-                if newValue != .timeLimit {
-                    isTimeLimitFocused = false
                 }
             }
         }
@@ -178,6 +173,48 @@ struct NewGameFlowView: View {
     }
 }
 
+private struct ScorebookDurationPicker: View {
+    @Binding var minutes: Int
+    @ScaledMetric(relativeTo: .body) private var wheelHeight: CGFloat = 128
+
+    var body: some View {
+        VStack(spacing: AppTheme.Spacing.sm) {
+            HStack(alignment: .firstTextBaseline) {
+                Label("Time Limit", systemImage: "timer")
+                    .font(.system(.headline, design: .serif))
+                    .foregroundStyle(AppTheme.graphite)
+
+                Spacer()
+
+                Text("\(minutes)")
+                    .font(.system(.largeTitle, design: .serif, weight: .medium).monospacedDigit())
+                    .foregroundStyle(AppTheme.graphite)
+                Text("MIN")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppTheme.graphite.opacity(0.62))
+            }
+
+            PencilRule()
+
+            Picker("Time limit", selection: $minutes) {
+                ForEach(GameSetupValidation.timeLimitOptions, id: \.self) { option in
+                    Text("\(option) minutes").tag(option)
+                }
+            }
+            .pickerStyle(.wheel)
+            .frame(height: min(wheelHeight, 180))
+            .clipped()
+            .accessibilityIdentifier("game.timeLimit.picker")
+
+            Text("The timer is a reminder; it never finalizes the game automatically.")
+                .font(.caption.italic())
+                .foregroundStyle(AppTheme.graphite.opacity(0.66))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, AppTheme.Spacing.xs)
+    }
+}
+
 struct LineupDraftEntry: Identifiable, Equatable {
     let playerID: UUID
     var position: DefensivePosition?
@@ -205,15 +242,20 @@ private struct LineupBuilderView: View {
         VStack(spacing: 0) {
             List {
                 Section {
-                    HStack {
-                        Label("Batting Order", systemImage: "person.3.fill")
-                        Spacer()
+                    VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+                        ScorebookPageHeader(
+                            title: "Lineup Card",
+                            subtitle: "Batting order and nine defensive assignments",
+                            systemImage: "list.number"
+                        )
+
                         Text("\(lineup.count) batters · \(defenderCount) / \(LineupValidation.requiredDefenderCount) fielders")
-                            .monospacedDigit()
-                            .foregroundStyle(defenderCount == LineupValidation.requiredDefenderCount ? AppTheme.accent : .secondary)
+                            .font(.system(.subheadline, design: .serif).monospacedDigit())
+                            .foregroundStyle(defenderCount == LineupValidation.requiredDefenderCount ? AppTheme.graphite : .secondary)
                             .accessibilityIdentifier("lineup.summary")
                     }
                 }
+                .listRowBackground(AppTheme.paper.opacity(0.82))
 
                 if !lineup.isEmpty {
                     Section("Batting Order") {

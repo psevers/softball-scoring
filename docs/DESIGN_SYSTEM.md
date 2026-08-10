@@ -31,6 +31,8 @@ Live scoring, box score, lineup, and play history should feel like contiguous pa
 
 Roster/season editors may remain closer to native Forms. Apply the paper background and rule language but do not make basic data entry slower.
 
+Game setup and lineup are scorebook pages rather than generic administration. They use ruled paper, a faint scorebook margin, graphite marks, serif page headings, and pencil-rule dividers while retaining native fields, pickers, and buttons.
+
 ### Interaction invariants
 
 - 44pt minimum target.
@@ -51,6 +53,7 @@ Roster/season editors may remain closer to native Forms. Apply the paper backgro
 - runner movement row
 - play log row
 - stat row
+- scorebook duration wheel with large minute readout
 
 ### Reference design
 

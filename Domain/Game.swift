@@ -21,6 +21,25 @@ enum GameFormat: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+struct GameSetupValidation {
+    static let timeLimitOptions = Array(stride(from: 30, through: 90, by: 5))
+    static let defaultTimeLimitMinutes = 75
+
+    static func canContinue(
+        opponentName: String,
+        seasonID: UUID?,
+        format: GameFormat,
+        timeLimitMinutes: Int
+    ) -> Bool {
+        guard !opponentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              seasonID != nil else {
+            return false
+        }
+
+        return format != .timeLimit || timeLimitOptions.contains(timeLimitMinutes)
+    }
+}
+
 @Model
 final class Game {
     @Attribute(.unique) var id: UUID
@@ -100,8 +119,8 @@ final class Game {
         createdAt: Date = .now
     ) {
         precondition(
-            timeLimitMinutes.map { $0 > 0 } ?? (regulationInnings > 0),
-            "A game requires a positive inning count or time limit."
+            timeLimitMinutes.map { GameSetupValidation.timeLimitOptions.contains($0) } ?? (regulationInnings > 0),
+            "A game requires a positive inning count or a supported time limit."
         )
         self.id = id
         self.seasonID = seasonID

@@ -3,6 +3,76 @@ import Testing
 @testable import SoftballScoring
 
 struct GameTests {
+    @Test func timeLimitOptionsCoverThirtyThroughNinetyMinutes() {
+        let options = GameSetupValidation.timeLimitOptions
+
+        #expect(options.first == 30)
+        #expect(options.last == 90)
+        #expect(options.count == 13)
+        #expect(zip(options, options.dropFirst()).allSatisfy { current, next in
+            next - current == 5
+        })
+        #expect(GameSetupValidation.defaultTimeLimitMinutes == 75)
+    }
+
+    @Test func gameSetupAcceptsOnlySupportedTimeLimits() {
+        let seasonID = UUID()
+
+        #expect(GameSetupValidation.canContinue(
+            opponentName: "Thunder",
+            seasonID: seasonID,
+            format: .timeLimit,
+            timeLimitMinutes: 30
+        ))
+        #expect(GameSetupValidation.canContinue(
+            opponentName: "Thunder",
+            seasonID: seasonID,
+            format: .timeLimit,
+            timeLimitMinutes: 90
+        ))
+        #expect(!GameSetupValidation.canContinue(
+            opponentName: "Thunder",
+            seasonID: seasonID,
+            format: .timeLimit,
+            timeLimitMinutes: 29
+        ))
+        #expect(!GameSetupValidation.canContinue(
+            opponentName: "Thunder",
+            seasonID: seasonID,
+            format: .timeLimit,
+            timeLimitMinutes: 91
+        ))
+        #expect(!GameSetupValidation.canContinue(
+            opponentName: "Thunder",
+            seasonID: seasonID,
+            format: .timeLimit,
+            timeLimitMinutes: 31
+        ))
+    }
+
+    @Test func gameSetupRequiresOpponentAndSeasonForEveryFormat() {
+        let seasonID = UUID()
+
+        #expect(!GameSetupValidation.canContinue(
+            opponentName: "   ",
+            seasonID: seasonID,
+            format: .innings,
+            timeLimitMinutes: 31
+        ))
+        #expect(!GameSetupValidation.canContinue(
+            opponentName: "Thunder",
+            seasonID: nil,
+            format: .innings,
+            timeLimitMinutes: 31
+        ))
+        #expect(GameSetupValidation.canContinue(
+            opponentName: "Thunder",
+            seasonID: seasonID,
+            format: .innings,
+            timeLimitMinutes: 31
+        ))
+    }
+
     @Test func gameRoundTripsSetupValues() {
         let seasonID = UUID()
         let pitcherID = UUID()
@@ -40,13 +110,13 @@ struct GameTests {
         let game = Game(
             seasonID: UUID(),
             opponentName: "Thunder",
-            timeLimitMinutes: 3,
+            timeLimitMinutes: 30,
             status: .inProgress,
             startedAt: start
         )
 
-        #expect(game.timeStatus(at: start.addingTimeInterval(65)) == "1:55 remaining")
-        #expect(game.timeStatus(at: start.addingTimeInterval(180)) == "Time expired")
+        #expect(game.timeStatus(at: start.addingTimeInterval(65)) == "28:55 remaining")
+        #expect(game.timeStatus(at: start.addingTimeInterval(1_800)) == "Time expired")
         #expect(game.status == .inProgress)
     }
 
@@ -55,10 +125,11 @@ struct GameTests {
         let game = Game(
             seasonID: UUID(),
             opponentName: "Thunder",
-            timeLimitMinutes: Int.max,
+            timeLimitMinutes: 75,
             startedAt: start
         )
 
+        game.regulationInnings = -Int.max
         #expect(game.timeStatus(at: start) != nil)
 
         game.regulationInnings = 0

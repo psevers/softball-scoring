@@ -80,6 +80,8 @@ Across representative:
 - Duplicate players, missing/duplicate regulation positions, more than nine defenders, and a pitcher not assigned P are rejected.
 - Full batting order and defensive assignments survive persistence.
 - Innings-based and time-limited formats survive persistence.
+- Time-limit setup offers 30–90 minutes in five-minute stops without opening a keyboard.
+- Both time-limit endpoints and Set Lineup remain reachable by touch on a small iPhone.
 - Timed status reaches expiration without silently finalizing the game.
 
 ## Roster and lineup reachability

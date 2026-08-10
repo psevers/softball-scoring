@@ -37,6 +37,8 @@ https://github.com/psevers/softball-scoring
 - RBI placeholder is captured and cannot exceed legally counted runs.
 - Third out advances half-inning and clears bases/count.
 - Live defense uses the approved pencil-scorebook surface for pitch → outcome → runner-confirm flow.
+- Game setup and lineup use ruled paper, graphite/serif page headings, and pencil-rule dividers instead of a flat tinted Form.
+- Time-limited games use a keyboard-free 30–90 minute wheel in five-minute stops.
 
 ## Validation performed
 
@@ -44,9 +46,9 @@ On macOS with Xcode 26.6 and an iPhone 17 / iOS 26.5 simulator:
 
 - `xcodegen generate`: **PASS**
 - App build: **PASS**
-- Domain tests: **33 PASS**
+- Domain tests: **36 PASS**
 - Scoring-engine tests: **33 PASS**
-- UI scrolling tests: **2 PASS**
+- UI workflow tests: **3 PASS**
 - App install/launch smoke test: **PASS**
 
 The first Xcode test run exposed missing generated test-bundle Info.plists; `project.yml` now enables generated Info.plists for both test targets. The adversarial checkpoint also fixed runner-passing, force-third-out scoring, stale-snapshot duplicate sequences, invalid durable game values, and added persistence/replay boundary tests. Third-out events now persist whether the decisive out was a force/batter-runner out or a timing play.
@@ -56,6 +58,8 @@ The Slice 4 checkpoint manual evidence covered app install, launch, and the rend
 Post-checkpoint field-feedback verification additionally covers a real 13-player roster in the iPhone 17 simulator: all batters could be added, the list scrolled through players 12–13 and the starting-pitcher control, reorder mode exposed every move action, and Start Game remained pinned and reachable at both standard and accessibility-extra-large Dynamic Type sizes.
 
 Automated XCUITest coverage now synthesizes finger drags on an isolated 14-player roster, including the smallest installed iPhone 17e simulator. It verifies that Team reaches and opens a player in the Inactive section, and that Set Lineup can build, save, and open a complete 14-player game while keeping the final batter and Start Game reachable.
+
+Time-limit setup coverage verifies the keyboard-free wheel at both 30 and 90 minutes and confirms Set Lineup remains reachable. Simulator visual inspection covers the ruled-paper Game Card, graphite/serif hierarchy, pencil rules, and large timer readout.
 
 Earlier source-only validation:
 

@@ -2,6 +2,28 @@ import XCTest
 
 @MainActor
 final class ScrollReachabilityUITests: XCTestCase {
+    func testTimeLimitUsesKeyboardFreeThirtyToNinetyMinuteWheel() {
+        let app = launchApp()
+        app.tabBars.buttons["Games"].tap()
+        app.buttons["New Game"].tap()
+        app.buttons["Time Limit"].tap()
+
+        let wheel = app.pickerWheels.firstMatch
+        XCTAssertTrue(wheel.waitForExistence(timeout: 2))
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+
+        wheel.adjust(toPickerWheelValue: "90 minutes")
+        XCTAssertEqual(wheel.value as? String, "90 minutes")
+        wheel.adjust(toPickerWheelValue: "30 minutes")
+        XCTAssertEqual(wheel.value as? String, "30 minutes")
+
+        XCTAssertTrue(swipeUntilHittable(
+            app.buttons["Set Lineup"],
+            in: app,
+            listIdentifier: "game.setup.form"
+        ))
+    }
+
     func testTeamRosterSwipeReachesInactivePlayerAndOpensEditor() {
         let app = launchApp()
         app.tabBars.buttons["Team"].tap()
