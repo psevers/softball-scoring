@@ -18,6 +18,7 @@
 		48F2DC6E9EC7CD8BF4B83092 /* GamesHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4038A9214E82F535BE82137E /* GamesHomeView.swift */; };
 		49B04F247B8EB7E909EB8471 /* GameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6905ED25DF2F69D2830E73AD /* GameTests.swift */; };
 		4E6776BCD476166921BBC914 /* GameEventRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = C399BB1B5B64E90B0676E645 /* GameEventRecorder.swift */; };
+		4E74F09A29C76056DA60FEF9 /* ScrollReachabilityUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2440672ACBF6A868A15FEB9A /* ScrollReachabilityUITests.swift */; };
 		58AF7D0726A0CFAB397EB3B9 /* AppModelContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8EA32DA2AB799F27DFB8776 /* AppModelContainer.swift */; };
 		5C6DC47DFC5E6C2CB903CB57 /* SoftballScoringApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64827908EFF1612B175DFF63 /* SoftballScoringApp.swift */; };
 		5D5DF1847419ECB4CD2516D8 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94E4C17E1FA1CF2CF42B4B79 /* AppTheme.swift */; };
@@ -36,6 +37,7 @@
 		D58DF6361EF174D8E04E16D8 /* TeamEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CEBA89242C7B0D778E8FC08 /* TeamEditorView.swift */; };
 		D82CA0BF5C0320E74D1B3A75 /* StatsHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08E149DDB354600810587E40 /* StatsHomeView.swift */; };
 		E1646C20332027DD952CC9CB /* Player.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C7AADC42538A26CD444972C /* Player.swift */; };
+		EA0451336E724657B27A9DE4 /* UITestData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E08E8662A5820C20159E3D9F /* UITestData.swift */; };
 		EA09DEC250695E115B160C93 /* SeasonEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF7CBA90EACBA13AE0C42A34 /* SeasonEditorView.swift */; };
 		F4E49EA95C7428CE50E3D30F /* TeamHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53FC8DDB978EF857FC4A160E /* TeamHomeView.swift */; };
 		FB2710AC4AE18ACB81C18CF3 /* Team.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71CB1531392AFC77547F69B /* Team.swift */; };
@@ -57,6 +59,13 @@
 			remoteGlobalIDString = 58E40A36F3D8309DF4033481;
 			remoteInfo = SoftballScoring;
 		};
+		C627201CDE0BA997056E751F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 609748E8412B85EC4A9B700E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 58E40A36F3D8309DF4033481;
+			remoteInfo = SoftballScoring;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -68,6 +77,7 @@
 		0CF1FDE635A02CC776FDA64F /* NewGameFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewGameFlowView.swift; sourceTree = "<group>"; };
 		1625F5735183A8DFC5C26176 /* GameReducer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameReducer.swift; sourceTree = "<group>"; };
 		1CEBA89242C7B0D778E8FC08 /* TeamEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamEditorView.swift; sourceTree = "<group>"; };
+		2440672ACBF6A868A15FEB9A /* ScrollReachabilityUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollReachabilityUITests.swift; sourceTree = "<group>"; };
 		2671CF8FED59ABC7A1194C66 /* ScoringEngineTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ScoringEngineTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2C7AADC42538A26CD444972C /* Player.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Player.swift; sourceTree = "<group>"; };
 		322383DFD810D41E4B003B35 /* GameState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameState.swift; sourceTree = "<group>"; };
@@ -93,8 +103,10 @@
 		D7E5FCACB2CED201F8CD1D74 /* Game.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Game.swift; sourceTree = "<group>"; };
 		D831EE5C5C1C9EA89D6D550C /* RunnerConfirmationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerConfirmationSheet.swift; sourceTree = "<group>"; };
 		E047CD9115234F5F7DA3ADBD /* GameSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSummaryView.swift; sourceTree = "<group>"; };
+		E08E8662A5820C20159E3D9F /* UITestData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestData.swift; sourceTree = "<group>"; };
 		EB80733A9CB93CBA74705222 /* GameEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameEventTests.swift; sourceTree = "<group>"; };
 		ED845B34E7F6560586C99672 /* SoftballScoring.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SoftballScoring.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EFBD9BBE40613E21329980BA /* SoftballScoringUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SoftballScoringUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F9E5FA8B0163464FCB34F283 /* GameStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameStateTests.swift; sourceTree = "<group>"; };
 		FFE63CB059B932F01230B42E /* PlayerEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerEditorView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -160,6 +172,7 @@
 			children = (
 				C8EA32DA2AB799F27DFB8776 /* AppModelContainer.swift */,
 				C399BB1B5B64E90B0676E645 /* GameEventRecorder.swift */,
+				E08E8662A5820C20159E3D9F /* UITestData.swift */,
 			);
 			path = Persistence;
 			sourceTree = "<group>";
@@ -198,6 +211,7 @@
 			children = (
 				F00FAC642C730E18224A3E87 /* DomainTests */,
 				3CAE0193507EFD0D97B4FFE2 /* ScoringEngineTests */,
+				B2E456EA7C71BD78FE9518E4 /* SoftballScoringUITests */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -208,6 +222,7 @@
 				3959B069EAB211BA24FFD9B2 /* DomainTests.xctest */,
 				2671CF8FED59ABC7A1194C66 /* ScoringEngineTests.xctest */,
 				ED845B34E7F6560586C99672 /* SoftballScoring.app */,
+				EFBD9BBE40613E21329980BA /* SoftballScoringUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -221,6 +236,14 @@
 				322383DFD810D41E4B003B35 /* GameState.swift */,
 			);
 			path = ScoringEngine;
+			sourceTree = "<group>";
+		};
+		B2E456EA7C71BD78FE9518E4 /* SoftballScoringUITests */ = {
+			isa = PBXGroup;
+			children = (
+				2440672ACBF6A868A15FEB9A /* ScrollReachabilityUITests.swift */,
+			);
+			path = SoftballScoringUITests;
 			sourceTree = "<group>";
 		};
 		C9E38881DBE46C13267FA088 /* Games */ = {
@@ -285,6 +308,24 @@
 			productReference = ED845B34E7F6560586C99672 /* SoftballScoring.app */;
 			productType = "com.apple.product-type.application";
 		};
+		9F0023890A23DCCAA76029C3 /* SoftballScoringUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AFDEFE92FDA2B2F58B6A2876 /* Build configuration list for PBXNativeTarget "SoftballScoringUITests" */;
+			buildPhases = (
+				EAC28A0AD2BF373F9390090C /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				982E3D942F9AF1F071B6E480 /* PBXTargetDependency */,
+			);
+			name = SoftballScoringUITests;
+			packageProductDependencies = (
+			);
+			productName = SoftballScoringUITests;
+			productReference = EFBD9BBE40613E21329980BA /* SoftballScoringUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		ECF21F3E3C47E51A6A1A39A3 /* ScoringEngineTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = DC25FC1C07F2589A817ACD7B /* Build configuration list for PBXNativeTarget "ScoringEngineTests" */;
@@ -312,6 +353,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					9F0023890A23DCCAA76029C3 = {
+						TestTargetID = 58E40A36F3D8309DF4033481;
+					};
 				};
 			};
 			buildConfigurationList = F5F4C37A1EFCD3333EA27215 /* Build configuration list for PBXProject "SoftballScoring" */;
@@ -331,6 +375,7 @@
 				58E40A36F3D8309DF4033481 /* SoftballScoring */,
 				4E55871EABC09AB685EA6397 /* DomainTests */,
 				ECF21F3E3C47E51A6A1A39A3 /* ScoringEngineTests */,
+				9F0023890A23DCCAA76029C3 /* SoftballScoringUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -379,6 +424,7 @@
 				FB2710AC4AE18ACB81C18CF3 /* Team.swift in Sources */,
 				D58DF6361EF174D8E04E16D8 /* TeamEditorView.swift in Sources */,
 				F4E49EA95C7428CE50E3D30F /* TeamHomeView.swift in Sources */,
+				EA0451336E724657B27A9DE4 /* UITestData.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -390,6 +436,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		EAC28A0AD2BF373F9390090C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4E74F09A29C76056DA60FEF9 /* ScrollReachabilityUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -397,6 +451,11 @@
 			isa = PBXTargetDependency;
 			target = 58E40A36F3D8309DF4033481 /* SoftballScoring */;
 			targetProxy = 9C1C27BD9A14863419ED2C86 /* PBXContainerItemProxy */;
+		};
+		982E3D942F9AF1F071B6E480 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 58E40A36F3D8309DF4033481 /* SoftballScoring */;
+			targetProxy = C627201CDE0BA997056E751F /* PBXContainerItemProxy */;
 		};
 		D2D9DE06C94E51F04E8E509C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -438,6 +497,23 @@
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SoftballScoring.app/SoftballScoring";
+			};
+			name = Release;
+		};
+		7119592E5FB2137457956B3A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.psevers.softballscoring.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = SoftballScoring;
 			};
 			name = Release;
 		};
@@ -537,6 +613,23 @@
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SoftballScoring.app/SoftballScoring";
+			};
+			name = Debug;
+		};
+		C429B4C824ABD61ECE6B13BA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.psevers.softballscoring.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = SoftballScoring;
 			};
 			name = Debug;
 		};
@@ -641,6 +734,15 @@
 			buildConfigurations = (
 				1137087A654931EB25CB62C5 /* Debug */,
 				F926CDD2AE07BABD21B2C7FC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AFDEFE92FDA2B2F58B6A2876 /* Build configuration list for PBXNativeTarget "SoftballScoringUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C429B4C824ABD61ECE6B13BA /* Debug */,
+				7119592E5FB2137457956B3A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

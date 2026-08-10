@@ -40,6 +40,7 @@ struct TeamHomeView: View {
                 seasonsContent
             }
         }
+        .accessibilityIdentifier("team.roster.list")
         .scorebookFormBackground()
         .navigationTitle("Team")
         .toolbar {

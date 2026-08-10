@@ -81,3 +81,8 @@ Across representative:
 - Full batting order and defensive assignments survive persistence.
 - Innings-based and time-limited formats survive persistence.
 - Timed status reaches expiration without silently finalizing the game.
+
+## Roster and lineup reachability
+
+- A finger swipe reaches and opens the inactive player after a 14-player active Team roster.
+- A 14-player batting order can be built by touch, its final batter remains reachable, and Start Game saves and opens the live game.

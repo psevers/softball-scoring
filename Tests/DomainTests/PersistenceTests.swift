@@ -40,7 +40,7 @@ struct PersistenceTests {
     @Test func timedGameAndContinuousBattingOrderPersistInContainer() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext
-        let playerIDs = (0..<13).map { _ in UUID() }
+        let playerIDs = (0..<14).map { _ in UUID() }
         let game = Game(
             seasonID: UUID(),
             opponentName: "Lightning",
@@ -66,14 +66,14 @@ struct PersistenceTests {
             .filter { $0.gameID == game.id }
             .sorted { $0.battingOrder < $1.battingOrder }
         let expectedPositions: [DefensivePosition?] = LineupValidation.regulationDefensivePositions.map(Optional.some)
-            + Array(repeating: nil, count: 4)
+            + Array(repeating: nil, count: 5)
 
         #expect(storedGame.timeLimitMinutes == 75)
         #expect(storedGame.format == .timeLimit)
         #expect(storedGame.startingPitcherID == playerIDs[0])
-        #expect(storedEntries.count == 13)
+        #expect(storedEntries.count == 14)
         #expect(storedEntries.map(\.playerID) == playerIDs)
-        #expect(storedEntries.map(\.battingOrder) == Array(1...13))
+        #expect(storedEntries.map(\.battingOrder) == Array(1...14))
         #expect(storedEntries.map(\.startingPosition) == expectedPositions)
     }
 

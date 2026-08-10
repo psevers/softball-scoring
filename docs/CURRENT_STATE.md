@@ -46,6 +46,7 @@ On macOS with Xcode 26.6 and an iPhone 17 / iOS 26.5 simulator:
 - App build: **PASS**
 - Domain tests: **33 PASS**
 - Scoring-engine tests: **33 PASS**
+- UI scrolling tests: **2 PASS**
 - App install/launch smoke test: **PASS**
 
 The first Xcode test run exposed missing generated test-bundle Info.plists; `project.yml` now enables generated Info.plists for both test targets. The adversarial checkpoint also fixed runner-passing, force-third-out scoring, stale-snapshot duplicate sequences, invalid durable game values, and added persistence/replay boundary tests. Third-out events now persist whether the decisive out was a force/batter-runner out or a timing play.
@@ -53,6 +54,8 @@ The first Xcode test run exposed missing generated test-bundle Info.plists; `pro
 The Slice 4 checkpoint manual evidence covered app install, launch, and the rendered Games empty state. The broader navigation/data-entry smoke checklist in `docs/LAPTOP_HANDOFF.md` remains separate from the focused field-feedback verification below.
 
 Post-checkpoint field-feedback verification additionally covers a real 13-player roster in the iPhone 17 simulator: all batters could be added, the list scrolled through players 12–13 and the starting-pitcher control, reorder mode exposed every move action, and Start Game remained pinned and reachable at both standard and accessibility-extra-large Dynamic Type sizes.
+
+Automated XCUITest coverage now synthesizes finger drags on an isolated 14-player roster, including the smallest installed iPhone 17e simulator. It verifies that Team reaches and opens a player in the Inactive section, and that Set Lineup can build, save, and open a complete 14-player game while keeping the final batter and Start Game reachable.
 
 Earlier source-only validation:
 

@@ -23,6 +23,8 @@ Implementation and macOS/Xcode validation are complete through **Vertical Slice 
 4. Select an iPhone simulator and run
 5. Run the `SoftballScoring` scheme tests
 
+In Simulator, scroll an iPhone list by clicking inside the device screen and dragging upward, the same motion as a finger swipe. A mouse wheel or trackpad scroll event is not a substitute for the simulated touch gesture.
+
 ## Current user flow
 
 Open **Team** to configure the roster and season, create an innings-based or time-limited game under **Games**, build a variable batting order with nine defenders, then use the live scorebook to record defensive pitches and explicit ball-in-play runner outcomes.

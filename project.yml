@@ -39,6 +39,7 @@ targets:
       testTargets:
         - DomainTests
         - ScoringEngineTests
+        - SoftballScoringUITests
   DomainTests:
     type: bundle.unit-test
     platform: iOS
@@ -60,4 +61,15 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.psevers.softballscoring.scoringenginetests
+        GENERATE_INFOPLIST_FILE: YES
+  SoftballScoringUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - Tests/SoftballScoringUITests
+    dependencies:
+      - target: SoftballScoring
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.psevers.softballscoring.uitests
         GENERATE_INFOPLIST_FILE: YES

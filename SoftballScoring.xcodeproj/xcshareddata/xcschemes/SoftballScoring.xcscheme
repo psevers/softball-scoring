@@ -61,6 +61,17 @@
                ReferencedContainer = "container:SoftballScoring.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "9F0023890A23DCCAA76029C3"
+               BuildableName = "SoftballScoringUITests.xctest"
+               BlueprintName = "SoftballScoringUITests"
+               ReferencedContainer = "container:SoftballScoring.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

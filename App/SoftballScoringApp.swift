@@ -7,7 +7,15 @@ struct SoftballScoringApp: App {
 
     init() {
         do {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-uiTesting") {
+                container = try UITestData.makeContainer()
+            } else {
+                container = try AppModelContainer.make()
+            }
+            #else
             container = try AppModelContainer.make()
+            #endif
         } catch {
             fatalError("Unable to create SwiftData container: \(error)")
         }

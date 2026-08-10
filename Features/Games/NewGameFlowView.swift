@@ -202,72 +202,81 @@ private struct LineupBuilderView: View {
     }
 
     var body: some View {
-        List {
-            Section {
-                HStack {
-                    Label("Batting Order", systemImage: "person.3.fill")
-                    Spacer()
-                    Text("\(lineup.count) batters · \(defenderCount) / \(LineupValidation.requiredDefenderCount) fielders")
-                        .monospacedDigit()
-                        .foregroundStyle(defenderCount == LineupValidation.requiredDefenderCount ? AppTheme.accent : .secondary)
-                }
-            }
-
-            if !lineup.isEmpty {
-                Section("Batting Order") {
-                    ForEach(Array(lineup.enumerated()), id: \.element.id) { index, entry in
-                        if let player = player(entry.playerID) {
-                            lineupRow(number: index + 1, player: player, entry: entry)
-                        }
-                    }
-                    .onMove(perform: moveLineup)
-                    .onDelete(perform: removeFromLineup)
-                }
-            }
-
-            if !availablePlayers.isEmpty {
-                Section("Available Players") {
-                    ForEach(availablePlayers) { player in
-                        Button {
-                            addToLineup(player)
-                        } label: {
-                            HStack {
-                                playerIdentity(player)
-                                Spacer()
-                                Image(systemName: "plus.circle.fill")
-                                    .foregroundStyle(AppTheme.accent)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            if !lineup.isEmpty {
-                Section("Starting Pitcher") {
-                    Picker("Pitcher", selection: Binding(
-                        get: { startingPitcherID },
-                        set: { setStartingPitcher($0) }
-                    )) {
-                        Text("Choose Pitcher").tag(UUID?.none)
-                        ForEach(lineup, id: \.id) { entry in
-                            if let player = player(entry.playerID) {
-                                Text(player.displayName).tag(Optional(player.id))
-                            }
-                        }
-                    }
-                }
-            }
-
-            if !canStart {
+        VStack(spacing: 0) {
+            List {
                 Section {
-                    EmptyView()
-                } footer: {
-                    Text("Add at least nine unique batters, assign each regulation defensive position once, and choose the pitcher. Additional batters do not need a position.")
+                    HStack {
+                        Label("Batting Order", systemImage: "person.3.fill")
+                        Spacer()
+                        Text("\(lineup.count) batters · \(defenderCount) / \(LineupValidation.requiredDefenderCount) fielders")
+                            .monospacedDigit()
+                            .foregroundStyle(defenderCount == LineupValidation.requiredDefenderCount ? AppTheme.accent : .secondary)
+                            .accessibilityIdentifier("lineup.summary")
+                    }
+                }
+
+                if !lineup.isEmpty {
+                    Section("Batting Order") {
+                        ForEach(Array(lineup.enumerated()), id: \.element.id) { index, entry in
+                            if let player = player(entry.playerID) {
+                                lineupRow(number: index + 1, player: player, entry: entry)
+                            }
+                        }
+                        .onMove(perform: moveLineup)
+                        .onDelete(perform: removeFromLineup)
+                    }
+                }
+
+                if !availablePlayers.isEmpty {
+                    Section("Available Players") {
+                        ForEach(availablePlayers) { player in
+                            Button {
+                                addToLineup(player)
+                            } label: {
+                                HStack {
+                                    playerIdentity(player)
+                                    Spacer()
+                                    Image(systemName: "plus.circle.fill")
+                                        .foregroundStyle(AppTheme.accent)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("lineup.add.\(player.displayName)")
+                        }
+                    }
+                }
+
+                if !lineup.isEmpty {
+                    Section("Starting Pitcher") {
+                        Picker("Pitcher", selection: Binding(
+                            get: { startingPitcherID },
+                            set: { setStartingPitcher($0) }
+                        )) {
+                            Text("Choose Pitcher").tag(UUID?.none)
+                            ForEach(lineup, id: \.id) { entry in
+                                if let player = player(entry.playerID) {
+                                    Text(player.displayName).tag(Optional(player.id))
+                                }
+                            }
+                        }
+                        .accessibilityIdentifier("lineup.pitcher")
+                    }
+                }
+
+                if !canStart {
+                    Section {
+                        EmptyView()
+                    } footer: {
+                        Text("Add at least nine unique batters, assign each regulation defensive position once, and choose the pitcher. Additional batters do not need a position.")
+                    }
                 }
             }
-        }
-        .safeAreaInset(edge: .bottom) {
+            .accessibilityIdentifier("lineup.list")
+            .scorebookFormBackground()
+
+            Divider()
+
             Button {
                 _ = onStartGame()
             } label: {
@@ -276,11 +285,11 @@ private struct LineupBuilderView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(!canStart)
+            .accessibilityValue("\(lineup.count) batters, \(defenderCount) of \(LineupValidation.requiredDefenderCount) fielders")
             .padding(.horizontal, AppTheme.Spacing.md)
             .padding(.vertical, AppTheme.Spacing.sm)
             .background(.bar)
         }
-        .scorebookFormBackground()
         .navigationTitle("Set Lineup")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { EditButton() }
