@@ -12,15 +12,20 @@ struct NewGameFlowView: View {
     @State private var gameDate = Date.now
     @State private var homeAway: HomeAway = .away
     @State private var seasonID: UUID?
+    @State private var gameFormat: GameFormat = .innings
     @State private var regulationInnings = 7
+    @State private var timeLimitMinutes = 75
     @State private var lineup: [LineupDraftEntry] = []
     @State private var startingPitcherID: UUID?
     @State private var saveErrorMessage: String?
+    @FocusState private var isTimeLimitFocused: Bool
 
     private var activePlayers: [Player] { players.filter(\.isActive) }
     private var selectedSeason: Season? { seasons.first { $0.id == seasonID } }
     private var canContinue: Bool {
-        !opponentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && selectedSeason != nil
+        !opponentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && selectedSeason != nil
+            && (gameFormat != .timeLimit || timeLimitMinutes > 0)
     }
 
     var body: some View {
@@ -58,7 +63,27 @@ struct NewGameFlowView: View {
                 }
 
                 Section("Format") {
-                    Stepper("Regulation innings: \(regulationInnings)", value: $regulationInnings, in: 1...12)
+                    Picker("Game format", selection: $gameFormat) {
+                        ForEach(GameFormat.allCases) { format in
+                            Text(format.rawValue).tag(format)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    switch gameFormat {
+                    case .innings:
+                        Stepper("Regulation innings: \(regulationInnings)", value: $regulationInnings, in: 1...12)
+                    case .timeLimit:
+                        LabeledContent("Time limit") {
+                            TextField("Minutes", value: $timeLimitMinutes, format: .number)
+                                .keyboardType(.numberPad)
+                                .focused($isTimeLimitFocused)
+                                .multilineTextAlignment(.trailing)
+                                .frame(minWidth: 72)
+                            Text("minutes")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
 
                 Section {
@@ -74,7 +99,7 @@ struct NewGameFlowView: View {
                     }
                     .disabled(!canContinue)
                 } footer: {
-                    Text("The MVP lineup uses nine starters. You can reorder them and set each defensive position on the next screen.")
+                    Text("Add the full batting order, then assign the nine defensive positions. Batting-only players can remain without a position.")
                 }
             }
             .scorebookFormBackground()
@@ -83,6 +108,10 @@ struct NewGameFlowView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { isTimeLimitFocused = false }
                 }
             }
             .alert("Could Not Start Game", isPresented: Binding(
@@ -96,6 +125,11 @@ struct NewGameFlowView: View {
             .onAppear {
                 if seasonID == nil {
                     seasonID = seasons.first(where: \.isActive)?.id ?? seasons.first?.id
+                }
+            }
+            .onChange(of: gameFormat) { _, newValue in
+                if newValue != .timeLimit {
+                    isTimeLimitFocused = false
                 }
             }
         }
@@ -115,6 +149,7 @@ struct NewGameFlowView: View {
             gameDate: gameDate,
             homeAway: homeAway,
             regulationInnings: regulationInnings,
+            timeLimitMinutes: gameFormat == .timeLimit ? timeLimitMinutes : nil,
             status: .inProgress,
             startingPitcherID: startingPitcherID,
             startedAt: .now
@@ -158,6 +193,7 @@ private struct LineupBuilderView: View {
 
     private var selectedIDs: Set<UUID> { Set(lineup.map(\.playerID)) }
     private var availablePlayers: [Player] { players.filter { !selectedIDs.contains($0.id) } }
+    private var defenderCount: Int { lineup.compactMap(\.position).count }
     private var canStart: Bool {
         LineupValidation.canStart(
             entries: lineup.map { .init(playerID: $0.playerID, position: $0.position) },
@@ -169,11 +205,11 @@ private struct LineupBuilderView: View {
         List {
             Section {
                 HStack {
-                    Label("Starters", systemImage: "person.3.fill")
+                    Label("Batting Order", systemImage: "person.3.fill")
                     Spacer()
-                    Text("\(lineup.count) / \(LineupValidation.requiredStarterCount)")
+                    Text("\(lineup.count) batters · \(defenderCount) / \(LineupValidation.requiredDefenderCount) fielders")
                         .monospacedDigit()
-                        .foregroundStyle(lineup.count == LineupValidation.requiredStarterCount ? AppTheme.accent : .secondary)
+                        .foregroundStyle(defenderCount == LineupValidation.requiredDefenderCount ? AppTheme.accent : .secondary)
                 }
             }
 
@@ -189,25 +225,20 @@ private struct LineupBuilderView: View {
                 }
             }
 
-            if lineup.count < LineupValidation.requiredStarterCount {
+            if !availablePlayers.isEmpty {
                 Section("Available Players") {
-                    if availablePlayers.isEmpty {
-                        Text("No additional active players are available.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(availablePlayers) { player in
-                            Button {
-                                addToLineup(player)
-                            } label: {
-                                HStack {
-                                    playerIdentity(player)
-                                    Spacer()
-                                    Image(systemName: "plus.circle.fill")
-                                        .foregroundStyle(AppTheme.accent)
-                                }
+                    ForEach(availablePlayers) { player in
+                        Button {
+                            addToLineup(player)
+                        } label: {
+                            HStack {
+                                playerIdentity(player)
+                                Spacer()
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundStyle(AppTheme.accent)
                             }
-                            .buttonStyle(.plain)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -228,19 +259,26 @@ private struct LineupBuilderView: View {
                 }
             }
 
-            Section {
-                Button {
-                    _ = onStartGame()
-                } label: {
-                    Label("Start Game", systemImage: "play.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .disabled(!canStart)
-            } footer: {
-                if !canStart {
-                    Text("Select nine unique starters, assign each regulation defensive position once, and choose the pitcher.")
+            if !canStart {
+                Section {
+                    EmptyView()
+                } footer: {
+                    Text("Add at least nine unique batters, assign each regulation defensive position once, and choose the pitcher. Additional batters do not need a position.")
                 }
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            Button {
+                _ = onStartGame()
+            } label: {
+                Label("Start Game", systemImage: "play.fill")
+                    .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!canStart)
+            .padding(.horizontal, AppTheme.Spacing.md)
+            .padding(.vertical, AppTheme.Spacing.sm)
+            .background(.bar)
         }
         .scorebookFormBackground()
         .navigationTitle("Set Lineup")
@@ -290,7 +328,6 @@ private struct LineupBuilderView: View {
     }
 
     private func addToLineup(_ player: Player) {
-        guard lineup.count < LineupValidation.requiredStarterCount else { return }
         lineup.append(LineupDraftEntry(playerID: player.id, position: player.defaultPosition))
         if player.defaultPosition == .pitcher && startingPitcherID == nil {
             startingPitcherID = player.id

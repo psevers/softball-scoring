@@ -36,6 +36,8 @@ The reducer/domain layer does not depend on SwiftUI. Live scoring renders derive
 - `LineupEntry`
 - `GameEventRecord`
 
+`Game` supports innings-based and time-limited formats without changing the shipped Slice 4 SwiftData schema. Domain accessors isolate the backward-compatible durable representation from setup and scoring views.
+
 IDs are used across durable records rather than a broad SwiftData relationship graph. Event payloads remain explicit and export/migration-friendly.
 
 ## Event architecture

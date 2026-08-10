@@ -72,3 +72,12 @@ Across representative:
 - Relaunch while pending Ball In Play returns to outcome selection state.
 - Relaunch after completed play restores score, bases, outs, batter and pitch totals.
 - Malformed/duplicate sequence history is rejected and scoring pauses.
+
+## Game setup
+
+- Nine-player batting order with nine regulation defenders is accepted.
+- 11–13-player batting orders with exactly nine defenders and batting-only entries are accepted.
+- Duplicate players, missing/duplicate regulation positions, more than nine defenders, and a pitcher not assigned P are rejected.
+- Full batting order and defensive assignments survive persistence.
+- Innings-based and time-limited formats survive persistence.
+- Timed status reaches expiration without silently finalizing the game.

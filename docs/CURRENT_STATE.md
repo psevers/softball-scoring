@@ -15,7 +15,8 @@ https://github.com/psevers/softball-scoring
 - SwiftUI app shell: Games / Stats / Team.
 - SwiftData local persistence.
 - Team, roster and season management.
-- Game creation, nine-player lineup, regulation defensive positions, starting pitcher.
+- Game creation with innings-based or time-limited formats.
+- Variable batting orders with exactly nine independent regulation defensive assignments and a starting pitcher.
 - Resume in-progress game.
 - Pencil/graph-paper scorebook visual language.
 - Persisted event stream + deterministic replay.
@@ -43,13 +44,15 @@ On macOS with Xcode 26.6 and an iPhone 17 / iOS 26.5 simulator:
 
 - `xcodegen generate`: **PASS**
 - App build: **PASS**
-- Domain tests: **25 PASS**
+- Domain tests: **33 PASS**
 - Scoring-engine tests: **33 PASS**
 - App install/launch smoke test: **PASS**
 
 The first Xcode test run exposed missing generated test-bundle Info.plists; `project.yml` now enables generated Info.plists for both test targets. The adversarial checkpoint also fixed runner-passing, force-third-out scoring, stale-snapshot duplicate sequences, invalid durable game values, and added persistence/replay boundary tests. Third-out events now persist whether the decisive out was a force/batter-runner out or a timing play.
 
-Manual evidence currently covers app install, launch, and the rendered Games empty state. The remaining navigation/data-entry smoke checklist in `docs/LAPTOP_HANDOFF.md` still requires an interactive Simulator pass; macOS accessibility automation was unavailable in this session.
+The Slice 4 checkpoint manual evidence covered app install, launch, and the rendered Games empty state. The broader navigation/data-entry smoke checklist in `docs/LAPTOP_HANDOFF.md` remains separate from the focused field-feedback verification below.
+
+Post-checkpoint field-feedback verification additionally covers a real 13-player roster in the iPhone 17 simulator: all batters could be added, the list scrolled through players 12–13 and the starting-pitcher control, reorder mode exposed every move action, and Start Game remained pinned and reachable at both standard and accessibility-extra-large Dynamic Type sizes.
 
 Earlier source-only validation:
 
@@ -107,6 +110,7 @@ Do not merge until GitHub CI is green.
 - Opponent hitters are numbered slots.
 - Runner suggestions for FC/SAC are conservative and intentionally editable rather than pretending to infer fielding context.
 - No dedicated triple-play result yet.
+- A time-limit expiration is informational until game-ending rules are implemented; the scorekeeper finalizes play manually.
 
 ## Next vertical slice
 
@@ -115,13 +119,14 @@ Do not merge until GitHub CI is green.
 Goals:
 
 - Reuse the same PA/result/movement concepts when our team bats.
-- Derive current tracked-team batter from persisted lineup order.
+- Derive current tracked-team batter from the full persisted lineup order.
 - Attribute PA outcome, runs and RBI to real `Player` IDs.
 - Preserve event/replay determinism.
 - Begin batting-stat projection inputs (PA/AB/H/2B/3B/HR/BB/HBP/SO/R/RBI) without storing mutable totals.
 - Keep pitch tracking optional/quick on offensive half; do not require opponent-pitcher tracking for MVP.
 - Add hostile batting-order rollover and stat-rule tests.
+- Exercise rollover using the actual lineup length, including both 9-player and 13-player orders.
 
 ## Do not redo
 
-Do not reopen native-vs-PWA, local-first, event-derived state, pitch-count MVP status, pencil scorebook direction, nine-player baseline, or adversarial-review requirement without field evidence.
+Do not reopen native-vs-PWA, local-first, event-derived state, pitch-count MVP status, pencil scorebook direction, or adversarial-review requirement without field evidence. Field evidence has replaced the former nine-player batting-order baseline with a variable order plus nine defenders.

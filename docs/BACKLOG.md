@@ -8,6 +8,12 @@
 - Slice 3 — Defensive pitch-by-pitch scoring / event reducer.
 - Slice 4 — Ball In Play + runner confirmation + runs + outs.
 
+## Field-feedback fixes after Slice 4
+
+- Variable batting orders with exactly nine independent defensive assignments.
+- Scrollable lineup setup with a persistently reachable Start Game action.
+- Innings-based or time-limited game setup, persisted format display, and informational countdown.
+
 ## Next
 
 ### Slice 5 — Full offensive scoring

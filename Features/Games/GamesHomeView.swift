@@ -10,7 +10,7 @@ struct GamesHomeView: View {
 
     private var inProgressGames: [Game] { games.filter { $0.status == .inProgress } }
     private var otherGames: [Game] { games.filter { $0.status != .inProgress } }
-    private var canCreateGame: Bool { !seasons.isEmpty && players.filter(\.isActive).count >= LineupValidation.requiredStarterCount }
+    private var canCreateGame: Bool { !seasons.isEmpty && players.filter(\.isActive).count >= LineupValidation.requiredDefenderCount }
 
     var body: some View {
         Group {

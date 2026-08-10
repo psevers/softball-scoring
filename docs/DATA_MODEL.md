@@ -21,14 +21,14 @@ Durable game metadata:
 - `opponentName`
 - `gameDate`
 - `homeAway`
-- `regulationInnings`
+- innings-based or time-limited game format
 - `status`
 - `startingPitcherID`
 - lifecycle timestamps
 
 ## LineupEntry
 
-Starting tracked-team lineup entry:
+Tracked-team batting-order entry:
 
 - `gameID`
 - `playerID`
@@ -36,7 +36,7 @@ Starting tracked-team lineup entry:
 - starting/current position
 - active state
 
-MVP start validation requires exactly P, C, 1B, 2B, 3B, SS, LF, CF, RF once each.
+The batting order has a variable length. Game start validation requires exactly P, C, 1B, 2B, 3B, SS, LF, CF, RF once each; additional batting-only entries have no defensive position.
 
 ## GameEventRecord
 

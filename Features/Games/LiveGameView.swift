@@ -119,7 +119,16 @@ struct LiveGameView: View {
                 HStack {
                     Text(homeAway == .home ? "Opponent is away" : "Opponent is home")
                     Spacer()
-                    Text(game.gameDate.formatted(date: .abbreviated, time: .omitted))
+                    VStack(alignment: .trailing, spacing: 2) {
+                        if game.format == .timeLimit {
+                            TimelineView(.periodic(from: .now, by: 1)) { context in
+                                Text(game.timeStatus(at: context.date) ?? game.formatDescription)
+                            }
+                        } else {
+                            Text(game.formatDescription)
+                        }
+                        Text(game.gameDate.formatted(date: .abbreviated, time: .omitted))
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)

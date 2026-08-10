@@ -183,8 +183,8 @@ A historical event must retain enough identity information to replay correctly a
 
 Test:
 
-- Batter 1 through Batter 9
-- Wrap Batter 9 → Batter 1
+- Every batter in the persisted lineup, including orders longer than nine
+- Wrap the final batting-order slot → Batter 1 using the actual lineup length
 - Half-inning ending early
 - Next offensive inning resumes with correct next hitter
 - Game reload preserves next hitter
@@ -303,8 +303,8 @@ Optional design exploration:
 
 ## Batting order
 
-8. Nine straight outs/PA advance lineup correctly.
-9. Batter 9 followed by Batter 1.
+8. A full trip through 9-player and 13-player orders advances every slot correctly.
+9. The final batter in each order is followed by Batter 1.
 10. Third out on Batter 5 means next inning begins with Batter 6.
 11. Undo third out restores Batter 5 outcome and next-batter state.
 12. Relaunch app mid-inning preserves current batter.

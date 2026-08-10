@@ -36,6 +36,64 @@ struct PersistenceTests {
         #expect(entries.count == 1)
         #expect(entries.first?.gameID == game.id)
     }
+
+    @Test func timedGameAndContinuousBattingOrderPersistInContainer() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let playerIDs = (0..<13).map { _ in UUID() }
+        let game = Game(
+            seasonID: UUID(),
+            opponentName: "Lightning",
+            timeLimitMinutes: 75,
+            status: .inProgress,
+            startingPitcherID: playerIDs[0]
+        )
+        context.insert(game)
+
+        for (index, playerID) in playerIDs.enumerated() {
+            context.insert(LineupEntry(
+                playerID: playerID,
+                battingOrder: index + 1,
+                startingPosition: index < 9 ? LineupValidation.regulationDefensivePositions[index] : nil,
+                gameID: game.id
+            ))
+        }
+        try context.save()
+
+        let reloadContext = ModelContext(container)
+        let storedGame = try #require(reloadContext.fetch(FetchDescriptor<Game>()).first)
+        let storedEntries = try reloadContext.fetch(FetchDescriptor<LineupEntry>())
+            .filter { $0.gameID == game.id }
+            .sorted { $0.battingOrder < $1.battingOrder }
+        let expectedPositions: [DefensivePosition?] = LineupValidation.regulationDefensivePositions.map(Optional.some)
+            + Array(repeating: nil, count: 4)
+
+        #expect(storedGame.timeLimitMinutes == 75)
+        #expect(storedGame.format == .timeLimit)
+        #expect(storedGame.startingPitcherID == playerIDs[0])
+        #expect(storedEntries.count == 13)
+        #expect(storedEntries.map(\.playerID) == playerIDs)
+        #expect(storedEntries.map(\.battingOrder) == Array(1...13))
+        #expect(storedEntries.map(\.startingPosition) == expectedPositions)
+    }
+
+    @Test func inningsBasedFormatPersistsThroughFreshContext() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let game = Game(
+            seasonID: UUID(),
+            opponentName: "Lightning",
+            regulationInnings: 7
+        )
+        container.mainContext.insert(game)
+        try container.mainContext.save()
+
+        let reloadContext = ModelContext(container)
+        let storedGame = try #require(reloadContext.fetch(FetchDescriptor<Game>()).first)
+
+        #expect(storedGame.format == .innings)
+        #expect(storedGame.regulationInnings == 7)
+        #expect(storedGame.timeLimitMinutes == nil)
+    }
 }
 
 extension PersistenceTests {

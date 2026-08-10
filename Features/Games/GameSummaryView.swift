@@ -35,7 +35,7 @@ struct GameSummaryView: View {
                         : game.status?.rawValue.capitalized ?? "Unreadable"
                 )
                 LabeledContent("Season", value: season?.name ?? "Unknown Season")
-                LabeledContent("Format", value: "\(game.regulationInnings) innings")
+                LabeledContent("Format", value: game.formatDescription)
                 if let startingPitcher {
                     LabeledContent("Starting Pitcher", value: startingPitcher.displayName)
                 }
