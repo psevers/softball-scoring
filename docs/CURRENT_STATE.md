@@ -2,7 +2,7 @@
 
 ## Window
 
-Window 1 continuation — **Slice 5.5 scorebook visual alignment is in progress; foundation ticket #6 is implemented locally.**
+Window 1 continuation — **Slice 5.5 scorebook visual alignment is in progress; foundation ticket #6 and Game Card / lineup ticket #7 are implemented locally.**
 
 ## Canonical repo
 
@@ -37,7 +37,7 @@ https://github.com/psevers/softball-scoring
 - RBI placeholder is captured and cannot exceed legally counted runs.
 - Third out advances half-inning and clears bases/count.
 - Live defense uses the approved pencil-scorebook surface for pitch → outcome → runner-confirm flow.
-- Game setup and lineup use ruled paper, graphite/serif page headings, and pencil-rule dividers instead of a flat tinted Form.
+- Game setup and lineup use contiguous ruled ledger rows, graphite/handwritten page headings, and pencil-rule dividers instead of a generic Form or stacked cards.
 - Time-limited games use a keyboard-free 30–90 minute wheel in five-minute stops.
 
 ## Validation performed
@@ -59,7 +59,7 @@ Post-checkpoint field-feedback verification additionally covers a real 13-player
 
 Automated XCUITest coverage now synthesizes finger drags on an isolated 14-player roster, including the smallest installed iPhone 17e simulator. It verifies that Team reaches and opens a player in the Inactive section, and that Set Lineup can build, save, and open a complete 14-player game while keeping the final batter and Start Game reachable.
 
-Time-limit setup coverage verifies the keyboard-free wheel at both 30 and 90 minutes and confirms Set Lineup remains reachable. Simulator visual inspection covers the ruled-paper Game Card, graphite/serif hierarchy, pencil rules, and large timer readout.
+Time-limit setup coverage verifies the keyboard-free wheel at both 30 and 90 minutes and confirms Set Lineup remains reachable. Simulator visual inspection covers the ruled-paper Game Card, graphite/handwritten hierarchy, pencil rules, and large timer readout.
 
 ### Slice 5 validated checkpoint
 
@@ -74,7 +74,7 @@ Time-limit setup coverage verifies the keyboard-free wheel at both 30 and 90 min
 - Standalone SB/CS events update identified runners, outs, score, and SB/CS projection without advancing the batter.
 - Offensive UI displays the current player's name, jersey/position, complete counting-stat game line, and occupied bases using lineup slots.
 - Cold-store reload restores the next batter, active count identity, bases, score, and batting projection.
-- Latest full validation: 47 domain tests, 53 scoring tests, and 5 UI workflow tests pass on the iPhone 17 simulator.
+- Latest full validation: 48 domain tests, 53 scoring tests, and 5 UI workflow tests pass on the iPhone 17 simulator.
 
 `xcodegen generate`, the complete Xcode scheme, seeded simulator launch/visual smoke, `git diff --check`, and the fresh two-axis adversarial review pass locally with no unresolved P0/P1 findings. GitHub CI and collaborator review remain required before merge.
 
@@ -85,6 +85,14 @@ Time-limit setup coverage verifies the keyboard-free wheel at both 30 and 90 min
 - Reusable ledger sections, rows, labels, stat grids, key buttons, and empty-ledger treatments are available for the remaining Slice 5.5 surfaces.
 - Games home is the first end-to-end ledger surface, with deterministic empty and populated previews.
 - The root app forces a coherent light-paper appearance even when the device uses Dark Mode.
+
+### Slice 5.5 Game Card and lineup — ticket #7
+
+- New Game and Set Lineup now share a contiguous ruled scorebook-page treatment while retaining native fields, wheel picker, menus, reorder/delete controls, and pinned Start Game action.
+- Expressive headings, player names, and short actions use Patrick Hand; editable copy and instructions stay in semantic system text; batting order, jersey, position, timer, and lineup totals use tabular system numerals.
+- Deterministic previews cover a populated time-limit Game Card and a complete fourteen-batter lineup.
+- Focused UI verification launches deterministically at accessibility-extra-large Dynamic Type and passes for the 30/90-minute wheel, Set Lineup reachability, all fourteen batters, starting pitcher, lineup summary, save, and reopen workflow.
+- Standard and accessibility-size iPhone 17 screenshots were captured for product review; explicit product-owner approval and the full Slice 5.5 small-device evidence set remain pending.
 
 Earlier source-only validation:
 
@@ -119,7 +127,7 @@ No unresolved P0/P1 findings. Important fixes discovered during review include:
 
 ## Required before merge
 
-Push the validated checkpoint, open a draft PR, and merge only after GitHub CI is green and the PR adversarial checklist is complete.
+Push the validated checkpoint, open a draft PR, and merge only after GitHub CI is green, the PR adversarial checklist is complete, and the ticket #7 screenshot evidence receives explicit product-owner approval.
 
 ## Accepted limitations / backlog
 

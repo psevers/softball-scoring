@@ -19,6 +19,20 @@ struct NewGameFlowView: View {
     @State private var startingPitcherID: UUID?
     @State private var saveErrorMessage: String?
 
+    init(
+        initialOpponentName: String = "",
+        initialGameDate: Date = .now,
+        initialHomeAway: HomeAway = .away,
+        initialGameFormat: GameFormat = .innings,
+        initialTimeLimitMinutes: Int = GameSetupValidation.defaultTimeLimitMinutes
+    ) {
+        _opponentName = State(initialValue: initialOpponentName)
+        _gameDate = State(initialValue: initialGameDate)
+        _homeAway = State(initialValue: initialHomeAway)
+        _gameFormat = State(initialValue: initialGameFormat)
+        _timeLimitMinutes = State(initialValue: initialTimeLimitMinutes)
+    }
+
     private var activePlayers: [Player] { players.filter(\.isActive) }
     private var selectedSeason: Season? { seasons.first { $0.id == seasonID } }
     private var canContinue: Bool {
@@ -32,21 +46,29 @@ struct NewGameFlowView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            List {
                 Section {
                     ScorebookPageHeader(
                         title: "Game Card",
                         subtitle: "Set the matchup, format, and batting order",
                         systemImage: "pencil.and.scribble"
                     )
+                    .padding(.vertical, AppTheme.Spacing.sm)
+                    .scorebookListRow()
                 }
-                .listRowBackground(Color.clear)
 
-                Section("Game") {
-                    TextField("Opponent", text: $opponentName)
-                        .textInputAutocapitalization(.words)
+                Section {
+                    VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                        ScorebookLabel("Opponent")
+                        TextField("Opponent", text: $opponentName)
+                            .font(AppTheme.Typography.body)
+                            .textInputAutocapitalization(.words)
+                    }
+                    .scorebookListRow(verticalPadding: AppTheme.Spacing.sm)
 
                     DatePicker("Date", selection: $gameDate, displayedComponents: [.date, .hourAndMinute])
+                        .font(AppTheme.Typography.body)
+                        .scorebookListRow()
 
                     Picker("Home / Away", selection: $homeAway) {
                         ForEach(HomeAway.allCases) { value in
@@ -54,15 +76,19 @@ struct NewGameFlowView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .scorebookListRow(verticalPadding: AppTheme.Spacing.sm)
+                } header: {
+                    ScorebookListSectionHeader("Game")
                 }
 
-                Section("Season") {
+                Section {
                     if seasons.isEmpty {
                         ContentUnavailableView(
                             "Season Required",
                             systemImage: "calendar.badge.exclamationmark",
                             description: Text("Create a season from Team before starting a game.")
                         )
+                        .scorebookListRow(verticalPadding: AppTheme.Spacing.sm)
                     } else {
                         Picker("Season", selection: $seasonID) {
                             Text("Choose Season").tag(UUID?.none)
@@ -70,23 +96,33 @@ struct NewGameFlowView: View {
                                 Text(season.name).tag(Optional(season.id))
                             }
                         }
+                        .font(AppTheme.Typography.body)
+                        .scorebookListRow()
                     }
+                } header: {
+                    ScorebookListSectionHeader("Season")
                 }
 
-                Section("Format") {
+                Section {
                     Picker("Game format", selection: $gameFormat) {
                         ForEach(GameFormat.allCases) { format in
                             Text(format.rawValue).tag(format)
                         }
                     }
                     .pickerStyle(.segmented)
+                    .scorebookListRow(verticalPadding: AppTheme.Spacing.sm)
 
                     switch gameFormat {
                     case .innings:
                         Stepper("Regulation innings: \(regulationInnings)", value: $regulationInnings, in: 1...12)
+                            .font(AppTheme.Typography.body)
+                            .scorebookListRow()
                     case .timeLimit:
                         ScorebookDurationPicker(minutes: $timeLimitMinutes)
+                            .scorebookListRow(verticalPadding: AppTheme.Spacing.sm)
                     }
+                } header: {
+                    ScorebookListSectionHeader("Format")
                 }
 
                 Section {
@@ -99,14 +135,23 @@ struct NewGameFlowView: View {
                         )
                     } label: {
                         Label("Set Lineup", systemImage: "list.number")
+                            .font(AppTheme.Typography.actionLabel)
+                            .foregroundStyle(canContinue ? AppTheme.accent : AppTheme.graphite.opacity(0.48))
                     }
                     .disabled(!canContinue)
+                    .scorebookListRow(verticalPadding: AppTheme.Spacing.xs)
                 } footer: {
                     Text("Add the full batting order, then assign the nine defensive positions. Batting-only players can remain without a position.")
+                        .font(AppTheme.Typography.metadata)
+                        .foregroundStyle(AppTheme.graphite.opacity(0.68))
+                        .textCase(nil)
                 }
             }
+            .listStyle(.plain)
+            .listSectionSpacing(0)
             .accessibilityIdentifier("game.setup.form")
             .scorebookFormBackground()
+            .overlay(alignment: .leading) { ScorebookMarginRule() }
             .navigationTitle("New Game")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -181,16 +226,16 @@ private struct ScorebookDurationPicker: View {
         VStack(spacing: AppTheme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
                 Label("Time Limit", systemImage: "timer")
-                    .font(.system(.headline, design: .serif))
+                    .font(AppTheme.Typography.notation)
                     .foregroundStyle(AppTheme.graphite)
 
                 Spacer()
 
                 Text("\(minutes)")
-                    .font(.system(.largeTitle, design: .serif, weight: .medium).monospacedDigit())
+                    .font(AppTheme.Typography.score)
                     .foregroundStyle(AppTheme.graphite)
                 Text("MIN")
-                    .font(.caption2.weight(.semibold))
+                    .font(AppTheme.Typography.fieldLabel)
                     .foregroundStyle(AppTheme.graphite.opacity(0.62))
             }
 
@@ -207,7 +252,7 @@ private struct ScorebookDurationPicker: View {
             .accessibilityIdentifier("game.timeLimit.picker")
 
             Text("The timer is a reminder; it never finalizes the game automatically.")
-                .font(.caption.italic())
+                .font(AppTheme.Typography.metadata.italic())
                 .foregroundStyle(AppTheme.graphite.opacity(0.66))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -223,6 +268,8 @@ struct LineupDraftEntry: Identifiable, Equatable {
 }
 
 private struct LineupBuilderView: View {
+    @ScaledMetric(relativeTo: .body) private var orderColumnWidth: CGFloat = 32
+
     let players: [Player]
     @Binding var lineup: [LineupDraftEntry]
     @Binding var startingPitcherID: UUID?
@@ -250,27 +297,35 @@ private struct LineupBuilderView: View {
                         )
 
                         Text("\(lineup.count) batters · \(defenderCount) / \(LineupValidation.requiredDefenderCount) fielders")
-                            .font(.system(.subheadline, design: .serif).monospacedDigit())
-                            .foregroundStyle(defenderCount == LineupValidation.requiredDefenderCount ? AppTheme.graphite : .secondary)
+                            .font(AppTheme.Typography.tabularNumber)
+                            .foregroundStyle(
+                                defenderCount == LineupValidation.requiredDefenderCount
+                                    ? AppTheme.positive
+                                    : AppTheme.graphite.opacity(0.68)
+                            )
                             .accessibilityIdentifier("lineup.summary")
                     }
+                    .padding(.vertical, AppTheme.Spacing.sm)
+                    .scorebookListRow()
                 }
-                .listRowBackground(AppTheme.paper.opacity(0.82))
 
                 if !lineup.isEmpty {
-                    Section("Batting Order") {
+                    Section {
                         ForEach(Array(lineup.enumerated()), id: \.element.id) { index, entry in
                             if let player = player(entry.playerID) {
                                 lineupRow(number: index + 1, player: player, entry: entry)
+                                    .scorebookListRow(verticalPadding: AppTheme.Spacing.xs)
                             }
                         }
                         .onMove(perform: moveLineup)
                         .onDelete(perform: removeFromLineup)
+                    } header: {
+                        ScorebookListSectionHeader("Batting Order")
                     }
                 }
 
                 if !availablePlayers.isEmpty {
-                    Section("Available Players") {
+                    Section {
                         ForEach(availablePlayers) { player in
                             Button {
                                 addToLineup(player)
@@ -285,12 +340,15 @@ private struct LineupBuilderView: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("lineup.add.\(player.displayName)")
+                            .scorebookListRow(verticalPadding: AppTheme.Spacing.xs)
                         }
+                    } header: {
+                        ScorebookListSectionHeader("Available Players")
                     }
                 }
 
                 if !lineup.isEmpty {
-                    Section("Starting Pitcher") {
+                    Section {
                         Picker("Pitcher", selection: Binding(
                             get: { startingPitcherID },
                             set: { setStartingPitcher($0) }
@@ -303,21 +361,31 @@ private struct LineupBuilderView: View {
                             }
                         }
                         .accessibilityIdentifier("lineup.pitcher")
+                        .font(AppTheme.Typography.body)
+                        .scorebookListRow()
+                    } header: {
+                        ScorebookListSectionHeader("Starting Pitcher")
                     }
                 }
 
                 if !canStart {
                     Section {
-                        EmptyView()
-                    } footer: {
                         Text("Add at least nine unique batters, assign each regulation defensive position once, and choose the pitcher. Additional batters do not need a position.")
+                            .font(AppTheme.Typography.metadata)
+                            .foregroundStyle(AppTheme.graphite.opacity(0.68))
+                            .scorebookListRow(verticalPadding: AppTheme.Spacing.sm)
                     }
                 }
             }
+            .listStyle(.plain)
+            .listSectionSpacing(0)
             .accessibilityIdentifier("lineup.list")
             .scorebookFormBackground()
+            .overlay(alignment: .leading) { ScorebookMarginRule() }
 
-            Divider()
+            Rectangle()
+                .fill(AppTheme.rule)
+                .frame(height: 1)
 
             Button {
                 _ = onStartGame()
@@ -325,12 +393,13 @@ private struct LineupBuilderView: View {
                 Label("Start Game", systemImage: "play.fill")
                     .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(ScorebookKeyButtonStyle(role: .positive))
             .disabled(!canStart)
+            .opacity(canStart ? 1 : 0.46)
             .accessibilityValue("\(lineup.count) batters, \(defenderCount) of \(LineupValidation.requiredDefenderCount) fielders")
             .padding(.horizontal, AppTheme.Spacing.md)
             .padding(.vertical, AppTheme.Spacing.sm)
-            .background(.bar)
+            .background(AppTheme.paper)
         }
         .navigationTitle("Set Lineup")
         .navigationBarTitleDisplayMode(.inline)
@@ -340,8 +409,9 @@ private struct LineupBuilderView: View {
     private func lineupRow(number: Int, player: Player, entry: LineupDraftEntry) -> some View {
         HStack(spacing: AppTheme.Spacing.sm) {
             Text("\(number)")
-                .font(.headline.monospacedDigit())
-                .frame(width: 24, alignment: .leading)
+                .font(AppTheme.Typography.tabularNumber)
+                .foregroundStyle(AppTheme.graphite.opacity(0.72))
+                .frame(width: orderColumnWidth, alignment: .leading)
 
             playerIdentity(player)
 
@@ -358,8 +428,14 @@ private struct LineupBuilderView: View {
                 }
             } label: {
                 Text(entry.position?.rawValue ?? "Pos")
-                    .font(.subheadline.weight(.semibold))
+                    .font(AppTheme.Typography.tabularNumber)
+                    .foregroundStyle(entry.position == nil ? AppTheme.graphite.opacity(0.58) : AppTheme.accent)
+                    .padding(.horizontal, AppTheme.Spacing.sm)
                     .frame(minWidth: 44, minHeight: 44)
+                    .overlay {
+                        Rectangle()
+                            .stroke(entry.position == nil ? AppTheme.rule : AppTheme.accent.opacity(0.58), lineWidth: 1)
+                    }
             }
         }
     }
@@ -367,10 +443,11 @@ private struct LineupBuilderView: View {
     private func playerIdentity(_ player: Player) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(player.displayName)
-                .foregroundStyle(.primary)
+                .font(AppTheme.Typography.playerName)
+                .foregroundStyle(AppTheme.graphite)
             Text(player.jerseyNumber.isEmpty ? "No jersey" : "#\(player.jerseyNumber)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(AppTheme.Typography.tabularNumber)
+                .foregroundStyle(AppTheme.graphite.opacity(0.62))
         }
     }
 
@@ -425,7 +502,90 @@ private struct LineupBuilderView: View {
     }
 }
 
-#Preview {
-    NewGameFlowView()
-        .modelContainer(PreviewData.container)
+private struct ScorebookListSectionHeader: View {
+    let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .font(AppTheme.Typography.notation)
+            .textCase(nil)
+            .foregroundStyle(AppTheme.graphite.opacity(0.78))
+            .padding(.horizontal, AppTheme.Spacing.md)
+            .padding(.vertical, AppTheme.Spacing.xs)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppTheme.paper)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(AppTheme.rule)
+                    .frame(height: 1)
+            }
+    }
+}
+
+private extension View {
+    func scorebookListRow(verticalPadding: CGFloat = 0) -> some View {
+        listRowInsets(EdgeInsets(
+            top: verticalPadding,
+            leading: AppTheme.Spacing.md,
+            bottom: verticalPadding,
+            trailing: AppTheme.Spacing.md
+        ))
+        .listRowBackground(AppTheme.paper.opacity(0.97))
+        .listRowSeparator(.visible)
+        .listRowSeparatorTint(AppTheme.rule)
+    }
+}
+
+private struct LongLineupPreview: View {
+    let players: [Player]
+    @State private var lineup: [LineupDraftEntry]
+    @State private var startingPitcherID: UUID?
+
+    init(players: [Player]) {
+        self.players = players
+        let regulationPositions = Set(LineupValidation.regulationDefensivePositions)
+        _lineup = State(initialValue: players.map { player in
+            LineupDraftEntry(
+                playerID: player.id,
+                position: player.defaultPosition.flatMap {
+                    regulationPositions.contains($0) ? $0 : nil
+                }
+            )
+        })
+        _startingPitcherID = State(initialValue: players.first {
+            $0.defaultPosition == .pitcher
+        }?.id)
+    }
+
+    var body: some View {
+        NavigationStack {
+            LineupBuilderView(
+                players: players,
+                lineup: $lineup,
+                startingPitcherID: $startingPitcherID,
+                onStartGame: { true }
+            )
+        }
+    }
+}
+
+#Preview("New Game — Time Limit") {
+    NewGameFlowView(
+        initialOpponentName: "Northside Storm",
+        initialGameDate: Date(timeIntervalSince1970: 1_786_562_700),
+        initialHomeAway: .home,
+        initialGameFormat: .timeLimit,
+        initialTimeLimitMinutes: 75
+    )
+    .modelContainer(PreviewData.longLineupContainer)
+}
+
+#Preview("Lineup — Fourteen Batters") {
+    let container = PreviewData.longLineupContainer
+    LongLineupPreview(players: PreviewData.players(in: container))
+        .modelContainer(container)
 }

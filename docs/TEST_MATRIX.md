@@ -90,11 +90,13 @@ Across representative:
 - Time-limit setup offers 30–90 minutes in five-minute stops without opening a keyboard.
 - Both time-limit endpoints and Set Lineup remain reachable by touch on a small iPhone.
 - Timed status reaches expiration without silently finalizing the game.
+- Deterministic previews render a populated time-limit Game Card and a fourteen-batter lineup without relying on current dates or unordered fetches.
 
 ## Roster and lineup reachability
 
 - A finger swipe reaches and opens the inactive player after a 14-player active Team roster.
 - A 14-player batting order can be built by touch, its final batter remains reachable, and Start Game saves and opens the live game.
+- With accessibility-extra-large Dynamic Type encoded in the app launch, New Game scrolls to the time-limit wheel and Set Lineup action; the fourteen-batter lineup scrolls between its last batter, pitcher control, and summary before saving.
 
 ## Tracked-team offense
 
