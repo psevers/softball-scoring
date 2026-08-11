@@ -1,0 +1,52 @@
+name: iOS
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+      - name: Select iOS Simulator
+        id: simulator
+        run: |
+          simulator_id="$(
+            xcrun simctl list devices available --json | /usr/bin/python3 -c '
+          import json
+          import sys
+
+          devices = [
+              device
+              for runtime_devices in json.load(sys.stdin)["devices"].values()
+              for device in runtime_devices
+              if device.get("isAvailable") and device["name"].startswith("iPhone")
+          ]
+          preferred = next(
+              (device for device in devices if device["name"] == "iPhone 17"),
+              devices[0] if devices else None,
+          )
+          if preferred:
+              print(preferred["udid"])
+          '
+          )"
+          if [[ -z "$simulator_id" ]]; then
+            echo "No available iPhone simulator was found after installing the iOS platform." >&2
+            exit 1
+          fi
+          echo "id=$simulator_id" >> "$GITHUB_OUTPUT"
+      - name: Build and test
+        run: |
+          xcodebuild test \
+            -project SoftballScoring.xcodeproj \
+            -scheme SoftballScoring \
+            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
+            CODE_SIGNING_ALLOWED=NO

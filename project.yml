@@ -1,0 +1,79 @@
+name: SoftballScoring
+options:
+  bundleIdPrefix: com.psevers
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 0.1.0
+targets:
+  SoftballScoring:
+    type: application
+    platform: iOS
+    sources:
+      - App
+      - Domain
+      - Persistence
+      - ScoringEngine
+      - Features
+      - DesignSystem
+      - path: Resources
+        buildPhase: resources
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Softball Scoring
+        UIAppFonts:
+          - PatrickHand-Regular.ttf
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiresFullScreen: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.psevers.softballscoring
+        PRODUCT_NAME: SoftballScoring
+        GENERATE_INFOPLIST_FILE: NO
+    scheme:
+      testTargets:
+        - DomainTests
+        - ScoringEngineTests
+        - SoftballScoringUITests
+  DomainTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests/DomainTests
+    dependencies:
+      - target: SoftballScoring
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.psevers.softballscoring.domaintests
+        GENERATE_INFOPLIST_FILE: YES
+  ScoringEngineTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests/ScoringEngineTests
+    dependencies:
+      - target: SoftballScoring
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.psevers.softballscoring.scoringenginetests
+        GENERATE_INFOPLIST_FILE: YES
+  SoftballScoringUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - Tests/SoftballScoringUITests
+    dependencies:
+      - target: SoftballScoring
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.psevers.softballscoring.uitests
+        GENERATE_INFOPLIST_FILE: YES
