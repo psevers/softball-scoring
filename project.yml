@@ -20,10 +20,14 @@ targets:
       - ScoringEngine
       - Features
       - DesignSystem
+      - path: Resources
+        buildPhase: resources
     info:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Softball Scoring
+        UIAppFonts:
+          - PatrickHand-Regular.ttf
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

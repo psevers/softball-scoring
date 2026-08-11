@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct GamesHomeView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query(sort: \Game.gameDate, order: .reverse) private var games: [Game]
     @Query(sort: \Season.startDate, order: .reverse) private var seasons: [Season]
     @Query private var players: [Player]
@@ -13,46 +14,46 @@ struct GamesHomeView: View {
     private var canCreateGame: Bool { !seasons.isEmpty && players.filter(\.isActive).count >= LineupValidation.requiredDefenderCount }
 
     var body: some View {
-        Group {
-            if games.isEmpty {
-                EmptyStateView(
-                    systemImage: "sportscourt",
-                    title: "No Games Yet",
-                    message: canCreateGame
-                        ? "Your roster is ready. Create a game and set today's lineup."
-                        : "Create a season and add at least nine active players before starting a game."
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List {
-                    if !inProgressGames.isEmpty {
-                        Section("In Progress") {
-                            ForEach(inProgressGames) { game in
-                                NavigationLink {
-                                    LiveGameView(game: game)
-                                } label: {
-                                    gameRow(game, emphasis: true)
-                                }
-                            }
-                        }
-                    }
+        ZStack {
+            ScorebookPaperBackground()
 
-                    if !otherGames.isEmpty {
-                        Section("Games") {
-                            ForEach(otherGames) { game in
-                                NavigationLink {
-                                    GameSummaryView(game: game)
-                                } label: {
-                                    gameRow(game, emphasis: false)
-                                }
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
+                    ScorebookPageHeader(
+                        title: "Games",
+                        subtitle: "Season scorecards",
+                        systemImage: "book.closed"
+                    )
+
+                    if games.isEmpty {
+                        ScorebookEmptyLedger(
+                            systemImage: "sportscourt",
+                            title: "No Games Yet",
+                            message: canCreateGame
+                                ? "Your roster is ready. Create a game and set today's lineup."
+                                : "Create a season and add at least nine active players before starting a game."
+                        )
+                    } else {
+                        ScorebookLedger {
+                            if !inProgressGames.isEmpty {
+                                gameSection(title: "In Progress", games: inProgressGames, emphasis: true)
+                            }
+
+                            if !otherGames.isEmpty {
+                                gameSection(title: "Games", games: otherGames, emphasis: false)
                             }
                         }
                     }
                 }
+                .padding(.horizontal, AppTheme.Spacing.md)
+                .padding(.vertical, AppTheme.Spacing.sm)
             }
+            .accessibilityIdentifier("games.home.ledger")
         }
-        .background(AppTheme.paper)
         .navigationTitle("Games")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(AppTheme.paper, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -69,27 +70,84 @@ struct GamesHomeView: View {
         }
     }
 
-    private func gameRow(_ game: Game, emphasis: Bool) -> some View {
-        HStack(spacing: AppTheme.Spacing.sm) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(game.homeAway == .home ? "vs \(game.opponentName)" : "@ \(game.opponentName)")
-                    .font(emphasis ? .headline : .body)
-                Text(game.gameDate.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if emphasis {
-                Text("Resume")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.accent)
+    private func gameSection(title: String, games: [Game], emphasis: Bool) -> some View {
+        ScorebookPageSection(title) {
+            ForEach(games) { game in
+                NavigationLink {
+                    if emphasis {
+                        LiveGameView(game: game)
+                    } else {
+                        GameSummaryView(game: game)
+                    }
+                } label: {
+                    ScorebookLedgerRow {
+                        gameRow(game, emphasis: emphasis)
+                    }
+                }
+                .buttonStyle(.plain)
             }
         }
-        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func gameRow(_ game: Game, emphasis: Bool) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+                HStack(alignment: .firstTextBaseline) {
+                    ScorebookLabel(game.homeAway.rawValue)
+                    Spacer()
+                    if emphasis {
+                        resumeLabel
+                    }
+                }
+                opponentLabel(for: game)
+                dateLabel(for: game)
+            }
+        } else {
+            HStack(spacing: AppTheme.Spacing.sm) {
+                ScorebookLabel(game.homeAway.rawValue)
+                    .frame(width: 44, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    opponentLabel(for: game)
+                    dateLabel(for: game)
+                }
+                Spacer()
+                if emphasis {
+                    resumeLabel
+                }
+            }
+        }
+    }
+
+    private func opponentLabel(for game: Game) -> some View {
+        Text(game.homeAway == .home ? "vs \(game.opponentName)" : "@ \(game.opponentName)")
+            .font(AppTheme.Typography.playerName)
+            .foregroundStyle(AppTheme.graphite)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func dateLabel(for game: Game) -> some View {
+        Text(game.gameDate.formatted(date: .abbreviated, time: .shortened))
+            .font(AppTheme.Typography.metadata)
+            .foregroundStyle(AppTheme.graphite.opacity(0.68))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var resumeLabel: some View {
+        Text("Resume →")
+            .font(AppTheme.Typography.notation)
+            .foregroundStyle(AppTheme.positive)
+            .lineLimit(1)
     }
 }
 
-#Preview {
+#Preview("Games — Empty") {
     NavigationStack { GamesHomeView() }
         .modelContainer(PreviewData.container)
+}
+
+#Preview("Games — Ledger") {
+    NavigationStack { GamesHomeView() }
+        .modelContainer(PreviewData.gamesContainer)
 }

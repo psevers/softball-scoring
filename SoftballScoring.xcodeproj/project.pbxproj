@@ -30,9 +30,11 @@
 		853D97C5683DF980B59600A5 /* BattingStatProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3616AB9DCCFA15363847AAE7 /* BattingStatProjector.swift */; };
 		8ADCD3F9C8381E97D8AF44BB /* GameEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B3D24798624385E1132EAD /* GameEvent.swift */; };
 		91DC505CEAD1074ED4EECF55 /* PreviewData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3CAF1AC842A54457698B6F /* PreviewData.swift */; };
+		959C4E996433A2B00E0AAC57 /* PatrickHand-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 95DDEC12C8C358C27EBEF6F8 /* PatrickHand-Regular.ttf */; };
 		9D2D3FD1A3D72D4B2AAA86B2 /* PlayerEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE63CB059B932F01230B42E /* PlayerEditorView.swift */; };
 		A1070E3B0BA23F9C4897DA52 /* BattingStatProjectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37B485147258262D9C8DBFBC /* BattingStatProjectorTests.swift */; };
 		A98FB80B73313BBF1B093AF5 /* GameEventTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB80733A9CB93CBA74705222 /* GameEventTests.swift */; };
+		ABE453CB80C1DCA37E63D13A /* DesignSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FD7C6C0E8D89B400B340FA2 /* DesignSystemTests.swift */; };
 		B3E021E955F146496FCD4CF0 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA40339A5411E14DABBF3375 /* RootTabView.swift */; };
 		BB0F6E394CF08124DBC3D81F /* GameReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1625F5735183A8DFC5C26176 /* GameReducer.swift */; };
 		C85552B60F483CECA9F041C4 /* LiveGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 893B8FDC783DEB49E7F62D2D /* LiveGameView.swift */; };
@@ -45,6 +47,7 @@
 		F4E49EA95C7428CE50E3D30F /* TeamHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53FC8DDB978EF857FC4A160E /* TeamHomeView.swift */; };
 		FB2710AC4AE18ACB81C18CF3 /* Team.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71CB1531392AFC77547F69B /* Team.swift */; };
 		FDA4EB43037D3EB3542007ED /* BallInPlayValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D22DC9262C1FE13239D79BDE /* BallInPlayValidator.swift */; };
+		FDEFDB89BE91F3918C1FD389 /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = C31FFAD5F1F2784B0D78FAE2 /* OFL.txt */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -92,16 +95,19 @@
 		53FC8DDB978EF857FC4A160E /* TeamHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamHomeView.swift; sourceTree = "<group>"; };
 		64827908EFF1612B175DFF63 /* SoftballScoringApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftballScoringApp.swift; sourceTree = "<group>"; };
 		6905ED25DF2F69D2830E73AD /* GameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameTests.swift; sourceTree = "<group>"; };
+		6FD7C6C0E8D89B400B340FA2 /* DesignSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystemTests.swift; sourceTree = "<group>"; };
 		7E3CAF1AC842A54457698B6F /* PreviewData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewData.swift; sourceTree = "<group>"; };
 		82B9A4B8F2070C4E5426F67D /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		893B8FDC783DEB49E7F62D2D /* LiveGameView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveGameView.swift; sourceTree = "<group>"; };
 		8FD3F8339D65BF903E715D59 /* OffensiveRunnerConfirmationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OffensiveRunnerConfirmationSheet.swift; sourceTree = "<group>"; };
 		94E4C17E1FA1CF2CF42B4B79 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		95DDEC12C8C358C27EBEF6F8 /* PatrickHand-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "PatrickHand-Regular.ttf"; sourceTree = "<group>"; };
 		A15288F8F73A479E3A5F0DD2 /* PersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceTests.swift; sourceTree = "<group>"; };
 		A71CB1531392AFC77547F69B /* Team.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Team.swift; sourceTree = "<group>"; };
 		AA40339A5411E14DABBF3375 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		AEC32EA505BA923C85E31A31 /* ScorebookDiamondView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScorebookDiamondView.swift; sourceTree = "<group>"; };
 		BF7CBA90EACBA13AE0C42A34 /* SeasonEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonEditorView.swift; sourceTree = "<group>"; };
+		C31FFAD5F1F2784B0D78FAE2 /* OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = OFL.txt; sourceTree = "<group>"; };
 		C399BB1B5B64E90B0676E645 /* GameEventRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameEventRecorder.swift; sourceTree = "<group>"; };
 		C8EA32DA2AB799F27DFB8776 /* AppModelContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelContainer.swift; sourceTree = "<group>"; };
 		D22DC9262C1FE13239D79BDE /* BallInPlayValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BallInPlayValidator.swift; sourceTree = "<group>"; };
@@ -148,6 +154,7 @@
 				09470F30FD9AB8E649E0FF61 /* Domain */,
 				0809FD389A578DC0924E34D9 /* Features */,
 				3BF77091EEA5F441A6396068 /* Persistence */,
+				4B5F09631FBD1749B5FA7031 /* Resources */,
 				A7E400B23335BD197CAAD89B /* ScoringEngine */,
 				976C9CCEBA02A4DD283208B8 /* Tests */,
 				9D52442EBE03594588F294A6 /* Products */,
@@ -190,6 +197,14 @@
 				F9E5FA8B0163464FCB34F283 /* GameStateTests.swift */,
 			);
 			path = ScoringEngineTests;
+			sourceTree = "<group>";
+		};
+		4B5F09631FBD1749B5FA7031 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				F4D7B092721230B8F1A44274 /* Fonts */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		52E717872F5F1E92141FDBFB /* Team */ = {
@@ -270,6 +285,7 @@
 		F00FAC642C730E18224A3E87 /* DomainTests */ = {
 			isa = PBXGroup;
 			children = (
+				6FD7C6C0E8D89B400B340FA2 /* DesignSystemTests.swift */,
 				EB80733A9CB93CBA74705222 /* GameEventTests.swift */,
 				6905ED25DF2F69D2830E73AD /* GameTests.swift */,
 				A15288F8F73A479E3A5F0DD2 /* PersistenceTests.swift */,
@@ -277,6 +293,15 @@
 				03886681FCCBD2A00ED23D0F /* SeasonTests.swift */,
 			);
 			path = DomainTests;
+			sourceTree = "<group>";
+		};
+		F4D7B092721230B8F1A44274 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				C31FFAD5F1F2784B0D78FAE2 /* OFL.txt */,
+				95DDEC12C8C358C27EBEF6F8 /* PatrickHand-Regular.ttf */,
+			);
+			path = Fonts;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -305,6 +330,7 @@
 			buildConfigurationList = 6961BB26CF2B74F9A159012A /* Build configuration list for PBXNativeTarget "SoftballScoring" */;
 			buildPhases = (
 				3A7E72FBA6B70D8DBB200AE8 /* Sources */,
+				B1AC794849D45A8814A0BF64 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -389,11 +415,24 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		B1AC794849D45A8814A0BF64 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FDEFDB89BE91F3918C1FD389 /* OFL.txt in Resources */,
+				959C4E996433A2B00E0AAC57 /* PatrickHand-Regular.ttf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		05C5E582A8D761C0A64E6F57 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ABE453CB80C1DCA37E63D13A /* DesignSystemTests.swift in Sources */,
 				A98FB80B73313BBF1B093AF5 /* GameEventTests.swift in Sources */,
 				49B04F247B8EB7E909EB8471 /* GameTests.swift in Sources */,
 				821109C961172C7CF491B395 /* PersistenceTests.swift in Sources */,

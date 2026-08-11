@@ -2,7 +2,7 @@
 
 ## Window
 
-Window 1 continuation — **Vertical Slice 5 offensive scoring and player attribution are complete locally.**
+Window 1 continuation — **Slice 5.5 scorebook visual alignment is in progress; foundation ticket #6 is implemented locally.**
 
 ## Canonical repo
 
@@ -77,6 +77,14 @@ Time-limit setup coverage verifies the keyboard-free wheel at both 30 and 90 min
 - Latest full validation: 47 domain tests, 53 scoring tests, and 5 UI workflow tests pass on the iPhone 17 simulator.
 
 `xcodegen generate`, the complete Xcode scheme, seeded simulator launch/visual smoke, `git diff --check`, and the fresh two-axis adversarial review pass locally with no unresolved P0/P1 findings. GitHub CI and collaborator review remain required before merge.
+
+### Slice 5.5 foundation — ticket #6
+
+- Patrick Hand Regular is bundled with its SIL Open Font License and registered through the generated app configuration.
+- Semantic typography separates expressive page/team/player/notation roles from system body copy and monospaced numerical roles.
+- Reusable ledger sections, rows, labels, stat grids, key buttons, and empty-ledger treatments are available for the remaining Slice 5.5 surfaces.
+- Games home is the first end-to-end ledger surface, with deterministic empty and populated previews.
+- The root app forces a coherent light-paper appearance even when the device uses Dark Mode.
 
 Earlier source-only validation:
 

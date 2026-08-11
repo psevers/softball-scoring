@@ -1,5 +1,12 @@
 # Test Matrix
 
+## Scorebook visual foundation
+
+- The bundled Patrick Hand resource resolves by PostScript name in the hosted app runtime.
+- Games home retains its empty and populated navigation behavior after moving from a native list to ledger sections.
+- The app remains a coherent light-paper surface when the device uses Dark Mode.
+- Expressive text scales from semantic Dynamic Type roles; dense metadata and numerical text retain system typography.
+
 ## Pitch/count regression
 
 - 0/1/2 ball progression.

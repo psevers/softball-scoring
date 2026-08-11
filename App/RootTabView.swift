@@ -25,6 +25,10 @@ struct RootTabView: View {
             }
         }
         .tint(AppTheme.accent)
+        .toolbarBackground(AppTheme.paper, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .background(AppTheme.paper.ignoresSafeArea())
+        .preferredColorScheme(.light)
     }
 }
 

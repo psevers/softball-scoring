@@ -14,7 +14,15 @@ The visual language is pencil-on-scorebook-paper, but the interaction model stay
 
 ### Typography
 
-Use system typography for reliability and legibility. The handmade feel comes from geometry, ruling, notation, and restrained imperfection—not from sacrificing readability with a novelty font.
+Use a role-based pairing rather than one typeface everywhere:
+
+- Patrick Hand for expressive scorebook roles: page titles, team/player names, play notation, short annotations, and compact action labels.
+- Semantic SF Pro text styles for forms, alerts, longer instructions, editable content, and accessibility-critical text.
+- Monospaced system digits for statistics, scores, counts, timers, and aligned tables.
+
+Custom typography must scale from semantic Dynamic Type styles. Do not use handwriting below body size for dense copy, and fall back to system typography wherever truncation or rapid numerical comparison would suffer. See `docs/adr/0001-selective-handwritten-typography.md`.
+
+Patrick Hand Regular is bundled at `Resources/Fonts/PatrickHand-Regular.ttf`; its SIL Open Font License is retained beside it at `Resources/Fonts/OFL.txt`.
 
 ### Game surfaces
 
@@ -26,6 +34,8 @@ Live scoring, box score, lineup, and play history should feel like contiguous pa
 - pencil-like notation,
 - small annotation-style metadata,
 - off-white sheets.
+
+Avoid stacks of floating rounded cards. Use contiguous ledger sections, shared hairline boundaries, compact row metrics, and square or nearly square geometry so the paper remains the surface rather than decoration behind a dashboard.
 
 ### Administrative surfaces
 
@@ -44,7 +54,14 @@ Game setup and lineup are scorebook pages rather than generic administration. Th
 ### Core components
 
 - `ScorebookPaperBackground`
-- `ScorebookSheet`
+- `ScorebookLedger`
+- `ScorebookPageSection`
+- `ScorebookLedgerRow`
+- `ScorebookLabel`
+- `ScorebookStatGrid`
+- `ScorebookKeyButtonStyle`
+- `ScorebookEmptyLedger`
+- `ScorebookSheet` (legacy card wrapper pending surface migration)
 - scoreboard / line-score grid
 - base diamond
 - count indicator
