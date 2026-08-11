@@ -2,7 +2,7 @@
 
 ## Window
 
-Window 1 continuation — **Vertical Slice 4 implementation complete, adversarially reviewed, and validated on macOS/Xcode.**
+Window 1 continuation — **Vertical Slice 5 offensive scoring and player attribution are complete locally.**
 
 ## Canonical repo
 
@@ -61,6 +61,23 @@ Automated XCUITest coverage now synthesizes finger drags on an isolated 14-playe
 
 Time-limit setup coverage verifies the keyboard-free wheel at both 30 and 90 minutes and confirms Set Lineup remains reachable. Simulator visual inspection covers the ruled-paper Game Card, graphite/serif hierarchy, pencil rules, and large timer readout.
 
+### Slice 5 validated checkpoint
+
+- Offensive plate appearances snapshot real player identity rather than relying on mutable display data.
+- Offensive pitches and plate appearances carry event-time batter and batting-order context, so replay does not depend on a later mutable lineup. A live count remains bound to that identity until the PA completes.
+- Batting-order rollover supports both nine-player and extended orders.
+- Quick Walk, HBP, Strikeout, and Home Run actions persist through the authoritative recorder.
+- Hits, reached-base results, batted-ball outs, sacrifices, and double plays use a scorer-confirmed runner sheet.
+- Timing plays retain exactly which runner sources scored for correct player run attribution.
+- A pure batting projector derives PA, AB, R, H, 2B, 3B, HR, RBI, BB, HBP, SO, SB, and CS.
+- Normal offensive Ball/Strike/Foul/Swing entry derives live count and completes player-attributed BB/K without opponent-pitcher stats.
+- Standalone SB/CS events update identified runners, outs, score, and SB/CS projection without advancing the batter.
+- Offensive UI displays the current player's name, jersey/position, complete counting-stat game line, and occupied bases using lineup slots.
+- Cold-store reload restores the next batter, active count identity, bases, score, and batting projection.
+- Latest full validation: 47 domain tests, 53 scoring tests, and 5 UI workflow tests pass on the iPhone 17 simulator.
+
+`xcodegen generate`, the complete Xcode scheme, seeded simulator launch/visual smoke, `git diff --check`, and the fresh two-axis adversarial review pass locally with no unresolved P0/P1 findings. GitHub CI and collaborator review remain required before merge.
+
 Earlier source-only validation:
 
 Swift 6.2.1 Linux pure-domain harness compiled event/state/validator/reducer code and executed representative:
@@ -77,7 +94,7 @@ Result: **PASS**.
 
 ## Adversarial review
 
-See `docs/reviews/SLICE4_ADVERSARIAL_REVIEW.md`.
+See `docs/reviews/SLICE4_ADVERSARIAL_REVIEW.md` and `docs/reviews/SLICE5_ADVERSARIAL_REVIEW.md`.
 
 No unresolved P0/P1 findings. Important fixes discovered during review include:
 
@@ -96,43 +113,22 @@ No unresolved P0/P1 findings. Important fixes discovered during review include:
 
 Push the validated checkpoint, open a draft PR, and merge only after GitHub CI is green and the PR adversarial checklist is complete.
 
-## Suggested checkpoint commit
-
-Validated checkpoint:
-
-```bash
-git add .
-git commit -m "feat: add ball-in-play runner scoring"
-git push
-```
-
-Do not merge until GitHub CI is green.
-
 ## Accepted limitations / backlog
 
-- Tracked-team offense is still a placeholder; Slice 5 owns player-attributed offensive PAs.
-- Standalone SB/CS/WP/PB/manual basepath events are still required for MVP.
+- Standalone WP/PB/manual basepath events are still required for MVP.
 - Undo/edit/pitch-count correction is Slice 6.
 - Current pitcher remains fixed to starting pitcher until Slice 7.
 - Opponent hitters are numbered slots.
 - Runner suggestions for FC/SAC are conservative and intentionally editable rather than pretending to infer fielding context.
 - No dedicated triple-play result yet.
 - A time-limit expiration is informational until game-ending rules are implemented; the scorekeeper finalizes play manually.
+- Slice 6 should extract the offensive scoring surface/view model from `LiveGameView` while adding history/undo, reducing its mixed UI/replay/persistence responsibilities.
 
-## Next vertical slice
+## Current vertical slice
 
-**Slice 5 — Full tracked-team offensive scoring + player attribution.**
+**Slice 6 — Undo + play history + correction engine.**
 
-Goals:
-
-- Reuse the same PA/result/movement concepts when our team bats.
-- Derive current tracked-team batter from the full persisted lineup order.
-- Attribute PA outcome, runs and RBI to real `Player` IDs.
-- Preserve event/replay determinism.
-- Begin batting-stat projection inputs (PA/AB/H/2B/3B/HR/BB/HBP/SO/R/RBI) without storing mutable totals.
-- Keep pitch tracking optional/quick on offensive half; do not require opponent-pitcher tracking for MVP.
-- Add hostile batting-order rollover and stat-rule tests.
-- Exercise rollover using the actual lineup length, including both 9-player and 13-player orders.
+Next goals are event-log history, undo/edit/delete through replay, and pitch-count correction as specified in `docs/LAPTOP_HANDOFF.md`.
 
 ## Do not redo
 

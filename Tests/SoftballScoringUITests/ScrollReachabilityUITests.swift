@@ -89,6 +89,89 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Test Opponent"].waitForExistence(timeout: 3))
     }
 
+    func testOffensiveQuickResultsPersistRealBatterProgression() {
+        let app = launchApp()
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let currentBatter = app.staticTexts["offense.currentBatter"]
+        XCTAssertTrue(currentBatter.waitForExistence(timeout: 3))
+        XCTAssertEqual(currentBatter.label, "Player 01")
+
+        let walk = app.buttons["Walk"]
+        XCTAssertTrue(scrollUntilHittable(walk, in: app))
+        walk.tap()
+        XCTAssertTrue(waitForLabel("Player 02", on: currentBatter))
+        let homeRun = app.buttons["Home Run"]
+        XCTAssertTrue(scrollUntilHittable(homeRun, in: app))
+        homeRun.tap()
+        XCTAssertTrue(waitForLabel("Player 03", on: currentBatter))
+
+        let single = app.buttons["1B"]
+        let deadline = Date().addingTimeInterval(5)
+        while !single.isHittable && Date() < deadline {
+            app.swipeUp()
+        }
+        XCTAssertTrue(single.isHittable)
+        single.tap()
+        XCTAssertTrue(app.navigationBars["Record Our Play"].waitForExistence(timeout: 3))
+        app.buttons["Record"].tap()
+        XCTAssertTrue(waitForLabel("Player 04", on: currentBatter))
+
+        app.navigationBars["UI Opponent"].buttons.firstMatch.tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertTrue(waitForLabel("Player 04", on: currentBatter))
+    }
+
+    func testNormalOffensivePitchAndBaseRunningControlsPersistDerivedState() {
+        let app = launchApp()
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let currentBatter = app.staticTexts["offense.currentBatter"]
+        let count = app.staticTexts["game.count"]
+        XCTAssertTrue(currentBatter.waitForExistence(timeout: 3))
+        XCTAssertEqual(currentBatter.label, "Player 01")
+
+        let ball = app.buttons["offense.pitch.ball"]
+        for expectedCount in ["1 – 0", "2 – 0", "3 – 0"] {
+            ball.tap()
+            XCTAssertTrue(waitForLabel(expectedCount, on: count))
+        }
+        ball.tap()
+        XCTAssertTrue(waitForLabel("Player 02", on: currentBatter))
+        XCTAssertTrue(waitForLabel("0 – 0", on: count))
+
+        let stealSecond = app.buttons["offense.baseRunning.first.stolenBase"]
+        XCTAssertTrue(scrollUntilHittable(stealSecond, in: app))
+        stealSecond.tap()
+        let caughtStealing = app.buttons["offense.baseRunning.second.caughtStealing"]
+        XCTAssertTrue(scrollUntilHittable(caughtStealing, in: app))
+        caughtStealing.tap()
+        XCTAssertEqual(currentBatter.label, "Player 02")
+
+        let calledStrike = app.buttons["offense.pitch.calledStrike"]
+        XCTAssertTrue(scrollUntilHittable(calledStrike, in: app))
+        calledStrike.tap()
+        XCTAssertTrue(waitForLabel("0 – 1", on: count))
+        app.buttons["offense.pitch.foul"].tap()
+        XCTAssertTrue(waitForLabel("0 – 2", on: count))
+        app.buttons["offense.pitch.foul"].tap()
+        XCTAssertTrue(waitForLabel("0 – 2", on: count))
+        app.buttons["offense.pitch.swingingStrike"].tap()
+        XCTAssertTrue(waitForLabel("Player 03", on: currentBatter))
+        XCTAssertTrue(waitForLabel("0 – 0", on: count))
+    }
+
     private func launchApp() -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -148,12 +231,28 @@ final class ScrollReachabilityUITests: XCTestCase {
         return XCTWaiter.wait(for: [updated], timeout: 2) == .completed
     }
 
+    private func waitForLabel(_ label: String, on element: XCUIElement) -> Bool {
+        let updated = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", label),
+            object: element
+        )
+        return XCTWaiter.wait(for: [updated], timeout: 3) == .completed
+    }
+
     private func waitForScrollToSettle() {
         let settled = expectation(description: "Scroll settled")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             settled.fulfill()
         }
         wait(for: [settled], timeout: 1)
+    }
+
+    private func scrollUntilHittable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        let deadline = Date().addingTimeInterval(5)
+        while !element.isHittable && Date() < deadline {
+            app.swipeUp()
+        }
+        return element.isHittable
     }
 
     private func swipeDownUntilHittable(

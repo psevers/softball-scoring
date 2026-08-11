@@ -88,3 +88,26 @@ Across representative:
 
 - A finger swipe reaches and opens the inactive player after a 14-player active Team roster.
 - A 14-player batting order can be built by touch, its final batter remains reachable, and Start Game saves and opens the live game.
+
+## Tracked-team offense
+
+- Offensive event codec preserves historical player identity and explicit counted-run sources.
+- Authoritative recorder resolves the current batter from persisted lineup/player records.
+- Nine- and thirteen-player orders wrap using their actual length.
+- Third out preserves the next tracked batter for the following offensive inning.
+- Reload/replay restores the next batter and real-player base occupancy.
+- Historical events replay after current lineup metadata/order changes because each event owns its batting-order context.
+- A pitch sequence cannot be completed by a different player identity at the same lineup slot.
+- Cold-store reload restores batter, live count, bases, score, and derived batting projection.
+- Defensive pitch recording succeeds after an offensive half-inning.
+- Rapid stale offensive writes are rejected before they can score the next batter.
+- Normal Ball/Strike/Foul/Swing entry completes BB/K and preserves the two-strike foul rule without opponent-pitcher stats.
+- BB/HBP force only required runners; a loaded award credits the runner from third and one RBI.
+- HR moves and credits every occupied real-player runner.
+- Offensive ball-in-play suggestions cover hits and double plays before scorer confirmation.
+- Runner passing, base collisions, backward movement, excess outs, and ordinary batter-out timing runs are rejected.
+- SB advances the identified runner; CS removes that runner and adds an out without advancing the batter.
+- Steal of home credits one run and SB without RBI; third-out CS advances the half and clears remaining runners.
+- SB/CS rejects an occupied destination, wrong runner identity, and the wrong half-inning.
+- Batting projection covers every PA result and credits PA/AB/H/2B/3B/HR/BB/HBP/SO/R/RBI/SB/CS without storing mutable totals.
+- UI workflow records quick results and a confirmed single, then reopens the game at the correct next batter.

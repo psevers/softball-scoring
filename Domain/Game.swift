@@ -201,3 +201,36 @@ struct LineupDraftEntryValue: Equatable {
     let playerID: UUID
     let position: DefensivePosition?
 }
+
+enum TrackedBattingOrder {
+    static func resolve(
+        gameID: UUID,
+        lineupEntries: [LineupEntry],
+        players: [Player]
+    ) -> [TrackedBatterIdentity]? {
+        let entries = lineupEntries
+            .filter { $0.gameID == gameID && $0.isActive }
+            .sorted { $0.battingOrder < $1.battingOrder }
+        guard !entries.isEmpty,
+              entries.map(\.battingOrder) == Array(1...entries.count),
+              Set(entries.map(\.playerID)).count == entries.count else {
+            return nil
+        }
+
+        let groupedPlayers = Dictionary(grouping: players, by: \.id)
+        guard groupedPlayers.values.allSatisfy({ $0.count == 1 }) else { return nil }
+        let playersByID = groupedPlayers.compactMapValues(\.first)
+        var battingOrder: [TrackedBatterIdentity] = []
+        for (index, entry) in entries.enumerated() {
+            guard let player = playersByID[entry.playerID] else { return nil }
+            battingOrder.append(TrackedBatterIdentity(
+                playerID: player.id,
+                lineupSlot: index + 1,
+                displayName: player.displayName,
+                jerseyNumber: player.jerseyNumber,
+                position: entry.startingPosition
+            ))
+        }
+        return battingOrder
+    }
+}

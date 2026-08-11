@@ -58,6 +58,9 @@ Typed bodies now include:
 ```text
 GameEventBody.pitch(PitchEvent)
 GameEventBody.ballInPlay(BallInPlayEvent)
+GameEventBody.offensivePitch(OffensivePitchEvent)
+GameEventBody.offensivePlateAppearance(OffensivePlateAppearanceEvent)
+GameEventBody.offensiveBaseRunning(OffensiveBaseRunningEvent)
 ```
 
 A Ball In Play PA is deliberately two-stage:
@@ -73,6 +76,15 @@ PA completes / count resets / batter advances
 ```
 
 This prevents a ball in play from either missing a pitch or counting it twice.
+
+Tracked-team offense uses self-contained events. A plate appearance snapshots the historical
+player ID, lineup slot, lineup size, display name, jersey number, and starting position, then records
+explicit runner movements and the exact runner sources whose touches of home count. Non-terminal
+Ball/Strike/Foul/Swing inputs use `OffensivePitchEvent`; ball four and strike three become the same
+authoritative plate-appearance events as quick results. SB/CS use a player-ID base-running event and
+do not advance the batter. Historical replay requires no current mutable lineup context. Derived
+`OffensiveCountContext` binds a live count to the same event-time batter identity and lineup size
+until the plate appearance completes.
 
 ## Explicit runner movement
 
@@ -107,7 +119,7 @@ SwiftUI / later stat projectors
 
 Malformed history is surfaced rather than silently skipped; new writes are blocked while rejected records exist.
 
-## Game state through Slice 4
+## Derived game state
 
 Derived state includes:
 
@@ -117,6 +129,8 @@ Derived state includes:
 - home / away score
 - opponent batter slot 1...9
 - first / second / third runner slot
+- tracked-team batter slot using the actual persisted lineup length
+- first / second / third tracked runner player ID
 - pending ball-in-play state
 - pitch totals/ball/strike counts by pitcher
 
@@ -136,8 +150,8 @@ No accumulated score/stat record is directly mutated by a scoring tap.
 
 ## Future evolution
 
-- Slice 5: tracked-team offensive PAs + player attribution/stat projection inputs.
+- Slice 5: tracked-team offensive PAs, pitch entry, SB/CS, and player attribution/stat projection inputs.
 - Slice 6: undo/edit/count correction through event history + replay.
 - Slice 7: pitcher-change events and current-pitcher replay state.
-- MVP follow-up: non-PA runner events (SB/CS/WP/PB/advance/out).
+- MVP follow-up: non-PA runner events beyond SB/CS (WP/PB/manual advance/out).
 - Slice 8+: box-score and season-stat projectors consume the same event stream.

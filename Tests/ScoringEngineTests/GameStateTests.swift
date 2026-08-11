@@ -701,6 +701,413 @@ struct GameStateTests {
         #expect(state == GameState())
     }
 
+    @Test(arguments: [9, 13])
+    func trackedBattingOrderUsesActualLineupLengthAndWraps(_ lineupCount: Int) {
+        let lineup = (1...lineupCount).map { slot in
+            TrackedBatterIdentity(
+                playerID: UUID(),
+                lineupSlot: slot,
+                displayName: "Batter \(slot)",
+                jerseyNumber: "\(slot)",
+                position: slot == 1 ? .pitcher : nil
+            )
+        }
+        var state = GameState()
+
+        for (index, batter) in lineup.enumerated() {
+            let plateAppearance = OffensivePlateAppearanceEvent(
+                batter: batter,
+                battingOrderSize: lineup.count,
+                result: .homeRun,
+                movements: [.init(source: .batter, destination: .home)],
+                rbi: 1,
+                countedRunSources: [.batter],
+                thirdOutClassification: nil
+            )
+            GameReducer.apply(
+                DecodedGameEvent(
+                    sequenceNumber: index + 1,
+                    timestamp: Date(timeIntervalSince1970: TimeInterval(index + 1)),
+                    body: .offensivePlateAppearance(plateAppearance)
+                ),
+                to: &state,
+                trackedTeamHomeAway: .away
+            )
+        }
+
+        #expect(state.currentTrackedBatterSlot == 1)
+        #expect(state.awayScore == lineupCount)
+        #expect(state.trackedBaseRunnerPlayerIDs.allSatisfy { $0 == nil })
+    }
+
+    @Test func trackedTeamWalkPlacesRealPlayerOnFirstAndAdvancesBatter() {
+        let lineup = (1...2).map { slot in
+            TrackedBatterIdentity(
+                playerID: UUID(),
+                lineupSlot: slot,
+                displayName: "Batter \(slot)",
+                jerseyNumber: "\(slot)",
+                position: nil
+            )
+        }
+        var state = GameState()
+        let walk = OffensivePlateAppearanceEvent(
+            batter: lineup[0],
+            battingOrderSize: lineup.count,
+            result: .walk,
+            movements: [.init(source: .batter, destination: .first)],
+            rbi: 0,
+            countedRunSources: [],
+            thirdOutClassification: nil
+        )
+
+        GameReducer.apply(
+            DecodedGameEvent(sequenceNumber: 1, timestamp: .now, body: .offensivePlateAppearance(walk)),
+            to: &state,
+            trackedTeamHomeAway: .away
+        )
+
+        #expect(state.firstBaseRunnerPlayerID == lineup[0].playerID)
+        #expect(state.currentTrackedBatterSlot == 2)
+        #expect(state.outs == 0)
+    }
+
+    @Test func offensiveQuickWalkForcesLoadedBasesAndCreditsOneRun() {
+        var state = GameState()
+        state.firstBaseRunnerPlayerID = UUID()
+        state.secondBaseRunnerPlayerID = UUID()
+        state.thirdBaseRunnerPlayerID = UUID()
+
+        let suggestion = OffensiveMovementSuggestions.awardedFirstBase(state: state)
+
+        #expect(suggestion.movements == [
+            .init(source: .batter, destination: .first),
+            .init(source: .first, destination: .second),
+            .init(source: .second, destination: .third),
+            .init(source: .third, destination: .home)
+        ])
+        #expect(suggestion.countedRunSources == [.third])
+        #expect(suggestion.rbi == 1)
+    }
+
+    @Test func offensiveQuickWalkHoldsUnforcedRunners() {
+        var state = GameState()
+        state.secondBaseRunnerPlayerID = UUID()
+        state.thirdBaseRunnerPlayerID = UUID()
+
+        let suggestion = OffensiveMovementSuggestions.awardedFirstBase(state: state)
+
+        #expect(suggestion.movements == [
+            .init(source: .batter, destination: .first),
+            .init(source: .second, destination: .second),
+            .init(source: .third, destination: .third)
+        ])
+        #expect(suggestion.countedRunSources.isEmpty)
+        #expect(suggestion.rbi == 0)
+    }
+
+    @Test func offensiveQuickHomeRunSendsEveryRunnerHome() {
+        var state = GameState()
+        state.firstBaseRunnerPlayerID = UUID()
+        state.thirdBaseRunnerPlayerID = UUID()
+
+        let suggestion = OffensiveMovementSuggestions.homeRun(state: state)
+
+        #expect(suggestion.movements == [
+            .init(source: .batter, destination: .home),
+            .init(source: .first, destination: .home),
+            .init(source: .third, destination: .home)
+        ])
+        #expect(suggestion.countedRunSources == [.batter, .first, .third])
+        #expect(suggestion.rbi == 3)
+    }
+
+    @Test func offensiveQuickStrikeoutHoldsRunnersAndRecordsBatterOut() {
+        var state = GameState()
+        state.firstBaseRunnerPlayerID = UUID()
+
+        let suggestion = OffensiveMovementSuggestions.strikeout(state: state)
+
+        #expect(suggestion.movements == [
+            .init(source: .batter, destination: .out),
+            .init(source: .first, destination: .first)
+        ])
+        #expect(suggestion.countedRunSources.isEmpty)
+        #expect(suggestion.rbi == 0)
+    }
+
+    @Test func offensiveSingleSuggestionsAdvanceAndAttributeLoadedRunners() {
+        var state = GameState()
+        state.firstBaseRunnerPlayerID = UUID()
+        state.secondBaseRunnerPlayerID = UUID()
+        state.thirdBaseRunnerPlayerID = UUID()
+
+        let suggestion = OffensiveMovementSuggestions.ballInPlay(.single, state: state)
+
+        #expect(suggestion.movements == [
+            .init(source: .batter, destination: .first),
+            .init(source: .first, destination: .second),
+            .init(source: .second, destination: .home),
+            .init(source: .third, destination: .home)
+        ])
+        #expect(suggestion.countedRunSources == [.second, .third])
+        #expect(suggestion.rbi == 2)
+    }
+
+    @Test func offensiveDoublePlaySuggestionsRecordTwoOutsWhenRunnerIsAvailable() {
+        var state = GameState()
+        state.firstBaseRunnerPlayerID = UUID()
+
+        let suggestion = OffensiveMovementSuggestions.ballInPlay(.doublePlay, state: state)
+
+        #expect(suggestion.movements == [
+            .init(source: .batter, destination: .out),
+            .init(source: .first, destination: .out)
+        ])
+        #expect(suggestion.countedRunSources.isEmpty)
+        #expect(suggestion.rbi == 0)
+    }
+
+    @Test func offensiveValidatorRejectsRunnerPassing() {
+        let lineup = trackedLineup(count: 3)
+        var state = GameState()
+        state.firstBaseRunnerPlayerID = lineup[0].playerID
+        state.secondBaseRunnerPlayerID = lineup[1].playerID
+        state.currentTrackedBatterSlot = 3
+        let play = OffensivePlateAppearanceEvent(
+            batter: lineup[2],
+            battingOrderSize: lineup.count,
+            result: .single,
+            movements: [
+                .init(source: .batter, destination: .first),
+                .init(source: .first, destination: .home),
+                .init(source: .second, destination: .second)
+            ],
+            rbi: 1,
+            countedRunSources: [.first],
+            thirdOutClassification: nil
+        )
+
+        #expect(!OffensivePlateAppearanceValidator.isValid(
+            play,
+            state: state,
+            trackedTeamHomeAway: .away
+        ))
+    }
+
+    @Test func ordinaryOffensiveBatterOutAsThirdOutCannotCountTimingRun() {
+        let lineup = trackedLineup(count: 2)
+        var state = GameState()
+        state.outs = 2
+        state.thirdBaseRunnerPlayerID = lineup[0].playerID
+        state.currentTrackedBatterSlot = 2
+        let play = OffensivePlateAppearanceEvent(
+            batter: lineup[1],
+            battingOrderSize: lineup.count,
+            result: .groundOut,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 1,
+            countedRunSources: [.third],
+            thirdOutClassification: .timingPlay
+        )
+
+        #expect(!OffensivePlateAppearanceValidator.isValid(
+            play,
+            state: state,
+            trackedTeamHomeAway: .away
+        ))
+    }
+
+    @Test func strikeoutAsThirdOutCannotCountTimingRun() {
+        let lineup = trackedLineup(count: 2)
+        var state = GameState()
+        state.outs = 2
+        state.thirdBaseRunnerPlayerID = lineup[0].playerID
+        state.currentTrackedBatterSlot = 2
+        let play = OffensivePlateAppearanceEvent(
+            batter: lineup[1],
+            battingOrderSize: lineup.count,
+            result: .strikeout,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 1,
+            countedRunSources: [.third],
+            thirdOutClassification: .timingPlay
+        )
+
+        #expect(!OffensivePlateAppearanceValidator.isValid(
+            play,
+            state: state,
+            trackedTeamHomeAway: .away
+        ))
+    }
+
+    @Test func offensiveThirdOutPreservesNextTrackedBatterForFollowingInning() {
+        let lineup = trackedLineup(count: 5)
+        var state = GameState()
+        state.outs = 2
+        let strikeout = OffensivePlateAppearanceEvent(
+            batter: lineup[0],
+            battingOrderSize: lineup.count,
+            result: .strikeout,
+            movements: [.init(source: .batter, destination: .out)],
+            rbi: 0,
+            countedRunSources: [],
+            thirdOutClassification: nil
+        )
+
+        GameReducer.apply(
+            DecodedGameEvent(sequenceNumber: 1, timestamp: .now, body: .offensivePlateAppearance(strikeout)),
+            to: &state,
+            trackedTeamHomeAway: .away
+        )
+
+        #expect(state.half == .bottom)
+        #expect(state.currentTrackedBatterSlot == 2)
+        #expect(state.outs == 0)
+    }
+
+    @Test func stolenBaseAndCaughtStealingUpdateRunnerWithoutAdvancingBatter() {
+        let runnerID = UUID()
+        var state = GameState()
+        state.firstBaseRunnerPlayerID = runnerID
+
+        GameReducer.apply(
+            DecodedGameEvent(
+                sequenceNumber: 1,
+                timestamp: .now,
+                body: .offensiveBaseRunning(OffensiveBaseRunningEvent(
+                    runnerID: runnerID,
+                    source: .first,
+                    destination: .second,
+                    result: .stolenBase
+                ))
+            ),
+            to: &state,
+            trackedTeamHomeAway: .away
+        )
+
+        #expect(state.firstBaseRunnerPlayerID == nil)
+        #expect(state.secondBaseRunnerPlayerID == runnerID)
+        #expect(state.currentTrackedBatterSlot == 1)
+        #expect(state.outs == 0)
+
+        GameReducer.apply(
+            DecodedGameEvent(
+                sequenceNumber: 2,
+                timestamp: .now,
+                body: .offensiveBaseRunning(OffensiveBaseRunningEvent(
+                    runnerID: runnerID,
+                    source: .second,
+                    destination: .out,
+                    result: .caughtStealing
+                ))
+            ),
+            to: &state,
+            trackedTeamHomeAway: .away
+        )
+
+        #expect(state.secondBaseRunnerPlayerID == nil)
+        #expect(state.currentTrackedBatterSlot == 1)
+        #expect(state.outs == 1)
+    }
+
+    @Test func stealOfHomeScoresRunnerWithoutRBI() {
+        let runnerID = UUID()
+        var state = GameState()
+        state.thirdBaseRunnerPlayerID = runnerID
+
+        GameReducer.apply(
+            DecodedGameEvent(
+                sequenceNumber: 1,
+                timestamp: .now,
+                body: .offensiveBaseRunning(OffensiveBaseRunningEvent(
+                    runnerID: runnerID,
+                    source: .third,
+                    destination: .home,
+                    result: .stolenBase
+                ))
+            ),
+            to: &state,
+            trackedTeamHomeAway: .away
+        )
+
+        #expect(state.awayScore == 1)
+        #expect(state.thirdBaseRunnerPlayerID == nil)
+        #expect(state.currentTrackedBatterSlot == 1)
+    }
+
+    @Test func caughtStealingAsThirdOutAdvancesHalfAndClearsOtherRunners() {
+        let caughtRunnerID = UUID()
+        var state = GameState()
+        state.outs = 2
+        state.firstBaseRunnerPlayerID = UUID()
+        state.secondBaseRunnerPlayerID = caughtRunnerID
+
+        GameReducer.apply(
+            DecodedGameEvent(
+                sequenceNumber: 1,
+                timestamp: .now,
+                body: .offensiveBaseRunning(OffensiveBaseRunningEvent(
+                    runnerID: caughtRunnerID,
+                    source: .second,
+                    destination: .out,
+                    result: .caughtStealing
+                ))
+            ),
+            to: &state,
+            trackedTeamHomeAway: .away
+        )
+
+        #expect(state.half == .bottom)
+        #expect(state.outs == 0)
+        #expect(state.trackedBaseRunnerPlayerIDs.allSatisfy { $0 == nil })
+        #expect(state.currentTrackedBatterSlot == 1)
+    }
+
+    @Test func baseRunningValidatorRejectsCollisionWrongRunnerAndWrongHalf() {
+        let runnerID = UUID()
+        var state = GameState()
+        state.firstBaseRunnerPlayerID = runnerID
+        state.secondBaseRunnerPlayerID = UUID()
+        let steal = OffensiveBaseRunningEvent(
+            runnerID: runnerID,
+            source: .first,
+            destination: .second,
+            result: .stolenBase
+        )
+
+        #expect(!OffensiveBaseRunningValidator.isValid(
+            steal,
+            state: state,
+            trackedTeamHomeAway: .away
+        ))
+
+        state.secondBaseRunnerPlayerID = nil
+        let wrongRunner = OffensiveBaseRunningEvent(
+            runnerID: UUID(),
+            source: .first,
+            destination: .second,
+            result: .stolenBase
+        )
+        #expect(!OffensiveBaseRunningValidator.isValid(
+            wrongRunner,
+            state: state,
+            trackedTeamHomeAway: .away
+        ))
+
+        #expect(!OffensiveBaseRunningValidator.isValid(
+            steal,
+            state: state,
+            trackedTeamHomeAway: .home
+        ))
+    }
+
     private func replayPitches(_ results: [PitchResult]) -> GameState {
         var state = GameState()
         state.half = .top // tracked team is home, so opponent bats top
@@ -709,6 +1116,18 @@ struct GameStateTests {
             GameReducer.apply(event, to: &state, trackedTeamHomeAway: .home)
         }
         return state
+    }
+
+    private func trackedLineup(count: Int) -> [TrackedBatterIdentity] {
+        (1...count).map { slot in
+            TrackedBatterIdentity(
+                playerID: UUID(),
+                lineupSlot: slot,
+                displayName: "Batter \(slot)",
+                jerseyNumber: "\(slot)",
+                position: nil
+            )
+        }
     }
 
     private func makePitchEvent(_ result: PitchResult, batterSlot: Int, sequence: Int = 1) -> DecodedGameEvent {

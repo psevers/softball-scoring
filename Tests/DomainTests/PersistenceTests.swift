@@ -5,6 +5,127 @@ import Testing
 
 @MainActor
 struct PersistenceTests {
+    @Test func thirteenPlayerOffensiveOrderReplaysToSameNextBatter() throws {
+        let gameID = UUID()
+        let lineup = (1...13).map { slot in
+            TrackedBatterIdentity(
+                playerID: UUID(),
+                lineupSlot: slot,
+                displayName: "Batter \(slot)",
+                jerseyNumber: "\(slot)",
+                position: nil
+            )
+        }
+        let records = try lineup.enumerated().map { index, batter in
+            try GameEventRecord(
+                gameID: gameID,
+                sequenceNumber: index + 1,
+                body: .offensivePlateAppearance(OffensivePlateAppearanceEvent(
+                    batter: batter,
+                    battingOrderSize: lineup.count,
+                    result: .homeRun,
+                    movements: [.init(source: .batter, destination: .home)],
+                    rbi: 1,
+                    countedRunSources: [.batter],
+                    thirdOutClassification: nil
+                ))
+            )
+        }
+
+        let replay = GameEventReplay.replay(
+            records: records,
+            homeAway: .away,
+            startingPitcherID: nil
+        )
+
+        #expect(replay.rejectedRecordIDs.isEmpty)
+        #expect(replay.state.currentTrackedBatterSlot == 1)
+        #expect(replay.state.awayScore == 13)
+    }
+
+    @Test func historicalOffensiveEventReplaysWithoutCurrentLineupContext() throws {
+        let firstPlayerID = UUID()
+        let historicalBatter = TrackedBatterIdentity(
+            playerID: firstPlayerID,
+            lineupSlot: 1,
+            displayName: "Batter One",
+            jerseyNumber: "1",
+            position: .pitcher
+        )
+        let record = try GameEventRecord(
+            gameID: UUID(),
+            sequenceNumber: 1,
+            body: .offensivePlateAppearance(OffensivePlateAppearanceEvent(
+                batter: historicalBatter,
+                battingOrderSize: 2,
+                result: .walk,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ))
+        )
+        let replay = GameEventReplay.replay(
+            records: [record],
+            homeAway: .away,
+            startingPitcherID: firstPlayerID
+        )
+
+        #expect(replay.rejectedRecordIDs.isEmpty)
+        #expect(replay.state.currentTrackedBatterSlot == 2)
+        #expect(replay.state.firstBaseRunnerPlayerID == firstPlayerID)
+    }
+
+    @Test func replayRejectsPlateAppearanceForDifferentBatterAfterPitchSequenceStarts() throws {
+        let firstBatter = TrackedBatterIdentity(
+            playerID: UUID(),
+            lineupSlot: 1,
+            displayName: "Original Batter",
+            jerseyNumber: "1",
+            position: nil
+        )
+        let replacementIdentity = TrackedBatterIdentity(
+            playerID: UUID(),
+            lineupSlot: 1,
+            displayName: "Different Batter",
+            jerseyNumber: "99",
+            position: nil
+        )
+        let gameID = UUID()
+        let pitch = try GameEventRecord(
+            gameID: gameID,
+            sequenceNumber: 1,
+            body: .offensivePitch(OffensivePitchEvent(
+                batter: firstBatter,
+                battingOrderSize: 2,
+                result: .calledStrike
+            ))
+        )
+        let plateAppearance = try GameEventRecord(
+            gameID: gameID,
+            sequenceNumber: 2,
+            body: .offensivePlateAppearance(OffensivePlateAppearanceEvent(
+                batter: replacementIdentity,
+                battingOrderSize: 2,
+                result: .strikeout,
+                movements: [.init(source: .batter, destination: .out)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ))
+        )
+
+        let replay = GameEventReplay.replay(
+            records: [pitch, plateAppearance],
+            homeAway: .away,
+            startingPitcherID: nil
+        )
+
+        #expect(replay.rejectedRecordIDs == [plateAppearance.id])
+        #expect(replay.state.strikes == 1)
+        #expect(replay.state.currentTrackedBatterSlot == 1)
+    }
+
     @Test func gameAndLineupPersistInContainer() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext
@@ -94,9 +215,424 @@ struct PersistenceTests {
         #expect(storedGame.regulationInnings == 7)
         #expect(storedGame.timeLimitMinutes == nil)
     }
+
+    @Test func coldStoreReloadRestoresOffensiveBatterCountBasesScoreAndProjection() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appending(path: "softball-scoring-cold-reload-\(UUID().uuidString).store")
+        let gameID = UUID()
+        let first = TrackedBatterIdentity(
+            playerID: UUID(),
+            lineupSlot: 1,
+            displayName: "Batter One",
+            jerseyNumber: "1",
+            position: nil
+        )
+        let second = TrackedBatterIdentity(
+            playerID: UUID(),
+            lineupSlot: 2,
+            displayName: "Batter Two",
+            jerseyNumber: "2",
+            position: nil
+        )
+
+        do {
+            let writeContainer = try AppModelContainer.make(storeURL: storeURL)
+            let context = writeContainer.mainContext
+            context.insert(try GameEventRecord(
+                gameID: gameID,
+                sequenceNumber: 1,
+                body: .offensivePlateAppearance(OffensivePlateAppearanceEvent(
+                    batter: first,
+                    battingOrderSize: 2,
+                    result: .homeRun,
+                    movements: [.init(source: .batter, destination: .home)],
+                    rbi: 1,
+                    countedRunSources: [.batter],
+                    thirdOutClassification: nil
+                ))
+            ))
+            context.insert(try GameEventRecord(
+                gameID: gameID,
+                sequenceNumber: 2,
+                body: .offensivePlateAppearance(OffensivePlateAppearanceEvent(
+                    batter: second,
+                    battingOrderSize: 2,
+                    result: .walk,
+                    movements: [.init(source: .batter, destination: .first)],
+                    rbi: 0,
+                    countedRunSources: [],
+                    thirdOutClassification: nil
+                ))
+            ))
+            context.insert(try GameEventRecord(
+                gameID: gameID,
+                sequenceNumber: 3,
+                body: .offensivePitch(OffensivePitchEvent(
+                    batter: first,
+                    battingOrderSize: 2,
+                    result: .ball
+                ))
+            ))
+            try context.save()
+        }
+
+        let readContainer = try AppModelContainer.make(storeURL: storeURL)
+        let records = try readContainer.mainContext.fetch(FetchDescriptor<GameEventRecord>())
+            .filter { $0.gameID == gameID }
+        let replay = GameEventReplay.replay(
+            records: records,
+            homeAway: .away,
+            startingPitcherID: nil
+        )
+        let projection = BattingStatProjector.project(events: try records.map { try $0.decoded() })
+
+        #expect(replay.rejectedRecordIDs.isEmpty)
+        #expect(replay.state.currentTrackedBatterSlot == 1)
+        #expect(replay.state.balls == 1)
+        #expect(replay.state.firstBaseRunnerPlayerID == second.playerID)
+        #expect(replay.state.awayScore == 1)
+        #expect(projection[first.playerID]?.homeRuns == 1)
+        #expect(projection[first.playerID]?.runs == 1)
+        #expect(projection[second.playerID]?.walks == 1)
+    }
 }
 
 extension PersistenceTests {
+    @Test func offensiveRecorderPersistsCurrentTrackedBatterAndReplaysFromStore() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let players = (1...13).map { slot in
+            Player(
+                firstName: "Batter",
+                lastName: "\(slot)",
+                jerseyNumber: "\(slot)"
+            )
+        }
+        let game = Game(
+            seasonID: UUID(),
+            opponentName: "Thunder",
+            homeAway: .away,
+            status: .inProgress,
+            startingPitcherID: players[0].id
+        )
+        context.insert(game)
+        for (index, player) in players.enumerated() {
+            context.insert(player)
+            context.insert(LineupEntry(
+                playerID: player.id,
+                battingOrder: index + 1,
+                startingPosition: index < 9 ? LineupValidation.regulationDefensivePositions[index] : nil,
+                gameID: game.id
+            ))
+        }
+        try context.save()
+
+        try GameEventRecorder.recordOffensivePlateAppearance(
+            expectedBatter: TrackedBatterIdentity(
+                playerID: players[0].id,
+                lineupSlot: 1,
+                displayName: "Batter 1",
+                jerseyNumber: "1",
+                position: .pitcher
+            ),
+            result: .walk,
+            movements: [.init(source: .batter, destination: .first)],
+            rbi: 0,
+            countedRunSources: [],
+            game: game,
+            existingRecords: [],
+            modelContext: context
+        )
+
+        let records = try context.fetch(FetchDescriptor<GameEventRecord>())
+        let lineupEntries = try context.fetch(FetchDescriptor<LineupEntry>())
+        let storedPlayers = try context.fetch(FetchDescriptor<Player>())
+        let battingOrder = try #require(TrackedBattingOrder.resolve(
+            gameID: game.id,
+            lineupEntries: lineupEntries,
+            players: storedPlayers
+        ))
+        let storedRecord = try #require(records.first)
+        let storedEvent = try storedRecord.decoded()
+        guard case .offensivePlateAppearance(let plateAppearance) = storedEvent.body else {
+            Issue.record("Expected an offensive plate appearance")
+            return
+        }
+        let replay = GameEventReplay.replay(
+            records: records,
+            homeAway: .away,
+            startingPitcherID: game.startingPitcherID
+        )
+
+        #expect(battingOrder.count == 13)
+        #expect(plateAppearance.batter.playerID == players[0].id)
+        #expect(plateAppearance.batter.lineupSlot == 1)
+        #expect(plateAppearance.batter.displayName == "Batter 1")
+        #expect(replay.rejectedRecordIDs.isEmpty)
+        #expect(replay.state.currentTrackedBatterSlot == 2)
+        #expect(replay.state.firstBaseRunnerPlayerID == players[0].id)
+    }
+
+    @Test func defensivePitchCanBeRecordedAfterOffensivePlateAppearances() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let player = Player(firstName: "Pitcher", lastName: "One", jerseyNumber: "1")
+        let game = Game(
+            seasonID: UUID(),
+            opponentName: "Thunder",
+            homeAway: .away,
+            status: .inProgress,
+            startingPitcherID: player.id
+        )
+        context.insert(game)
+        context.insert(player)
+        context.insert(LineupEntry(
+            playerID: player.id,
+            battingOrder: 1,
+            startingPosition: .pitcher,
+            gameID: game.id
+        ))
+        try context.save()
+
+        for _ in 0..<3 {
+            try GameEventRecorder.recordOffensivePlateAppearance(
+                expectedBatter: TrackedBatterIdentity(
+                    playerID: player.id,
+                    lineupSlot: 1,
+                    displayName: "Pitcher One",
+                    jerseyNumber: "1",
+                    position: .pitcher
+                ),
+                result: .strikeout,
+                movements: [.init(source: .batter, destination: .out)],
+                rbi: 0,
+                countedRunSources: [],
+                game: game,
+                existingRecords: [],
+                modelContext: context
+            )
+        }
+
+        try GameEventRecorder.recordPitch(
+            result: .ball,
+            game: game,
+            existingRecords: [],
+            modelContext: context
+        )
+
+        let records = try context.fetch(FetchDescriptor<GameEventRecord>())
+        let replay = GameEventReplay.replay(
+            records: records,
+            homeAway: .away,
+            startingPitcherID: player.id
+        )
+
+        #expect(replay.rejectedRecordIDs.isEmpty)
+        #expect(replay.state.half == .bottom)
+        #expect(replay.state.balls == 1)
+    }
+
+    @Test func recorderRejectsStaleDisplayedBatterBeforeApplyingNextPlateAppearance() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let players = [
+            Player(firstName: "Batter", lastName: "One", jerseyNumber: "1"),
+            Player(firstName: "Batter", lastName: "Two", jerseyNumber: "2")
+        ]
+        let game = Game(
+            seasonID: UUID(),
+            opponentName: "Thunder",
+            homeAway: .away,
+            status: .inProgress,
+            startingPitcherID: players[0].id
+        )
+        context.insert(game)
+        for (index, player) in players.enumerated() {
+            context.insert(player)
+            context.insert(LineupEntry(
+                playerID: player.id,
+                battingOrder: index + 1,
+                startingPosition: index == 0 ? .pitcher : nil,
+                gameID: game.id
+            ))
+        }
+        try context.save()
+
+        let displayedBatter = TrackedBatterIdentity(
+            playerID: players[0].id,
+            lineupSlot: 1,
+            displayName: "Batter One",
+            jerseyNumber: "1",
+            position: .pitcher
+        )
+        try GameEventRecorder.recordOffensivePlateAppearance(
+            expectedBatter: displayedBatter,
+            result: .homeRun,
+            movements: [.init(source: .batter, destination: .home)],
+            rbi: 1,
+            countedRunSources: [.batter],
+            game: game,
+            existingRecords: [],
+            modelContext: context
+        )
+
+        do {
+            try GameEventRecorder.recordOffensivePlateAppearance(
+                expectedBatter: displayedBatter,
+                result: .homeRun,
+                movements: [.init(source: .batter, destination: .home)],
+                rbi: 1,
+                countedRunSources: [.batter],
+                game: game,
+                existingRecords: [],
+                modelContext: context
+            )
+            Issue.record("Expected a stale displayed batter to be rejected")
+        } catch GameEventRecorderError.batterMismatch {
+            // Expected: the first write advanced the authoritative batting order.
+        } catch {
+            Issue.record("Expected batterMismatch, got \(error)")
+        }
+
+        let records = try context.fetch(FetchDescriptor<GameEventRecord>())
+        #expect(records.count == 1)
+    }
+
+    @Test func normalOffensivePitchFlowCompletesPlayerAttributedWalkAndStrikeout() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let players = [
+            Player(firstName: "Batter", lastName: "One", jerseyNumber: "1"),
+            Player(firstName: "Batter", lastName: "Two", jerseyNumber: "2")
+        ]
+        let game = Game(
+            seasonID: UUID(),
+            opponentName: "Thunder",
+            homeAway: .away,
+            status: .inProgress,
+            startingPitcherID: players[0].id
+        )
+        context.insert(game)
+        for (index, player) in players.enumerated() {
+            context.insert(player)
+            context.insert(LineupEntry(
+                playerID: player.id,
+                battingOrder: index + 1,
+                startingPosition: index == 0 ? .pitcher : nil,
+                gameID: game.id
+            ))
+        }
+        try context.save()
+
+        let displayedBatter = TrackedBatterIdentity(
+            playerID: players[0].id,
+            lineupSlot: 1,
+            displayName: "Batter One",
+            jerseyNumber: "1",
+            position: .pitcher
+        )
+        for _ in 0..<4 {
+            try GameEventRecorder.recordOffensivePitch(
+                expectedBatter: displayedBatter,
+                result: .ball,
+                game: game,
+                existingRecords: [],
+                modelContext: context
+            )
+        }
+
+        let records = try context.fetch(FetchDescriptor<GameEventRecord>())
+        let replay = GameEventReplay.replay(
+            records: records,
+            homeAway: .away,
+            startingPitcherID: players[0].id
+        )
+        let decoded = try records.map { try $0.decoded() }
+        let battingLine = BattingStatProjector.project(events: decoded)[players[0].id]
+
+        #expect(records.count == 4)
+        #expect(replay.rejectedRecordIDs.isEmpty)
+        #expect(replay.state.currentTrackedBatterSlot == 2)
+        #expect(replay.state.firstBaseRunnerPlayerID == players[0].id)
+        #expect(replay.state.balls == 0)
+        #expect(battingLine?.plateAppearances == 1)
+        #expect(battingLine?.walks == 1)
+
+        let secondDisplayedBatter = TrackedBatterIdentity(
+            playerID: players[1].id,
+            lineupSlot: 2,
+            displayName: "Batter Two",
+            jerseyNumber: "2",
+            position: nil
+        )
+        for result in [
+            OffensivePitchResult.calledStrike,
+            .foul,
+            .foul,
+            .swingingStrike
+        ] {
+            try GameEventRecorder.recordOffensivePitch(
+                expectedBatter: secondDisplayedBatter,
+                result: result,
+                game: game,
+                existingRecords: [],
+                modelContext: context
+            )
+        }
+
+        let completedRecords = try context.fetch(FetchDescriptor<GameEventRecord>())
+        let completedReplay = GameEventReplay.replay(
+            records: completedRecords,
+            homeAway: .away,
+            startingPitcherID: players[0].id
+        )
+        let completedProjection = BattingStatProjector.project(
+            events: try completedRecords.map { try $0.decoded() }
+        )
+
+        #expect(completedRecords.count == 8)
+        #expect(completedReplay.rejectedRecordIDs.isEmpty)
+        #expect(completedReplay.state.currentTrackedBatterSlot == 1)
+        #expect(completedReplay.state.outs == 1)
+        #expect(completedReplay.state.strikes == 0)
+        #expect(completedProjection[players[1].id]?.plateAppearances == 1)
+        #expect(completedProjection[players[1].id]?.strikeouts == 1)
+
+        try GameEventRecorder.recordOffensiveBaseRunning(
+            expectedRunnerID: players[0].id,
+            source: .first,
+            result: .stolenBase,
+            game: game,
+            existingRecords: [],
+            modelContext: context
+        )
+        try GameEventRecorder.recordOffensiveBaseRunning(
+            expectedRunnerID: players[0].id,
+            source: .second,
+            result: .caughtStealing,
+            game: game,
+            existingRecords: [],
+            modelContext: context
+        )
+
+        let baseRunningRecords = try context.fetch(FetchDescriptor<GameEventRecord>())
+        let baseRunningReplay = GameEventReplay.replay(
+            records: baseRunningRecords,
+            homeAway: .away,
+            startingPitcherID: players[0].id
+        )
+        let baseRunningProjection = BattingStatProjector.project(
+            events: try baseRunningRecords.map { try $0.decoded() }
+        )
+
+        #expect(baseRunningRecords.count == 10)
+        #expect(baseRunningReplay.rejectedRecordIDs.isEmpty)
+        #expect(baseRunningReplay.state.trackedBaseRunnerPlayerIDs.allSatisfy { $0 == nil })
+        #expect(baseRunningReplay.state.outs == 2)
+        #expect(baseRunningProjection[players[0].id]?.stolenBases == 1)
+        #expect(baseRunningProjection[players[0].id]?.caughtStealing == 1)
+    }
+
     @Test func pitchEventPersistsAndReplaysIntoCount() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext

@@ -219,4 +219,20 @@ struct GameTests {
         #expect(entry.startingPosition == .shortstop)
         #expect(entry.currentPosition == .shortstop)
     }
+
+    @Test func trackedBattingOrderRejectsDuplicateDurablePlayerIdentity() {
+        let gameID = UUID()
+        let playerID = UUID()
+        let entry = LineupEntry(playerID: playerID, battingOrder: 1, gameID: gameID)
+        let duplicatePlayers = [
+            Player(id: playerID, firstName: "First", lastName: "Copy"),
+            Player(id: playerID, firstName: "Second", lastName: "Copy")
+        ]
+
+        #expect(TrackedBattingOrder.resolve(
+            gameID: gameID,
+            lineupEntries: [entry],
+            players: duplicatePlayers
+        ) == nil)
+    }
 }

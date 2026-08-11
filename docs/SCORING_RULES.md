@@ -44,6 +44,22 @@ Pitch-stat classification:
 
 Only forced runners advance. Bases-loaded BB/HBP scores exactly one run.
 
+## Tracked-team offensive entry
+
+- Ball, called strike, swinging strike, and foul are persisted with the displayed tracked batter and event-time batting-order size.
+- Fourth ball completes a player-attributed walk; third called/swinging strike completes a player-attributed strikeout.
+- A two-strike foul leaves the live count at two strikes.
+- Quick Walk, HBP, Strikeout, and Home Run remain available and produce the same plate-appearance events as normal entry.
+- Opponent-pitcher statistics are not tracked in this slice.
+
+## Stolen base / caught stealing
+
+- SB advances one identified runner exactly one base, including third to home.
+- CS removes one identified runner and adds one out.
+- Neither result advances the current batter or completes a plate appearance.
+- A steal of home credits the runner with both SB and R; no RBI is credited.
+- A third-out CS advances the half-inning and preserves the next tracked batter.
+
 ## Ball in play
 
 Supported result labels:
@@ -100,6 +116,10 @@ Opponent slots rotate 1...9. Completing a PA advances the slot; 9 wraps to 1.
 - Same ordered valid history → same `GameState`.
 - Pitch must match current opponent batter and current pitcher contract.
 - Defensive events cannot apply while tracked team bats.
+- Offensive events cannot apply while the opponent bats.
+- Offensive pitch and PA writes must match the batter displayed by the caller and authoritative replay.
+- Historical offensive pitch/PA replay uses event-time batter and lineup-size context, not the mutable current lineup.
+- Once an offensive pitch starts a count, every later pitch and the completing PA must carry the same event-time batter identity and lineup size; mismatched history is rejected.
 - A pending Ball In Play result blocks further pitch events.
 - Every runner present at play start must appear exactly once in the play payload.
 - Unreadable/invalid history pauses new scoring instead of silently mutating around corruption.
@@ -108,8 +128,7 @@ Opponent slots rotate 1...9. Completing a PA advances the slot; 9 wraps to 1.
 
 Still required before game-complete MVP:
 
-- tracked-team offensive PAs/player attribution,
-- standalone SB/CS/WP/PB/advance/basepath-out events,
+- standalone WP/PB/manual advance/basepath-out events,
 - undo/edit/pitch-count correction,
 - pitching changes,
 - dropped-third-strike flow,

@@ -4,6 +4,9 @@ import SwiftData
 enum GameEventKind: String, Codable, Sendable {
     case pitch
     case ballInPlay
+    case offensivePitch
+    case offensiveBaseRunning
+    case offensivePlateAppearance
 }
 
 enum PitchResult: String, CaseIterable, Codable, Identifiable, Sendable {
@@ -59,6 +62,42 @@ struct PitchEvent: Codable, Equatable, Sendable {
     let result: PitchResult
     let pitcherID: UUID
     let opponentBatterSlot: Int
+}
+
+enum OffensivePitchResult: String, CaseIterable, Codable, Identifiable, Sendable {
+    case ball
+    case calledStrike
+    case swingingStrike
+    case foul
+
+    var id: String { rawValue }
+
+    var shortLabel: String {
+        switch self {
+        case .ball: "Ball"
+        case .calledStrike: "Strike"
+        case .swingingStrike: "Swing"
+        case .foul: "Foul"
+        }
+    }
+}
+
+struct OffensivePitchEvent: Codable, Equatable, Sendable {
+    let batter: TrackedBatterIdentity
+    let battingOrderSize: Int
+    let result: OffensivePitchResult
+}
+
+enum OffensiveBaseRunningResult: String, Codable, Sendable {
+    case stolenBase
+    case caughtStealing
+}
+
+struct OffensiveBaseRunningEvent: Codable, Equatable, Sendable {
+    let runnerID: UUID
+    let source: RunnerSource
+    let destination: RunnerDestination
+    let result: OffensiveBaseRunningResult
 }
 
 enum BallInPlayOutcome: String, CaseIterable, Codable, Identifiable, Sendable {
@@ -174,6 +213,71 @@ struct RunnerMovementEvent: Codable, Equatable, Sendable {
     let destination: RunnerDestination
 }
 
+struct TrackedBatterIdentity: Codable, Equatable, Sendable {
+    let playerID: UUID
+    let lineupSlot: Int
+    let displayName: String
+    let jerseyNumber: String
+    let position: DefensivePosition?
+}
+
+enum OffensivePlateAppearanceResult: String, CaseIterable, Codable, Equatable, Sendable {
+    case single
+    case double
+    case triple
+    case homeRun
+    case walk
+    case hitByPitch
+    case strikeout
+    case reachedOnError
+    case fieldersChoice
+    case groundOut
+    case flyOut
+    case lineOut
+    case popOut
+    case sacrificeBunt
+    case sacrificeFly
+    case doublePlay
+
+    init(ballInPlayOutcome: BallInPlayOutcome) {
+        switch ballInPlayOutcome {
+        case .single: self = .single
+        case .double: self = .double
+        case .triple: self = .triple
+        case .homeRun: self = .homeRun
+        case .reachedOnError: self = .reachedOnError
+        case .fieldersChoice: self = .fieldersChoice
+        case .groundOut: self = .groundOut
+        case .flyOut: self = .flyOut
+        case .lineOut: self = .lineOut
+        case .popOut: self = .popOut
+        case .sacrificeBunt: self = .sacrificeBunt
+        case .sacrificeFly: self = .sacrificeFly
+        case .doublePlay: self = .doublePlay
+        }
+    }
+}
+
+struct OffensivePlateAppearanceEvent: Codable, Equatable, Sendable {
+    let batter: TrackedBatterIdentity
+    /// Number of batting-order slots when this plate appearance occurred.
+    let battingOrderSize: Int
+    let result: OffensivePlateAppearanceResult
+    let movements: [RunnerMovementEvent]
+    let rbi: Int
+    /// Runner sources whose touches of home legally count. Identity is preserved for run attribution.
+    let countedRunSources: [RunnerSource]
+    let thirdOutClassification: ThirdOutClassification?
+}
+
+struct OffensivePlateAppearanceDraft: Equatable, Sendable {
+    let result: OffensivePlateAppearanceResult
+    let movements: [RunnerMovementEvent]
+    let rbi: Int
+    let countedRunSources: [RunnerSource]
+    let thirdOutClassification: ThirdOutClassification?
+}
+
 enum ThirdOutClassification: String, CaseIterable, Codable, Equatable, Sendable {
     case forceOrBatterRunner
     case timingPlay
@@ -213,11 +317,17 @@ struct BallInPlayEvent: Codable, Equatable, Sendable {
 enum GameEventBody: Equatable, Sendable {
     case pitch(PitchEvent)
     case ballInPlay(BallInPlayEvent)
+    case offensivePitch(OffensivePitchEvent)
+    case offensiveBaseRunning(OffensiveBaseRunningEvent)
+    case offensivePlateAppearance(OffensivePlateAppearanceEvent)
 
     var kind: GameEventKind {
         switch self {
         case .pitch: .pitch
         case .ballInPlay: .ballInPlay
+        case .offensivePitch: .offensivePitch
+        case .offensiveBaseRunning: .offensiveBaseRunning
+        case .offensivePlateAppearance: .offensivePlateAppearance
         }
     }
 }
@@ -241,6 +351,12 @@ enum GameEventCodec {
             return (.pitch, try encoder.encode(pitch))
         case .ballInPlay(let play):
             return (.ballInPlay, try encoder.encode(play))
+        case .offensivePitch(let pitch):
+            return (.offensivePitch, try encoder.encode(pitch))
+        case .offensiveBaseRunning(let event):
+            return (.offensiveBaseRunning, try encoder.encode(event))
+        case .offensivePlateAppearance(let plateAppearance):
+            return (.offensivePlateAppearance, try encoder.encode(plateAppearance))
         }
     }
 
@@ -256,6 +372,14 @@ enum GameEventCodec {
                 return .pitch(try decoder.decode(PitchEvent.self, from: payload))
             case .ballInPlay:
                 return .ballInPlay(try decoder.decode(BallInPlayEvent.self, from: payload))
+            case .offensivePitch:
+                return .offensivePitch(try decoder.decode(OffensivePitchEvent.self, from: payload))
+            case .offensiveBaseRunning:
+                return .offensiveBaseRunning(try decoder.decode(OffensiveBaseRunningEvent.self, from: payload))
+            case .offensivePlateAppearance:
+                return .offensivePlateAppearance(
+                    try decoder.decode(OffensivePlateAppearanceEvent.self, from: payload)
+                )
             }
         } catch {
             throw GameEventCodecError.invalidPayload(kind)

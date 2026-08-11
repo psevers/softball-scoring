@@ -65,7 +65,7 @@ enum BallInPlayValidator {
             return .baseCollision(collision)
         }
 
-        if let trailingRunner = runnerThatPassedAnotherRunner(in: play.movements) {
+        if let trailingRunner = RunnerMovementRules.runnerThatPassedAnotherRunner(in: play.movements) {
             return .illegalDestination(trailingRunner.source, trailingRunner.destination)
         }
 
@@ -165,7 +165,208 @@ enum BallInPlayValidator {
         }
     }
 
-    private static func runnerThatPassedAnotherRunner(
+}
+
+enum OffensivePlateAppearanceValidator {
+    static func isValid(
+        _ plateAppearance: OffensivePlateAppearanceEvent,
+        state: GameState,
+        trackedTeamHomeAway: HomeAway
+    ) -> Bool {
+        guard state.isTrackedTeamBatting(homeAway: trackedTeamHomeAway),
+              plateAppearance.battingOrderSize > 0,
+              (1...plateAppearance.battingOrderSize).contains(plateAppearance.batter.lineupSlot),
+              plateAppearance.batter.lineupSlot == state.currentTrackedBatterSlot,
+              state.offensiveCountContext?.matches(
+                batter: plateAppearance.batter,
+                battingOrderSize: plateAppearance.battingOrderSize
+              ) != false,
+              Set(plateAppearance.movements.map(\.source)) == Set(state.occupiedTrackedRunnerSources),
+              plateAppearance.movements.count == state.occupiedTrackedRunnerSources.count,
+              plateAppearance.rbi >= 0 else {
+            return false
+        }
+
+        guard plateAppearance.movements.allSatisfy(isLegalMovement),
+              hasNoFinalBaseCollision(plateAppearance.movements),
+              RunnerMovementRules.runnerThatPassedAnotherRunner(in: plateAppearance.movements) == nil else {
+            return false
+        }
+
+        let outsOnPlay = plateAppearance.movements.filter { $0.destination == .out }.count
+        guard state.outs + outsOnPlay <= 3 else { return false }
+
+        let homeSources = plateAppearance.movements
+            .filter { $0.destination == .home }
+            .map(\.source)
+        guard Set(plateAppearance.countedRunSources).isSubset(of: Set(homeSources)),
+              Set(plateAppearance.countedRunSources).count == plateAppearance.countedRunSources.count,
+              plateAppearance.rbi <= plateAppearance.countedRunSources.count else {
+            return false
+        }
+
+        let createsThirdOut = state.outs + outsOnPlay == 3
+        if createsThirdOut && !homeSources.isEmpty {
+            guard let classification = plateAppearance.thirdOutClassification else { return false }
+            if classification == .forceOrBatterRunner && !plateAppearance.countedRunSources.isEmpty {
+                return false
+            }
+            if classification == .timingPlay,
+               outsOnPlay == 1,
+               plateAppearance.movements.first(where: { $0.source == .batter })?.destination == .out,
+               [.strikeout, .groundOut, .flyOut, .lineOut, .popOut].contains(plateAppearance.result) {
+                return false
+            }
+        } else {
+            guard plateAppearance.thirdOutClassification == nil,
+                  Set(plateAppearance.countedRunSources) == Set(homeSources) else {
+                return false
+            }
+        }
+
+        guard let batterMovement = plateAppearance.movements.first(where: { $0.source == .batter }) else {
+            return false
+        }
+
+        switch plateAppearance.result {
+        case .walk, .hitByPitch:
+            return batterMovement.destination == .first && outsOnPlay == 0
+        case .homeRun:
+            return plateAppearance.movements.allSatisfy { $0.destination == .home }
+                && Set(plateAppearance.countedRunSources) == Set(plateAppearance.movements.map(\.source))
+                && plateAppearance.countedRunSources.count == plateAppearance.movements.count
+                && plateAppearance.rbi == plateAppearance.countedRunSources.count
+        case .single:
+            return [.first, .second, .third, .home, .out].contains(batterMovement.destination)
+        case .double:
+            return [.second, .third, .home, .out].contains(batterMovement.destination)
+        case .triple:
+            return [.third, .home, .out].contains(batterMovement.destination)
+        case .reachedOnError, .fieldersChoice:
+            return true
+        case .strikeout, .groundOut, .flyOut, .lineOut, .popOut:
+            return batterMovement.destination == .out && outsOnPlay >= 1
+        case .sacrificeBunt:
+            return state.outs < 2
+                && batterMovement.destination == .out
+                && plateAppearance.movements.contains(where: didExistingRunnerAdvance)
+        case .sacrificeFly:
+            return state.outs < 2
+                && batterMovement.destination == .out
+                && homeSources.contains(where: { $0 != .batter })
+        case .doublePlay:
+            return outsOnPlay == 2
+        }
+    }
+
+    private static func isLegalMovement(_ movement: RunnerMovementEvent) -> Bool {
+        switch movement.source {
+        case .batter, .first:
+            true
+        case .second:
+            movement.destination != .first
+        case .third:
+            movement.destination != .first && movement.destination != .second
+        }
+    }
+
+    private static func hasNoFinalBaseCollision(_ movements: [RunnerMovementEvent]) -> Bool {
+        let occupiedBases = movements.compactMap { movement -> RunnerDestination? in
+            switch movement.destination {
+            case .first, .second, .third: movement.destination
+            case .home, .out: nil
+            }
+        }
+        return Set(occupiedBases).count == occupiedBases.count
+    }
+
+    private static func didExistingRunnerAdvance(_ movement: RunnerMovementEvent) -> Bool {
+        switch (movement.source, movement.destination) {
+        case (.first, .second), (.first, .third), (.first, .home),
+             (.second, .third), (.second, .home),
+             (.third, .home):
+            true
+        default:
+            false
+        }
+    }
+}
+
+enum OffensivePitchValidator {
+    static func isValid(
+        _ pitch: OffensivePitchEvent,
+        state: GameState,
+        trackedTeamHomeAway: HomeAway
+    ) -> Bool {
+        guard state.isTrackedTeamBatting(homeAway: trackedTeamHomeAway),
+              pitch.battingOrderSize > 0,
+              (1...pitch.battingOrderSize).contains(pitch.batter.lineupSlot),
+              pitch.batter.lineupSlot == state.currentTrackedBatterSlot,
+              state.offensiveCountContext?.matches(
+                batter: pitch.batter,
+                battingOrderSize: pitch.battingOrderSize
+              ) != false else {
+            return false
+        }
+
+        switch pitch.result {
+        case .ball:
+            return state.balls < 3
+        case .calledStrike, .swingingStrike:
+            return state.strikes < 2
+        case .foul:
+            return true
+        }
+    }
+}
+
+enum OffensiveBaseRunningValidator {
+    static func isValid(
+        _ event: OffensiveBaseRunningEvent,
+        state: GameState,
+        trackedTeamHomeAway: HomeAway
+    ) -> Bool {
+        guard state.isTrackedTeamBatting(homeAway: trackedTeamHomeAway),
+              event.source != .batter,
+              runnerID(on: event.source, state: state) == event.runnerID else {
+            return false
+        }
+
+        switch event.result {
+        case .caughtStealing:
+            return event.destination == .out && state.outs < 3
+        case .stolenBase:
+            guard event.destination == nextDestination(after: event.source) else { return false }
+            switch event.destination {
+            case .second: return state.secondBaseRunnerPlayerID == nil
+            case .third: return state.thirdBaseRunnerPlayerID == nil
+            case .home: return true
+            case .first, .out: return false
+            }
+        }
+    }
+
+    private static func runnerID(on source: RunnerSource, state: GameState) -> UUID? {
+        switch source {
+        case .batter: nil
+        case .first: state.firstBaseRunnerPlayerID
+        case .second: state.secondBaseRunnerPlayerID
+        case .third: state.thirdBaseRunnerPlayerID
+        }
+    }
+
+    private static func nextDestination(after source: RunnerSource) -> RunnerDestination? {
+        switch source {
+        case .batter: nil
+        case .first: .second
+        case .second: .third
+        case .third: .home
+        }
+    }
+}
+
+enum RunnerMovementRules {
+    static func runnerThatPassedAnotherRunner(
         in movements: [RunnerMovementEvent]
     ) -> RunnerMovementEvent? {
         let activeMovements = movements.filter { $0.destination != .out }

@@ -16,7 +16,7 @@ enum ThrowingHand: String, CaseIterable, Codable, Identifiable {
     var id: String { rawValue }
 }
 
-enum DefensivePosition: String, CaseIterable, Codable, Identifiable {
+enum DefensivePosition: String, CaseIterable, Codable, Identifiable, Sendable {
     case pitcher = "P"
     case catcher = "C"
     case firstBase = "1B"

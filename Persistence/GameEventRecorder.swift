@@ -9,6 +9,9 @@ enum GameEventRecorderError: LocalizedError {
     case awaitingBallInPlayResult
     case noPendingBallInPlay
     case invalidBallInPlay(BallInPlayValidationError)
+    case noTrackedBattingOrder
+    case notOffensiveHalf
+    case invalidOffensivePlateAppearance
 
     var errorDescription: String? {
         switch self {
@@ -26,6 +29,12 @@ enum GameEventRecorderError: LocalizedError {
             "Record an In Play pitch before recording the play result."
         case .invalidBallInPlay(let error):
             "That runner result is not valid (\(String(describing: error))). Check each runner and try again."
+        case .noTrackedBattingOrder:
+            "The saved lineup cannot identify the current batter."
+        case .notOffensiveHalf:
+            "Offensive scoring is available while your team is batting."
+        case .invalidOffensivePlateAppearance:
+            "That offensive result is not valid for the current batter and runners."
         }
     }
 }
@@ -106,6 +115,210 @@ enum GameEventRecorder {
         )
     }
 
+    static func recordOffensivePlateAppearance(
+        expectedBatter: TrackedBatterIdentity,
+        result: OffensivePlateAppearanceResult,
+        movements: [RunnerMovementEvent],
+        rbi: Int,
+        countedRunSources: [RunnerSource],
+        thirdOutClassification: ThirdOutClassification? = nil,
+        game: Game,
+        existingRecords: [GameEventRecord],
+        modelContext: ModelContext,
+        save: Save = { try $0.save() }
+    ) throws {
+        let battingOrder = try trackedBattingOrder(gameID: game.id, modelContext: modelContext)
+        let (replay, homeAway, authoritativeRecords) = try validatedAuthoritativeReplay(
+            game: game,
+            existingRecords: existingRecords,
+            modelContext: modelContext
+        )
+        guard replay.state.isTrackedTeamBatting(homeAway: homeAway) else {
+            throw GameEventRecorderError.notOffensiveHalf
+        }
+        guard (1...battingOrder.count).contains(replay.state.currentTrackedBatterSlot) else {
+            throw GameEventRecorderError.noTrackedBattingOrder
+        }
+        let authoritativeBatter = battingOrder[replay.state.currentTrackedBatterSlot - 1]
+        guard expectedBatter == authoritativeBatter else {
+            throw GameEventRecorderError.batterMismatch
+        }
+
+        let plateAppearance = OffensivePlateAppearanceEvent(
+            batter: authoritativeBatter,
+            battingOrderSize: battingOrder.count,
+            result: result,
+            movements: movements,
+            rbi: rbi,
+            countedRunSources: countedRunSources,
+            thirdOutClassification: thirdOutClassification
+        )
+        guard OffensivePlateAppearanceValidator.isValid(
+            plateAppearance,
+            state: replay.state,
+            trackedTeamHomeAway: homeAway
+        ) else {
+            throw GameEventRecorderError.invalidOffensivePlateAppearance
+        }
+
+        try persist(
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: nextSequenceNumber(authoritativeRecords),
+                body: .offensivePlateAppearance(plateAppearance)
+            ),
+            modelContext: modelContext,
+            save: save
+        )
+    }
+
+    static func recordOffensivePitch(
+        expectedBatter: TrackedBatterIdentity,
+        result: OffensivePitchResult,
+        game: Game,
+        existingRecords: [GameEventRecord],
+        modelContext: ModelContext,
+        save: Save = { try $0.save() }
+    ) throws {
+        let battingOrder = try trackedBattingOrder(gameID: game.id, modelContext: modelContext)
+        let (replay, homeAway, authoritativeRecords) = try validatedAuthoritativeReplay(
+            game: game,
+            existingRecords: existingRecords,
+            modelContext: modelContext
+        )
+        guard replay.state.isTrackedTeamBatting(homeAway: homeAway) else {
+            throw GameEventRecorderError.notOffensiveHalf
+        }
+        guard (1...battingOrder.count).contains(replay.state.currentTrackedBatterSlot) else {
+            throw GameEventRecorderError.noTrackedBattingOrder
+        }
+        let authoritativeBatter = battingOrder[replay.state.currentTrackedBatterSlot - 1]
+        guard expectedBatter == authoritativeBatter else {
+            throw GameEventRecorderError.batterMismatch
+        }
+
+        let body: GameEventBody
+        if result == .ball, replay.state.balls == 3 {
+            let suggestion = OffensiveMovementSuggestions.awardedFirstBase(state: replay.state)
+            body = .offensivePlateAppearance(OffensivePlateAppearanceEvent(
+                batter: authoritativeBatter,
+                battingOrderSize: battingOrder.count,
+                result: .walk,
+                movements: suggestion.movements,
+                rbi: suggestion.rbi,
+                countedRunSources: suggestion.countedRunSources,
+                thirdOutClassification: nil
+            ))
+        } else if [.calledStrike, .swingingStrike].contains(result), replay.state.strikes == 2 {
+            let suggestion = OffensiveMovementSuggestions.strikeout(state: replay.state)
+            body = .offensivePlateAppearance(OffensivePlateAppearanceEvent(
+                batter: authoritativeBatter,
+                battingOrderSize: battingOrder.count,
+                result: .strikeout,
+                movements: suggestion.movements,
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ))
+        } else {
+            let pitch = OffensivePitchEvent(
+                batter: authoritativeBatter,
+                battingOrderSize: battingOrder.count,
+                result: result
+            )
+            guard OffensivePitchValidator.isValid(
+                pitch,
+                state: replay.state,
+                trackedTeamHomeAway: homeAway
+            ) else {
+                throw GameEventRecorderError.invalidOffensivePlateAppearance
+            }
+            body = .offensivePitch(pitch)
+        }
+
+        if case .offensivePlateAppearance(let plateAppearance) = body,
+           !OffensivePlateAppearanceValidator.isValid(
+            plateAppearance,
+            state: replay.state,
+            trackedTeamHomeAway: homeAway
+           ) {
+            throw GameEventRecorderError.invalidOffensivePlateAppearance
+        }
+
+        try persist(
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: nextSequenceNumber(authoritativeRecords),
+                body: body
+            ),
+            modelContext: modelContext,
+            save: save
+        )
+    }
+
+    static func recordOffensiveBaseRunning(
+        expectedRunnerID: UUID,
+        source: RunnerSource,
+        result: OffensiveBaseRunningResult,
+        game: Game,
+        existingRecords: [GameEventRecord],
+        modelContext: ModelContext,
+        save: Save = { try $0.save() }
+    ) throws {
+        let (replay, homeAway, authoritativeRecords) = try validatedAuthoritativeReplay(
+            game: game,
+            existingRecords: existingRecords,
+            modelContext: modelContext
+        )
+        guard replay.state.isTrackedTeamBatting(homeAway: homeAway) else {
+            throw GameEventRecorderError.notOffensiveHalf
+        }
+
+        let authoritativeRunnerID: UUID?
+        switch source {
+        case .batter: authoritativeRunnerID = nil
+        case .first: authoritativeRunnerID = replay.state.firstBaseRunnerPlayerID
+        case .second: authoritativeRunnerID = replay.state.secondBaseRunnerPlayerID
+        case .third: authoritativeRunnerID = replay.state.thirdBaseRunnerPlayerID
+        }
+        guard authoritativeRunnerID == expectedRunnerID else {
+            throw GameEventRecorderError.batterMismatch
+        }
+
+        let destination: RunnerDestination
+        switch (result, source) {
+        case (.caughtStealing, _): destination = .out
+        case (.stolenBase, .first): destination = .second
+        case (.stolenBase, .second): destination = .third
+        case (.stolenBase, .third): destination = .home
+        case (.stolenBase, .batter):
+            throw GameEventRecorderError.invalidOffensivePlateAppearance
+        }
+        let event = OffensiveBaseRunningEvent(
+            runnerID: expectedRunnerID,
+            source: source,
+            destination: destination,
+            result: result
+        )
+        guard OffensiveBaseRunningValidator.isValid(
+            event,
+            state: replay.state,
+            trackedTeamHomeAway: homeAway
+        ) else {
+            throw GameEventRecorderError.invalidOffensivePlateAppearance
+        }
+
+        try persist(
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: nextSequenceNumber(authoritativeRecords),
+                body: .offensiveBaseRunning(event)
+            ),
+            modelContext: modelContext,
+            save: save
+        )
+    }
+
     private static func validatedReplay(
         game: Game,
         existingRecords: [GameEventRecord]
@@ -143,6 +356,32 @@ enum GameEventRecorder {
             existingRecords: storedRecords
         )
         return (replay, homeAway, storedRecords)
+    }
+
+    private static func trackedBattingOrder(
+        gameID: UUID,
+        modelContext: ModelContext
+    ) throws -> [TrackedBatterIdentity] {
+        guard let battingOrder = try resolvedTrackedBattingOrder(
+            gameID: gameID,
+            modelContext: modelContext
+        ) else {
+            throw GameEventRecorderError.noTrackedBattingOrder
+        }
+        return battingOrder
+    }
+
+    private static func resolvedTrackedBattingOrder(
+        gameID: UUID,
+        modelContext: ModelContext
+    ) throws -> [TrackedBatterIdentity]? {
+        let lineupEntries = try modelContext.fetch(FetchDescriptor<LineupEntry>())
+        let players = try modelContext.fetch(FetchDescriptor<Player>())
+        return TrackedBattingOrder.resolve(
+            gameID: gameID,
+            lineupEntries: lineupEntries,
+            players: players
+        )
     }
 
     private static func nextSequenceNumber(_ records: [GameEventRecord]) -> Int {

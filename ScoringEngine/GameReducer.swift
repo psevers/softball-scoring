@@ -11,6 +11,128 @@ enum GameReducer {
             applyPitch(pitch, to: &state, trackedTeamHomeAway: trackedTeamHomeAway)
         case .ballInPlay(let play):
             applyBallInPlay(play, to: &state, trackedTeamHomeAway: trackedTeamHomeAway)
+        case .offensivePitch(let pitch):
+            applyOffensivePitch(pitch, to: &state, trackedTeamHomeAway: trackedTeamHomeAway)
+        case .offensiveBaseRunning(let event):
+            applyOffensiveBaseRunning(event, to: &state, trackedTeamHomeAway: trackedTeamHomeAway)
+        case .offensivePlateAppearance(let plateAppearance):
+            applyOffensivePlateAppearance(
+                plateAppearance,
+                to: &state,
+                trackedTeamHomeAway: trackedTeamHomeAway
+            )
+        }
+    }
+
+    private static func applyOffensiveBaseRunning(
+        _ event: OffensiveBaseRunningEvent,
+        to state: inout GameState,
+        trackedTeamHomeAway: HomeAway
+    ) {
+        guard OffensiveBaseRunningValidator.isValid(
+            event,
+            state: state,
+            trackedTeamHomeAway: trackedTeamHomeAway
+        ) else {
+            return
+        }
+
+        switch event.source {
+        case .batter: return
+        case .first: state.firstBaseRunnerPlayerID = nil
+        case .second: state.secondBaseRunnerPlayerID = nil
+        case .third: state.thirdBaseRunnerPlayerID = nil
+        }
+
+        switch event.destination {
+        case .first: state.firstBaseRunnerPlayerID = event.runnerID
+        case .second: state.secondBaseRunnerPlayerID = event.runnerID
+        case .third: state.thirdBaseRunnerPlayerID = event.runnerID
+        case .home:
+            scoreTrackedTeamRun(state: &state, trackedTeamHomeAway: trackedTeamHomeAway)
+        case .out:
+            state.outs += 1
+            if state.outs >= 3 { advanceHalfInning(state: &state) }
+        }
+    }
+
+    private static func applyOffensivePitch(
+        _ pitch: OffensivePitchEvent,
+        to state: inout GameState,
+        trackedTeamHomeAway: HomeAway
+    ) {
+        guard OffensivePitchValidator.isValid(
+            pitch,
+            state: state,
+            trackedTeamHomeAway: trackedTeamHomeAway
+        ) else {
+            return
+        }
+
+        switch pitch.result {
+        case .ball:
+            state.balls += 1
+        case .calledStrike, .swingingStrike:
+            state.strikes += 1
+        case .foul:
+            if state.strikes < 2 { state.strikes += 1 }
+        }
+        if state.offensiveCountContext == nil {
+            state.offensiveCountContext = OffensiveCountContext(
+                batter: pitch.batter,
+                battingOrderSize: pitch.battingOrderSize
+            )
+        }
+    }
+
+    private static func applyOffensivePlateAppearance(
+        _ plateAppearance: OffensivePlateAppearanceEvent,
+        to state: inout GameState,
+        trackedTeamHomeAway: HomeAway
+    ) {
+        guard OffensivePlateAppearanceValidator.isValid(
+            plateAppearance,
+            state: state,
+            trackedTeamHomeAway: trackedTeamHomeAway
+        ) else {
+            return
+        }
+
+        let runnerIDs: [RunnerSource: UUID] = Dictionary(
+            uniqueKeysWithValues: state.occupiedTrackedRunnerSources.compactMap { source in
+                state.trackedRunnerPlayerID(
+                    for: source,
+                    batterID: plateAppearance.batter.playerID
+                ).map { (source, $0) }
+            }
+        )
+
+        state.firstBaseRunnerPlayerID = nil
+        state.secondBaseRunnerPlayerID = nil
+        state.thirdBaseRunnerPlayerID = nil
+        for movement in plateAppearance.movements {
+            guard let runnerID = runnerIDs[movement.source] else { continue }
+            switch movement.destination {
+            case .first: state.firstBaseRunnerPlayerID = runnerID
+            case .second: state.secondBaseRunnerPlayerID = runnerID
+            case .third: state.thirdBaseRunnerPlayerID = runnerID
+            case .home, .out: break
+            }
+        }
+
+        for _ in plateAppearance.countedRunSources {
+            scoreTrackedTeamRun(state: &state, trackedTeamHomeAway: trackedTeamHomeAway)
+        }
+        state.outs += plateAppearance.movements.filter { $0.destination == .out }.count
+        state.balls = 0
+        state.strikes = 0
+        state.offensiveCountContext = nil
+        state.currentTrackedBatterSlot = state.currentTrackedBatterSlot == plateAppearance.battingOrderSize
+            ? 1
+            : state.currentTrackedBatterSlot + 1
+
+        if state.outs >= 3 {
+            advanceHalfInning(state: &state)
         }
     }
 
@@ -150,6 +272,11 @@ enum GameReducer {
         else { state.homeScore += 1 }
     }
 
+    private static func scoreTrackedTeamRun(state: inout GameState, trackedTeamHomeAway: HomeAway) {
+        if trackedTeamHomeAway == .home { state.homeScore += 1 }
+        else { state.awayScore += 1 }
+    }
+
     private static func advanceHalfInning(state: inout GameState) {
         state.outs = 0
         state.balls = 0
@@ -157,7 +284,11 @@ enum GameReducer {
         state.firstBaseRunnerSlot = nil
         state.secondBaseRunnerSlot = nil
         state.thirdBaseRunnerSlot = nil
+        state.firstBaseRunnerPlayerID = nil
+        state.secondBaseRunnerPlayerID = nil
+        state.thirdBaseRunnerPlayerID = nil
         state.isAwaitingBallInPlayResult = false
+        state.offensiveCountContext = nil
 
         switch state.half {
         case .top: state.half = .bottom

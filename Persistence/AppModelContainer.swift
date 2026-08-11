@@ -1,8 +1,9 @@
+import Foundation
 import SwiftData
 
 @MainActor
 enum AppModelContainer {
-    static func make(inMemory: Bool = false) throws -> ModelContainer {
+    static func make(inMemory: Bool = false, storeURL: URL? = nil) throws -> ModelContainer {
         let schema = Schema([
             Team.self,
             Player.self,
@@ -11,7 +12,16 @@ enum AppModelContainer {
             LineupEntry.self,
             GameEventRecord.self
         ])
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
+        let configuration: ModelConfiguration
+        if let storeURL {
+            configuration = ModelConfiguration(
+                schema: schema,
+                url: storeURL,
+                cloudKitDatabase: .none
+            )
+        } else {
+            configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
+        }
         return try ModelContainer(for: schema, configurations: [configuration])
     }
 }

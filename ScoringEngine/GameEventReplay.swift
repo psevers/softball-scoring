@@ -48,7 +48,11 @@ enum GameEventReplay {
                 continue
             }
 
-            GameReducer.apply(decoded, to: &state, trackedTeamHomeAway: homeAway)
+            GameReducer.apply(
+                decoded,
+                to: &state,
+                trackedTeamHomeAway: homeAway
+            )
         }
 
         return Result(state: state, rejectedRecordIDs: rejected)
@@ -73,6 +77,27 @@ enum GameEventReplay {
                 state: state,
                 trackedTeamHomeAway: homeAway
             ) == nil
+
+        case .offensivePitch(let pitch):
+            return OffensivePitchValidator.isValid(
+                pitch,
+                state: state,
+                trackedTeamHomeAway: homeAway
+            )
+
+        case .offensiveBaseRunning(let event):
+            return OffensiveBaseRunningValidator.isValid(
+                event,
+                state: state,
+                trackedTeamHomeAway: homeAway
+            )
+
+        case .offensivePlateAppearance(let plateAppearance):
+            return OffensivePlateAppearanceValidator.isValid(
+                plateAppearance,
+                state: state,
+                trackedTeamHomeAway: homeAway
+            )
         }
     }
 }
