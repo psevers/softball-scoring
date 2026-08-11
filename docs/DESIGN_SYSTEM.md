@@ -41,7 +41,7 @@ Avoid stacks of floating rounded cards. Use contiguous ledger sections, shared h
 
 Roster/season editors may remain closer to native Forms. Apply the paper background and rule language but do not make basic data entry slower.
 
-Game setup and lineup are scorebook pages rather than generic administration. They use ruled paper, a faint scorebook margin, graphite marks, serif page headings, and pencil-rule dividers while retaining native fields, pickers, and buttons.
+Game setup and lineup are scorebook pages rather than generic administration. They use contiguous ruled rows, a faint scorebook margin, graphite marks, handwritten headings and player names, and tabular numerals while retaining native fields, wheel pickers, menus, reorder/delete controls, and buttons. Sections meet at hairline rules with no floating-card gaps.
 
 ### Interaction invariants
 

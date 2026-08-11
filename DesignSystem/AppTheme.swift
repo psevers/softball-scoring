@@ -143,29 +143,53 @@ struct PencilRule: View {
 }
 
 struct ScorebookPageHeader: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let title: String
     let subtitle: String
     let systemImage: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
-            HStack(spacing: AppTheme.Spacing.sm) {
-                Image(systemName: systemImage)
-                    .font(.title2)
-                    .foregroundStyle(AppTheme.graphite.opacity(0.78))
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                    HStack(spacing: AppTheme.Spacing.sm) {
+                        titleIcon
+                        titleText
+                    }
+                    subtitleText
+                }
+            } else {
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    titleIcon
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(AppTheme.Typography.pageTitle)
-                        .foregroundStyle(AppTheme.graphite)
-                    Text(subtitle)
-                        .font(AppTheme.Typography.metadata.italic())
-                        .foregroundStyle(AppTheme.graphite.opacity(0.68))
+                    VStack(alignment: .leading, spacing: 1) {
+                        titleText
+                        subtitleText
+                    }
                 }
             }
             PencilRule()
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var titleIcon: some View {
+        Image(systemName: systemImage)
+            .font(.title2)
+            .foregroundStyle(AppTheme.graphite.opacity(0.78))
+    }
+
+    private var titleText: some View {
+        Text(title)
+            .font(AppTheme.Typography.pageTitle)
+            .foregroundStyle(AppTheme.graphite)
+    }
+
+    private var subtitleText: some View {
+        Text(subtitle)
+            .font(AppTheme.Typography.metadata.italic())
+            .foregroundStyle(AppTheme.graphite.opacity(0.68))
     }
 }
 
@@ -181,6 +205,17 @@ struct ScorebookLabel: View {
             .font(AppTheme.Typography.fieldLabel)
             .tracking(1.1)
             .foregroundStyle(AppTheme.graphite.opacity(0.68))
+    }
+}
+
+struct ScorebookMarginRule: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.red.opacity(0.10))
+            .frame(width: 0.75)
+            .padding(.leading, AppTheme.Spacing.lg)
+            .accessibilityHidden(true)
+            .allowsHitTesting(false)
     }
 }
 

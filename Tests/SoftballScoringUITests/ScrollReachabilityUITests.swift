@@ -3,10 +3,16 @@ import XCTest
 @MainActor
 final class ScrollReachabilityUITests: XCTestCase {
     func testTimeLimitUsesKeyboardFreeThirtyToNinetyMinuteWheel() {
-        let app = launchApp()
+        let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()
         app.buttons["New Game"].tap()
-        app.buttons["Time Limit"].tap()
+        let timeLimit = app.buttons["Time Limit"]
+        XCTAssertTrue(swipeUntilHittable(
+            timeLimit,
+            in: app,
+            listIdentifier: "game.setup.form"
+        ))
+        timeLimit.tap()
 
         let wheel = app.pickerWheels.firstMatch
         XCTAssertTrue(wheel.waitForExistence(timeout: 2))
@@ -35,13 +41,19 @@ final class ScrollReachabilityUITests: XCTestCase {
     }
 
     func testSetLineupSwipeReachesCompleteFourteenPlayerBattingOrder() {
-        let app = launchApp()
+        let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()
         app.buttons["New Game"].tap()
         app.textFields["Opponent"].tap()
         app.textFields["Opponent"].typeText("Test Opponent")
         app.keyboards.buttons["return"].tap()
-        app.buttons["Set Lineup"].tap()
+        let setLineup = app.buttons["Set Lineup"]
+        XCTAssertTrue(swipeUntilHittable(
+            setLineup,
+            in: app,
+            listIdentifier: "game.setup.form"
+        ))
+        setLineup.tap()
         let startGame = app.buttons["Start Game"]
 
         for index in 1...14 {
@@ -172,10 +184,16 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(waitForLabel("0 – 0", on: count))
     }
 
-    private func launchApp() -> XCUIApplication {
+    private func launchApp(atAccessibilityTextSize: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting"]
+        if atAccessibilityTextSize {
+            app.launchArguments += [
+                "-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityXL"
+            ]
+        }
         app.launch()
         return app
     }
@@ -263,7 +281,7 @@ final class ScrollReachabilityUITests: XCTestCase {
         let list = app.collectionViews[listIdentifier]
         guard list.waitForExistence(timeout: 2) else { return false }
 
-        let deadline = Date().addingTimeInterval(15)
+        let deadline = Date().addingTimeInterval(35)
         while !element.isHittable && Date() < deadline {
             dragDown(in: list)
         }
