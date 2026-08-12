@@ -54,7 +54,7 @@ A visible Play History entry for an unknown kind, malformed payload, invalid seq
 
 ## Undo candidate
 
-The latest persisted scoring action when it is an eligible defensive Ball, Called Strike, Swinging Strike, Foul, or HBP. A terminal candidate records the plate appearance it completed, and every candidate retains the expected game timeline so a moved or stale action cannot be removed.
+The latest persisted scoring action when it is an eligible defensive Ball, Called Strike, Swinging Strike, Foul, HBP, or completed Ball In Play result. A terminal-pitch candidate records the plate appearance it completed; a Ball In Play result candidate identifies the preceding counted pitch that will remain. Every candidate retains the expected game timeline so a moved or stale action cannot be removed.
 
 ## Correction boundary
 

@@ -64,17 +64,19 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Entries split into event-time top/bottom half-inning sections.
 - Accessibility XL UI coverage opens History from a deterministic live game, reads completed and pending plays, and returns to unchanged live state.
 
-## Undo latest eligible defensive pitch
+## Undo latest eligible defensive action
 
 - Ball, Called Strike, Swinging Strike, Foul, and HBP candidates restore prior state and pitcher totals through full replay.
 - Bases-loaded ball four restores the three-ball count, completed batter slot, forced runner positions, run, and pitcher totals.
 - HBP removes the awarded base and every forced movement together.
 - Called and swinging strike three restore the two-strike count, completed batter slot, outs, and the prior half-inning when the strikeout made the third out.
-- Only the latest persisted eligible pitch is offered; Ball In Play, completed plays, malformed history, wrong-game candidates, moved latest actions, and stale exact timelines are rejected.
+- A latest completed Ball In Play result is offered separately from its preceding counted In Play pitch. Undo removes only the result and restores pending outcome entry.
+- Single, double, home run, ordinary out, double play, and third-out result undo restore the complete pre-result state at the authoritative persistence/replay seam.
+- A pending Ball In Play pitch is not offered by this ticket; malformed history, wrong-game candidates, moved latest actions, and stale exact timelines are rejected.
 - Candidate replay succeeds before deletion, save failure rolls back every record, and surviving identity/sequence/timestamp values remain unchanged.
 - A later pitch allocates from the authoritative maximum surviving sequence without collision.
 - A fresh model context and cold-store reload reconstruct terminal-pitch state and pitcher totals identically to the immediate response.
-- Accessibility XL UI coverage verifies a ball-four award path from Play History and a third-out strikeout path across the half-inning transition, including exact confirmation, cancellation, successful deletion, and refreshed live scoring.
+- Accessibility XL UI coverage verifies a ball-four award path, a third-out strikeout path, and a completed Ball In Play result replacement from Play History, including exact confirmation, cancellation, successful deletion, and refreshed live scoring.
 
 ## Base occupancy matrix for Ball In Play
 
