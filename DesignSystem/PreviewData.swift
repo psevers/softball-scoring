@@ -3,6 +3,11 @@ import SwiftData
 
 @MainActor
 enum PreviewData {
+    struct AdministrativeFixture {
+        let container: ModelContainer
+        let game: Game
+    }
+
     struct LiveGameFixture {
         let container: ModelContainer
         let game: Game
@@ -54,6 +59,64 @@ enum PreviewData {
             return container
         } catch {
             preconditionFailure("Unable to add Games ledger fixtures: \(error)")
+        }
+    }
+
+    static var administrativeSurfaces: AdministrativeFixture {
+        let container = longLineupContainer
+        let context = container.mainContext
+
+        do {
+            guard let season = try context.fetch(FetchDescriptor<Season>()).first else {
+                preconditionFailure("Administrative preview requires the seeded season.")
+            }
+            let roster = players(in: container)
+            guard roster.count == 14 else {
+                preconditionFailure("Administrative preview requires fourteen active players.")
+            }
+
+            context.insert(Season(
+                name: "2025 Fall",
+                startDate: Date(timeIntervalSince1970: 1_756_339_200),
+                endDate: Date(timeIntervalSince1970: 1_764_028_800),
+                isActive: false,
+                createdAt: previewDate.addingTimeInterval(-1)
+            ))
+            context.insert(Player(
+                firstName: "Cameron",
+                lastName: "Brooks",
+                jerseyNumber: "10",
+                defaultPosition: .utility,
+                isActive: false,
+                createdAt: previewDate.addingTimeInterval(20)
+            ))
+
+            let game = Game(
+                seasonID: season.id,
+                opponentName: "Lakeview Lightning",
+                gameDate: Date(timeIntervalSince1970: 1_786_210_200),
+                homeAway: .away,
+                status: .final,
+                startingPitcherID: roster[4].id,
+                startedAt: Date(timeIntervalSince1970: 1_786_210_200),
+                finalizedAt: Date(timeIntervalSince1970: 1_786_217_400)
+            )
+            context.insert(game)
+
+            let positions = LineupValidation.regulationDefensivePositions
+            for (index, player) in roster.enumerated() {
+                context.insert(LineupEntry(
+                    playerID: player.id,
+                    battingOrder: index + 1,
+                    startingPosition: index < positions.count ? positions[index] : nil,
+                    gameID: game.id
+                ))
+            }
+
+            try context.save()
+            return AdministrativeFixture(container: container, game: game)
+        } catch {
+            preconditionFailure("Unable to build administrative preview data: \(error)")
         }
     }
 

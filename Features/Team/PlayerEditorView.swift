@@ -34,16 +34,20 @@ struct PlayerEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Player") {
+                Section {
                     TextField("First name", text: $firstName)
                         .textContentType(.givenName)
                     TextField("Last name", text: $lastName)
                         .textContentType(.familyName)
                     TextField("Jersey number", text: $jerseyNumber)
                         .keyboardType(.numbersAndPunctuation)
+                        .monospacedDigit()
+                } header: {
+                    ScorebookLabel("Player")
                 }
+                .scorebookAdministrativeRow()
 
-                Section("Defaults") {
+                Section {
                     Picker("Bats", selection: $battingSide) {
                         ForEach(BattingSide.allCases) { side in
                             Text(side.rawValue).tag(side)
@@ -60,7 +64,10 @@ struct PlayerEditorView: View {
                             Text(position.rawValue).tag(Optional(position))
                         }
                     }
+                } header: {
+                    ScorebookLabel("Defaults")
                 }
+                .scorebookAdministrativeRow()
 
                 if player != nil {
                     Section {
@@ -68,6 +75,7 @@ struct PlayerEditorView: View {
                     } footer: {
                         Text("Inactive players stay in historical games and can be reactivated later.")
                     }
+                    .scorebookAdministrativeRow()
                 }
             }
             .scorebookFormBackground()
@@ -114,4 +122,15 @@ struct PlayerEditorView: View {
         try? modelContext.save()
         dismiss()
     }
+}
+
+#Preview("Player editor") {
+    PlayerEditorView(player: nil)
+        .modelContainer(PreviewData.administrativeSurfaces.container)
+}
+
+#Preview("Player editor · Accessibility XL") {
+    PlayerEditorView(player: nil)
+        .modelContainer(PreviewData.administrativeSurfaces.container)
+        .environment(\.dynamicTypeSize, .accessibility2)
 }

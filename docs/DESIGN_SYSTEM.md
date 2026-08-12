@@ -39,7 +39,9 @@ Avoid stacks of floating rounded cards. Use contiguous ledger sections, shared h
 
 ### Administrative surfaces
 
-Roster/season editors may remain closer to native Forms. Apply the paper background and rule language but do not make basic data entry slower.
+Team, roster, season, game-summary, and Stats surfaces use the same paper, graphite, expressive-name, tabular-number, and hairline-rule language as the live scorebook. Roster and season editors remain native Forms so text entry, pickers, toggles, validation, confirmation, and destructive actions keep their platform behavior. Administrative list rows use paper-backed separators instead of floating cards, and long rosters must remain reachable at accessibility text sizes.
+
+Game summaries show only persisted game and lineup facts in contiguous ledger sections. Stats uses an intentional empty ledger until a current projection exists; visual alignment must not invent stored totals or future statistics.
 
 Game setup and lineup are scorebook pages rather than generic administration. They use contiguous ruled rows, a faint scorebook margin, graphite marks, handwritten headings and player names, and tabular numerals while retaining native fields, wheel pickers, menus, reorder/delete controls, and buttons. Sections meet at hairline rules with no floating-card gaps.
 

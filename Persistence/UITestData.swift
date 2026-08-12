@@ -1,4 +1,5 @@
 #if DEBUG
+import Foundation
 import SwiftData
 
 @MainActor
@@ -47,6 +48,26 @@ enum UITestData {
                 battingOrder: index + 1,
                 startingPosition: positions[index],
                 gameID: liveGame.id
+            ))
+        }
+
+        let summaryGame = Game(
+            seasonID: season.id,
+            opponentName: "UI Summary Opponent",
+            gameDate: Date(timeIntervalSince1970: 1_786_210_200),
+            homeAway: .home,
+            status: .final,
+            startingPitcherID: activePlayers[0].id,
+            startedAt: Date(timeIntervalSince1970: 1_786_210_200),
+            finalizedAt: Date(timeIntervalSince1970: 1_786_217_400)
+        )
+        context.insert(summaryGame)
+        for (index, player) in activePlayers.enumerated() {
+            context.insert(LineupEntry(
+                playerID: player.id,
+                battingOrder: index + 1,
+                startingPosition: positions[index],
+                gameID: summaryGame.id
             ))
         }
         try context.save()

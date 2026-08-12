@@ -2,7 +2,7 @@
 
 ## Window
 
-Window 1 continuation — **Slice 5.5 scorebook visual alignment is in progress; tickets #6 and #7 are merged, and live scoring / runner confirmation ticket #8 is implemented locally.**
+Window 1 continuation — **Slice 5.5 scorebook visual alignment is in progress; tickets #6–#8 are merged, the hosted-simulator CI fix is merged, and ticket #9 is implemented locally without publication.**
 
 ## Canonical repo
 
@@ -106,6 +106,15 @@ Time-limit setup coverage verifies the keyboard-free wheel at both 30 and 90 min
 - The fixture test executes each preview history and verifies its intended replay state. Both public offensive UI workflows launch at deterministic Accessibility XL and pass through quick results, runner confirmation, normal count entry, SB/CS, and persisted progression.
 - Standard and Accessibility XL iPhone 17 screenshots of the compact live cell and runner sheet were captured, visually inspected, and explicitly approved by the product owner on August 11, 2026, including the restored game status and Accessibility XL outcome columns. The broader Slice 5.5 small-device evidence set remains pending.
 
+### Slice 5.5 administrative surfaces — ticket #9
+
+- Team/roster, season selection and editors, final game summary, and Stats now share the ruled-paper, graphite, expressive-name, tabular-number, and restrained-rule system.
+- Native Forms, fields, pickers, toggles, swipe actions, confirmation dialogs, validation, and existing accessibility identifiers remain intact.
+- Game summary renders only persisted status, season, format, starting pitcher, and lineup facts. Stats retains an intentional empty ledger rather than introducing a new projection or storage model.
+- Deterministic previews cover the long active/inactive roster, active and historical seasons, a final fourteen-player game summary, Stats, and Accessibility XL reflow.
+- Focused simulator verification covers all four administrative surfaces and a native player editor at standard size, plus long-roster, player-editor, season, summary, and Stats reachability at Accessibility XL.
+- The complete Xcode scheme passes on iPhone 17 / iOS 26.5: 112 tests (115 parameterized test cases), with zero failures or skips.
+
 Earlier source-only validation:
 
 Swift 6.2.1 Linux pure-domain harness compiled event/state/validator/reducer code and executed representative:
@@ -137,9 +146,9 @@ No unresolved P0/P1 findings. Important fixes discovered during review include:
 9. repeated writes allocate from authoritative stored history;
 10. multi-out plays explicitly classify the third out as force/batter-runner or timing.
 
-## Required before merge
+## Required before ticket #9 publication
 
-Push the validated checkpoint, open a draft PR, and merge only after GitHub CI is green, the PR adversarial checklist is complete, and the current Slice 5.5 screenshot evidence receives explicit product-owner approval.
+Keep ticket #9 local until explicitly authorized to push. Before merge, publish the validated branch, open a draft PR, require green GitHub CI, complete the PR adversarial checklist, and obtain product-owner approval for the current screenshot evidence.
 
 ## Accepted limitations / backlog
 
@@ -154,9 +163,9 @@ Push the validated checkpoint, open a draft PR, and merge only after GitHub CI i
 
 ## Current vertical slice
 
-**Slice 5.5 — scorebook visual alignment, ticket #8 implemented locally.**
+**Slice 5.5 — scorebook visual alignment, ticket #9 implemented locally.**
 
-Next, complete review/merge for ticket #8, then continue the remaining Slice 5.5 visual tickets. Slice 6 event-log history, undo/edit/delete through replay, and pitch-count correction remain the next functional slice in `docs/LAPTOP_HANDOFF.md`.
+Next, complete local review and await explicit publication direction for ticket #9. Slice 6 event-log history, undo/edit/delete through replay, and pitch-count correction remain the next functional slice in `docs/LAPTOP_HANDOFF.md`.
 
 ## Do not redo
 

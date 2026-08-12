@@ -98,6 +98,13 @@ Across representative:
 - A 14-player batting order can be built by touch, its final batter remains reachable, and Start Game saves and opens the live game.
 - With accessibility-extra-large Dynamic Type encoded in the app launch, New Game scrolls to the time-limit wheel and Set Lineup action; the fourteen-batter lineup scrolls between its last batter, pitcher control, and summary before saving.
 
+## Administrative scorebook alignment
+
+- Deterministic preview data covers one team, fourteen active and one inactive player, active and historical seasons, and a final game with a complete fourteen-player lineup.
+- Standard-size UI evidence covers Team/roster, a native player editor, Seasons, final game summary, and the intentional Stats empty ledger.
+- At Accessibility XL, a lower long-roster row and its native editor remain reachable, Seasons remains usable, the final-game summary reflows without losing navigation, and the Stats empty state remains reachable.
+- Native team, player, and season editor controls retain their existing text fields, pickers, toggles, validation, confirmation, and destructive behavior.
+
 ## Live scorebook visual alignment
 
 - Deterministic fixtures replay into an offensive state with prior batting totals, a 1–1 count, and runners on second/third; a defensive state with one out, a 1–1 count, and a runner on first; and a rejected corrupt-history state that gates scoring.
