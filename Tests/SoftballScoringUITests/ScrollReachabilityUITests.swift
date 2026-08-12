@@ -2,6 +2,57 @@ import XCTest
 
 @MainActor
 final class ScrollReachabilityUITests: XCTestCase {
+    func testStandardLiveGameStartsWithCompactAtBatAndPitchControls() {
+        let app = launchApp()
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        XCTAssertTrue(app.staticTexts["offense.currentBatter"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["game.count"].isHittable)
+        XCTAssertEqual(app.staticTexts["game.status"].label, "7 innings")
+        XCTAssertTrue(app.buttons["offense.pitch.ball"].isHittable)
+        XCTAssertTrue(app.buttons["offense.pitch.calledStrike"].isHittable)
+        captureScreenshot(named: "ticket8-standard-live", from: app)
+
+        let single = app.buttons["1B"]
+        XCTAssertTrue(scrollUntilHittable(single, in: app))
+        single.tap()
+        XCTAssertTrue(app.navigationBars["Record Our Play"].waitForExistence(timeout: 3))
+        captureScreenshot(named: "ticket8-standard-runner", from: app)
+    }
+
+    func testAccessibilityRunnerConfirmationStartsWithDestinationAndRBIControls() {
+        let app = launchApp(atAccessibilityTextSize: true)
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        captureScreenshot(named: "ticket8-ax-live", from: app)
+
+        let single = app.buttons["1B"]
+        XCTAssertTrue(scrollUntilHittable(single, in: app))
+        let double = app.buttons["2B"]
+        let triple = app.buttons["3B"]
+        let homeRun = app.buttons["HR"]
+        XCTAssertGreaterThan(single.frame.width, app.frame.width * 0.35)
+        XCTAssertEqual(single.frame.minY, double.frame.minY, accuracy: 1)
+        XCTAssertGreaterThan(triple.frame.minY, single.frame.minY)
+        XCTAssertEqual(triple.frame.minY, homeRun.frame.minY, accuracy: 1)
+        single.tap()
+        XCTAssertTrue(app.navigationBars["Record Our Play"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["runner.destination.batter"].isHittable)
+        let rbi = app.steppers["runner.rbi"]
+        XCTAssertTrue(rbi.exists)
+        XCTAssertLessThanOrEqual(rbi.frame.maxY, app.frame.maxY)
+        captureScreenshot(named: "ticket8-ax-runner", from: app)
+    }
+
     func testTimeLimitUsesKeyboardFreeThirtyToNinetyMinuteWheel() {
         let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()
@@ -102,7 +153,7 @@ final class ScrollReachabilityUITests: XCTestCase {
     }
 
     func testOffensiveQuickResultsPersistRealBatterProgression() {
-        let app = launchApp()
+        let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()
         let liveGame = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "UI Opponent")
@@ -141,7 +192,7 @@ final class ScrollReachabilityUITests: XCTestCase {
     }
 
     func testNormalOffensivePitchAndBaseRunningControlsPersistDerivedState() {
-        let app = launchApp()
+        let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()
         let liveGame = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "UI Opponent")
@@ -155,6 +206,7 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertEqual(currentBatter.label, "Player 01")
 
         let ball = app.buttons["offense.pitch.ball"]
+        XCTAssertTrue(scrollUntilHittable(ball, in: app))
         for expectedCount in ["1 – 0", "2 – 0", "3 – 0"] {
             ball.tap()
             XCTAssertTrue(waitForLabel(expectedCount, on: count))
@@ -172,7 +224,7 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertEqual(currentBatter.label, "Player 02")
 
         let calledStrike = app.buttons["offense.pitch.calledStrike"]
-        XCTAssertTrue(scrollUntilHittable(calledStrike, in: app))
+        XCTAssertTrue(scrollFromTopUntilHittable(calledStrike, in: app))
         calledStrike.tap()
         XCTAssertTrue(waitForLabel("0 – 1", on: count))
         app.buttons["offense.pitch.foul"].tap()
@@ -265,12 +317,26 @@ final class ScrollReachabilityUITests: XCTestCase {
         wait(for: [settled], timeout: 1)
     }
 
+    private func captureScreenshot(named name: String, from app: XCUIApplication) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     private func scrollUntilHittable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(20)
         while !element.isHittable && Date() < deadline {
             app.swipeUp()
         }
         return element.isHittable
+    }
+
+    private func scrollFromTopUntilHittable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        for _ in 0..<8 {
+            app.swipeDown()
+        }
+        return scrollUntilHittable(element, in: app)
     }
 
     private func swipeDownUntilHittable(

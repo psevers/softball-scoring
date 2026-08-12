@@ -2,7 +2,7 @@
 
 ## Window
 
-Window 1 continuation — **Slice 5.5 scorebook visual alignment is in progress; foundation ticket #6 and Game Card / lineup ticket #7 are implemented locally.**
+Window 1 continuation — **Slice 5.5 scorebook visual alignment is in progress; tickets #6 and #7 are merged, and live scoring / runner confirmation ticket #8 is implemented locally.**
 
 ## Canonical repo
 
@@ -94,6 +94,18 @@ Time-limit setup coverage verifies the keyboard-free wheel at both 30 and 90 min
 - Focused UI verification launches deterministically at accessibility-extra-large Dynamic Type and passes for the 30/90-minute wheel, Set Lineup reachability, all fourteen batters, starting pitcher, lineup summary, save, and reopen workflow.
 - Standard and accessibility-size iPhone 17 screenshots were captured for product review; explicit product-owner approval and the full Slice 5.5 small-device evidence set remain pending.
 
+### Slice 5.5 live scoring and runner confirmation — ticket #8
+
+- Live offense and defense begin with one compact at-bat cell containing inning/half, score, active player, count, outs, and base state. Pitch and scoring actions immediately follow it in the first working viewport.
+- Standard layouts use concise Patrick Hand identity/notation with system monospaced numbers. Accessibility sizes replace decorative marks with a compact textual summary and system headline/body roles.
+- Pitch, quick-result, ball-in-play, and base-running actions use two-column scorebook keys when content permits without reducing the 52pt live-action target. Positive actions use muted green; caught stealing and validation/history failures use explicit destructive red labels as well as words/icons.
+- The diamond and out marks use layered graphite strokes for pencil character. Occupied bases use muted green plus the runner's lineup slot and a complete accessibility label, so color and geometry are never the only signal.
+- Both runner-confirmation sheets begin with the recorded outcome and "Confirm each runner's destination," followed immediately by destination and RBI controls. Longer attribution guidance is available in a disclosure after those controls.
+- The complete thirteen-category batting line remains aligned after the scoring controls rather than delaying the primary actions.
+- Deterministic previews cover offense with prior batting totals and runners on second/third, defense with a runner and out, scoring locked by corrupt history, standard and Accessibility XL live layouts, and both runner-confirmation variants.
+- The fixture test executes each preview history and verifies its intended replay state. Both public offensive UI workflows launch at deterministic Accessibility XL and pass through quick results, runner confirmation, normal count entry, SB/CS, and persisted progression.
+- Standard and Accessibility XL iPhone 17 screenshots of the compact live cell and runner sheet were captured, visually inspected, and explicitly approved by the product owner on August 11, 2026, including the restored game status and Accessibility XL outcome columns. The broader Slice 5.5 small-device evidence set remains pending.
+
 Earlier source-only validation:
 
 Swift 6.2.1 Linux pure-domain harness compiled event/state/validator/reducer code and executed representative:
@@ -127,7 +139,7 @@ No unresolved P0/P1 findings. Important fixes discovered during review include:
 
 ## Required before merge
 
-Push the validated checkpoint, open a draft PR, and merge only after GitHub CI is green, the PR adversarial checklist is complete, and the ticket #7 screenshot evidence receives explicit product-owner approval.
+Push the validated checkpoint, open a draft PR, and merge only after GitHub CI is green, the PR adversarial checklist is complete, and the current Slice 5.5 screenshot evidence receives explicit product-owner approval.
 
 ## Accepted limitations / backlog
 
@@ -142,9 +154,9 @@ Push the validated checkpoint, open a draft PR, and merge only after GitHub CI i
 
 ## Current vertical slice
 
-**Slice 6 — Undo + play history + correction engine.**
+**Slice 5.5 — scorebook visual alignment, ticket #8 implemented locally.**
 
-Next goals are event-log history, undo/edit/delete through replay, and pitch-count correction as specified in `docs/LAPTOP_HANDOFF.md`.
+Next, complete review/merge for ticket #8, then continue the remaining Slice 5.5 visual tickets. Slice 6 event-log history, undo/edit/delete through replay, and pitch-count correction remain the next functional slice in `docs/LAPTOP_HANDOFF.md`.
 
 ## Do not redo
 

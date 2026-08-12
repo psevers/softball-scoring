@@ -8,6 +8,7 @@ struct OffensiveRunnerConfirmationSheet: View {
     let onCancel: () -> Void
     let onRecord: (OffensivePlateAppearanceDraft) -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var destinations: [RunnerSource: RunnerDestination]
     @State private var rbi: Int
     @State private var countedRunSources: Set<RunnerSource>
@@ -73,53 +74,80 @@ struct OffensiveRunnerConfirmationSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                ScorebookPaperBackground(gridSpacing: 22)
+                ScorebookRuledPaperBackground()
 
                 ScrollView {
-                    VStack(spacing: AppTheme.Spacing.md) {
-                        ScorebookSheet {
-                            VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+                    ScorebookLedger {
+                        ScorebookPageSection {
+                            VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
                                 Text(outcome.label)
-                                    .font(.title2.weight(.semibold))
-                                Text("Confirm every runner's destination. Runs remain tied to the player who actually crossed home.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .font(dynamicTypeSize.isAccessibilitySize ? .headline : AppTheme.Typography.notation)
+                                Text("Confirm each runner’s destination.")
+                                    .font(dynamicTypeSize.isAccessibilitySize ? .callout : AppTheme.Typography.body)
+                                    .foregroundStyle(AppTheme.graphite.opacity(0.72))
+                            }
+                            .padding(.horizontal, AppTheme.Spacing.md)
+                            .padding(.vertical, AppTheme.Spacing.sm)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .overlay(alignment: .bottom) {
+                                Rectangle()
+                                    .fill(AppTheme.rule)
+                                    .frame(height: 1)
                             }
                         }
 
-                        ScorebookSheet {
-                            VStack(spacing: AppTheme.Spacing.sm) {
-                                ForEach(state.occupiedTrackedRunnerSources, id: \.self) { source in
+                        ScorebookPageSection(dynamicTypeSize.isAccessibilitySize ? nil : "Runner destinations") {
+                            ForEach(state.occupiedTrackedRunnerSources, id: \.self) { source in
+                                ScorebookLedgerRow {
                                     runnerRow(source)
-                                    if source != state.occupiedTrackedRunnerSources.last {
-                                        Rectangle().fill(AppTheme.rule).frame(height: 1)
-                                    }
                                 }
                             }
                         }
 
-                        ScorebookSheet {
-                            VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+                        ScorebookPageSection(dynamicTypeSize.isAccessibilitySize ? nil : "Scoring") {
+                            ScorebookLedgerRow {
                                 Stepper("RBI  \(rbi)", value: $rbi, in: 0...sourcesThatCount.count)
-                                    .font(.headline)
+                                    .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.notation)
+                                    .monospacedDigit()
+                                    .accessibilityIdentifier("runner.rbi")
+                            }
 
-                                if needsThirdOutDecision {
+                            if needsThirdOutDecision {
+                                ScorebookLedgerRow {
                                     thirdOutControls
                                 }
                             }
                         }
 
+                        ScorebookPageSection {
+                            ScorebookLedgerRow {
+                                DisclosureGroup("Run credit help") {
+                                    Text("Runs remain tied to the player who actually crossed home.")
+                                        .font(AppTheme.Typography.body)
+                                        .foregroundStyle(AppTheme.graphite.opacity(0.72))
+                                        .padding(.top, AppTheme.Spacing.xs)
+                                }
+                                .font(dynamicTypeSize.isAccessibilitySize ? .callout : .body)
+                            }
+                        }
+
                         if validationFailed {
-                            ScorebookSheet {
-                                Label(
-                                    "The result, runner destinations, outs, runs, or RBI do not form a legal play.",
-                                    systemImage: "exclamationmark.triangle"
-                                )
-                                .font(.subheadline)
+                            ScorebookPageSection("Check this play") {
+                                ScorebookLedgerRow {
+                                    Label(
+                                        "The result, runner destinations, outs, runs, or RBI do not form a legal play.",
+                                        systemImage: "exclamationmark.triangle"
+                                    )
+                                    .font(AppTheme.Typography.body)
+                                    .foregroundStyle(AppTheme.destructive)
+                                }
                             }
                         }
                     }
                     .padding(AppTheme.Spacing.md)
+                }
+                .overlay(alignment: .leading) {
+                    ScorebookMarginRule()
                 }
             }
             .navigationTitle("Record Our Play")
@@ -153,9 +181,7 @@ struct OffensiveRunnerConfirmationSheet: View {
 
     private var thirdOutControls: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-            Text("RUN ON THIRD OUT")
-                .font(.caption2.weight(.bold))
-                .tracking(1.2)
+            ScorebookLabel("Run on third out")
             Picker("Third out", selection: $thirdOutClassification) {
                 Text("Force / Batter").tag(ThirdOutClassification.forceOrBatterRunner)
                 Text("Timing Play").tag(ThirdOutClassification.timingPlay)
@@ -168,31 +194,48 @@ struct OffensiveRunnerConfirmationSheet: View {
                 }
             } else {
                 Text("No run can score when the third out is a force or the batter-runner is out before reaching first.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(AppTheme.Typography.metadata)
+                    .foregroundStyle(AppTheme.graphite.opacity(0.68))
             }
         }
     }
 
     private func runnerRow(_ source: RunnerSource) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(source.label)
-                    .font(.headline)
-                Text(runnerName(for: source))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: AppTheme.Spacing.md) {
+                runnerIdentity(source)
+                Spacer(minLength: AppTheme.Spacing.sm)
+                destinationPicker(source)
+                    .fixedSize()
             }
-            Spacer()
-            Picker(source.label, selection: destinationBinding(source)) {
-                ForEach(legalDestinations(for: source)) { destination in
-                    Text(destination.label).tag(destination)
-                }
+
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+                runnerIdentity(source)
+                destinationPicker(source)
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
         }
         .frame(minHeight: AppTheme.TouchTarget.minimum)
+    }
+
+    private func runnerIdentity(_ source: RunnerSource) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(runnerName(for: source))
+                .font(dynamicTypeSize.isAccessibilitySize ? .headline : AppTheme.Typography.notation)
+            Text(source.label)
+                .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.metadata)
+                .foregroundStyle(AppTheme.graphite.opacity(0.68))
+        }
+    }
+
+    private func destinationPicker(_ source: RunnerSource) -> some View {
+        Picker(source.label, selection: destinationBinding(source)) {
+            ForEach(legalDestinations(for: source)) { destination in
+                Text(destination.label).tag(destination)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .accessibilityIdentifier("runner.destination.\(source.rawValue)")
     }
 
     private func runnerName(for source: RunnerSource) -> String {
@@ -259,4 +302,27 @@ struct OffensiveRunnerConfirmationSheet: View {
         }
         onRecord(draft)
     }
+}
+
+#Preview("Our runner confirmation") {
+    OffensiveRunnerConfirmationSheet(
+        outcome: .double,
+        state: PreviewData.offensiveRunnerConfirmationState,
+        homeAway: .away,
+        battingOrder: PreviewData.runnerConfirmationBattingOrder,
+        onCancel: {},
+        onRecord: { _ in }
+    )
+}
+
+#Preview("Our runner confirmation · Accessibility XL") {
+    OffensiveRunnerConfirmationSheet(
+        outcome: .double,
+        state: PreviewData.offensiveRunnerConfirmationState,
+        homeAway: .away,
+        battingOrder: PreviewData.runnerConfirmationBattingOrder,
+        onCancel: {},
+        onRecord: { _ in }
+    )
+    .environment(\.dynamicTypeSize, .accessibility3)
 }

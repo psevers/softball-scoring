@@ -7,6 +7,7 @@ struct RunnerConfirmationSheet: View {
     let onCancel: () -> Void
     let onRecord: (BallInPlayEvent) -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var destinations: [RunnerSource: RunnerDestination]
     @State private var rbi: Int
     @State private var thirdOutRunsCounted: Int = 0
@@ -72,64 +73,90 @@ struct RunnerConfirmationSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                ScorebookPaperBackground(gridSpacing: 22)
+                ScorebookRuledPaperBackground()
 
                 ScrollView {
-                    VStack(spacing: AppTheme.Spacing.md) {
-                        ScorebookSheet {
-                            VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+                    ScorebookLedger {
+                        ScorebookPageSection {
+                            VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
                                 Text(outcome.label)
-                                    .font(.title2.weight(.semibold))
-                                Text("Confirm where everybody ended up. The suggestions are just a head start—change anything that happened differently.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .font(dynamicTypeSize.isAccessibilitySize ? .headline : AppTheme.Typography.notation)
+                                Text("Confirm each runner’s destination.")
+                                    .font(dynamicTypeSize.isAccessibilitySize ? .callout : AppTheme.Typography.body)
+                                    .foregroundStyle(AppTheme.graphite.opacity(0.72))
+                            }
+                            .padding(.horizontal, AppTheme.Spacing.md)
+                            .padding(.vertical, AppTheme.Spacing.sm)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .overlay(alignment: .bottom) {
+                                Rectangle()
+                                    .fill(AppTheme.rule)
+                                    .frame(height: 1)
                             }
                         }
 
-                        ScorebookSheet {
-                            VStack(spacing: AppTheme.Spacing.sm) {
-                                ForEach(state.occupiedRunnerSources, id: \.self) { source in
+                        ScorebookPageSection(dynamicTypeSize.isAccessibilitySize ? nil : "Runner destinations") {
+                            ForEach(state.occupiedRunnerSources, id: \.self) { source in
+                                ScorebookLedgerRow {
                                     runnerRow(source)
-                                    if source != state.occupiedRunnerSources.last {
-                                        Rectangle().fill(AppTheme.rule).frame(height: 1)
-                                    }
                                 }
                             }
                         }
 
-                        ScorebookSheet {
-                            VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+                        ScorebookPageSection(dynamicTypeSize.isAccessibilitySize ? nil : "Scoring") {
+                            ScorebookLedgerRow {
                                 Stepper("RBI  \(rbi)", value: $rbi, in: 0...maximumRBI)
-                                    .font(.headline)
+                                    .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.notation)
+                                    .monospacedDigit()
+                                    .accessibilityIdentifier("runner.rbi")
+                            }
 
-                                if needsThirdOutDecision {
+                            if needsThirdOutDecision {
+                                ScorebookLedgerRow {
                                     VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
-                                        Text("RUN ON THIRD OUT")
-                                            .font(.caption2.weight(.bold))
-                                            .tracking(1.2)
+                                        ScorebookLabel("Run on third out")
                                         Picker("Third out", selection: $thirdOutClassification) {
                                             Text("Force / Batter").tag(ThirdOutClassification.forceOrBatterRunner)
                                             Text("Timing Play").tag(ThirdOutClassification.timingPlay)
                                         }
                                         .pickerStyle(.segmented)
                                         Stepper("Runs that count  \(thirdOutRunsCounted)", value: $thirdOutRunsCounted, in: 0...maximumThirdOutRunsCounted)
-                                            .font(.headline)
+                                            .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.notation)
+                                            .monospacedDigit()
                                         Text("For a force/batter-runner third out this is 0. On a timing play, count only runners who crossed home before the third out.")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .font(AppTheme.Typography.metadata)
+                                            .foregroundStyle(AppTheme.graphite.opacity(0.68))
                                     }
                                 }
                             }
                         }
 
+                        ScorebookPageSection {
+                            ScorebookLedgerRow {
+                                DisclosureGroup("Suggestion help") {
+                                    Text("Destinations are a starting point. Change anything that happened differently.")
+                                        .font(AppTheme.Typography.body)
+                                        .foregroundStyle(AppTheme.graphite.opacity(0.72))
+                                        .padding(.top, AppTheme.Spacing.xs)
+                                }
+                                .font(dynamicTypeSize.isAccessibilitySize ? .callout : .body)
+                            }
+                        }
+
                         if let validationError {
-                            ScorebookSheet {
-                                Label(validationMessage(validationError), systemImage: "exclamationmark.triangle")
-                                    .font(.subheadline)
+                            ScorebookPageSection("Check this play") {
+                                ScorebookLedgerRow {
+                                    Label(validationMessage(validationError), systemImage: "exclamationmark.triangle")
+                                        .font(AppTheme.Typography.body)
+                                        .foregroundStyle(AppTheme.destructive)
+                                }
                             }
                         }
                     }
                     .padding(AppTheme.Spacing.md)
+                }
+                .overlay(alignment: .leading) {
+                    ScorebookMarginRule()
                 }
             }
             .navigationTitle("Record Play")
@@ -161,26 +188,43 @@ struct RunnerConfirmationSheet: View {
     }
 
     private func runnerRow(_ source: RunnerSource) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(source.label)
-                    .font(.headline)
-                if let slot = state.runnerSlot(for: source) {
-                    Text(source == .batter ? "Opponent Batter \(slot)" : "Batter slot \(slot)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: AppTheme.Spacing.md) {
+                runnerIdentity(source)
+                Spacer(minLength: AppTheme.Spacing.sm)
+                destinationPicker(source)
+                    .fixedSize()
             }
-            Spacer()
-            Picker(source.label, selection: destinationBinding(source)) {
-                ForEach(legalDestinations(for: source)) { destination in
-                    Text(destination.label).tag(destination)
-                }
+
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+                runnerIdentity(source)
+                destinationPicker(source)
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
         }
         .frame(minHeight: AppTheme.TouchTarget.minimum)
+    }
+
+    private func runnerIdentity(_ source: RunnerSource) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(source.label)
+                .font(dynamicTypeSize.isAccessibilitySize ? .headline : AppTheme.Typography.notation)
+            if let slot = state.runnerSlot(for: source) {
+                Text(source == .batter ? "Opponent Batter \(slot)" : "Batter slot \(slot)")
+                    .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.metadata)
+                    .foregroundStyle(AppTheme.graphite.opacity(0.68))
+            }
+        }
+    }
+
+    private func destinationPicker(_ source: RunnerSource) -> some View {
+        Picker(source.label, selection: destinationBinding(source)) {
+            ForEach(legalDestinations(for: source)) { destination in
+                Text(destination.label).tag(destination)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .accessibilityIdentifier("runner.destination.\(source.rawValue)")
     }
 
     private func destinationBinding(_ source: RunnerSource) -> Binding<RunnerDestination> {
@@ -281,4 +325,14 @@ struct RunnerConfirmationSheet: View {
 
         return result
     }
+}
+
+#Preview("Opponent runner confirmation") {
+    RunnerConfirmationSheet(
+        outcome: .double,
+        state: PreviewData.defensiveRunnerConfirmationState,
+        homeAway: .home,
+        onCancel: {},
+        onRecord: { _ in }
+    )
 }
