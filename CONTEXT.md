@@ -39,3 +39,15 @@ A stolen-base or caught-stealing attempt recorded independently of a plate appea
 ## Batting projection
 
 Player-attributed batting totals derived from the ordered game-event history. These totals are never authoritative mutable records.
+
+## Authoritative game snapshot
+
+A fresh, game-scoped projection containing the ordered event records, replayed game state, batting projection, and Play History. Live scoring and history consume the same snapshot boundary.
+
+## Play History
+
+A read-only scorebook projection over the authoritative event timeline. It groups records by event-time half-inning and logical plate appearance while retaining each component record.
+
+## Problem entry
+
+A visible Play History entry for an unknown kind, malformed payload, invalid sequence, or semantically rejected record. Problem entries preserve the record's chronological position instead of crashing or disappearing.

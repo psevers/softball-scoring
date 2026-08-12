@@ -124,6 +124,36 @@ final class ScrollReachabilityUITests: XCTestCase {
         captureScreenshot(named: "ticket8-standard-runner", from: app)
     }
 
+    func testPlayHistoryOpensFromLiveGameAndReturnsToUnchangedScoringState() {
+        let app = launchApp(atAccessibilityTextSize: true)
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI History Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let count = app.staticTexts["game.count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 3))
+        let countBeforeHistory = count.label
+        let history = app.buttons["game.history"]
+        XCTAssertTrue(history.isHittable)
+        history.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        let completedPlay = app.buttons["history.entry.1"]
+        let pendingPlay = app.buttons["history.entry.3"]
+        XCTAssertTrue(completedPlay.waitForExistence(timeout: 3))
+        XCTAssertTrue(completedPlay.label.contains("1B · Batter to 1B"))
+        XCTAssertTrue(pendingPlay.waitForExistence(timeout: 3))
+        XCTAssertTrue(pendingPlay.label.contains("Ball In Play · Pending"))
+
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertTrue(count.waitForExistence(timeout: 3))
+        XCTAssertEqual(count.label, countBeforeHistory)
+        XCTAssertTrue(app.buttons["game.history"].isHittable)
+    }
+
     func testAccessibilityRunnerConfirmationStartsWithDestinationAndRBIControls() {
         let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()

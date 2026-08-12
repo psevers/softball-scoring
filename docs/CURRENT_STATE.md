@@ -2,7 +2,7 @@
 
 ## Window
 
-Window 1 continuation — **Slice 5.5 scorebook visual alignment is complete locally through ticket #10. The whole device/type evidence set is retained and product-owner approved; publication remains separate.**
+Window 1 continuation — **Slice 5.5 scorebook visual alignment remains complete and approved. Slice 6 read-only Play History is implemented locally for ticket #18; publication remains separate.**
 
 ## Canonical repo
 
@@ -174,9 +174,13 @@ Keep ticket #10 local until explicitly authorized to push. Before merge, publish
 
 ## Current vertical slice
 
-**Slice 5.5 — scorebook visual alignment, evidence, and approval complete locally through ticket #10.**
+**Slice 6 — read-only Play History from the live game, ticket #18.**
 
-Next, await explicit publication direction for ticket #10. Slice 6 event-log history, undo/edit/delete through replay, and pitch-count correction remain the next functional slice in `docs/LAPTOP_HANDOFF.md`.
+The live game and Play History now share one fresh game-scoped snapshot containing replay,
+accepted-event batting projection, and a history trace. History groups event-time half-innings and
+plate appearances, pairs completed Ball In Play records, keeps pending plays visible, preserves
+component pitches, and exposes unreadable or rejected records as problem entries. Undo/edit/delete
+and pitch-count correction remain later Slice 6 work.
 
 ## Do not redo
 

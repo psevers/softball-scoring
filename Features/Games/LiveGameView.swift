@@ -12,18 +12,21 @@ struct LiveGameView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Query(sort: \GameEventRecord.sequenceNumber) private var allEventRecords: [GameEventRecord]
     @Query(sort: [SortDescriptor(\Player.lastName), SortDescriptor(\Player.firstName)]) private var players: [Player]
     @Query(sort: \LineupEntry.battingOrder) private var allLineupEntries: [LineupEntry]
 
+    @State private var session: LiveGameSession
     @State private var errorMessage: String?
     @State private var feedbackTick = 0
     @State private var selectedOutcome: BallInPlayOutcome?
     @State private var selectedOffensiveOutcome: BallInPlayOutcome?
 
-    private var gameRecords: [GameEventRecord] {
-        allEventRecords.filter { $0.gameID == game.id }
+    init(game: Game) {
+        self.game = game
+        _session = State(initialValue: LiveGameSession(gameID: game.id))
     }
+
+    private var gameRecords: [GameEventRecord] { session.snapshot?.records ?? [] }
 
     private var validatedHomeAway: HomeAway? {
         HomeAway(rawValue: game.homeAwayRawValue)
@@ -42,14 +45,8 @@ struct LiveGameView: View {
     }
 
     private var replay: GameEventReplay.Result {
-        guard let validatedHomeAway else {
-            return GameEventReplay.Result(state: GameState(), rejectedRecordIDs: [])
-        }
-        return GameEventReplay.replay(
-            records: gameRecords,
-            homeAway: validatedHomeAway,
-            startingPitcherID: game.startingPitcherID
-        )
+        session.snapshot?.replay
+            ?? GameEventReplay.Result(state: GameState(), rejectedRecordIDs: [])
     }
 
     private var state: GameState { replay.state }
@@ -72,23 +69,7 @@ struct LiveGameView: View {
         return trackedBattingOrder[state.currentTrackedBatterSlot - 1]
     }
 
-    private var battingProjection: Result<[UUID: BattingLine], Error> {
-        Result {
-            BattingStatProjector.project(events: try gameRecords.map { try $0.decoded() })
-        }
-    }
-
-    private var battingLines: [UUID: BattingLine] {
-        switch battingProjection {
-        case .success(let lines): lines
-        case .failure: [:]
-        }
-    }
-
-    private var hasBattingProjectionError: Bool {
-        if case .failure = battingProjection { return true }
-        return false
-    }
+    private var battingLines: [UUID: BattingLine] { session.snapshot?.battingLines ?? [:] }
 
     var body: some View {
         ZStack {
@@ -100,7 +81,7 @@ struct LiveGameView: View {
 
                     if validatedHomeAway == nil
                         || !replay.rejectedRecordIDs.isEmpty
-                        || hasBattingProjectionError {
+                        || session.loadError != nil {
                         historyWarning
                     } else if state.isOpponentBatting(homeAway: homeAway) {
                         defensiveScoringSurface
@@ -118,6 +99,19 @@ struct LiveGameView: View {
         }
         .navigationTitle(game.opponentName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    PlayHistoryView(game: game, session: session)
+                } label: {
+                    Label("History", systemImage: "clock.arrow.circlepath")
+                }
+                .accessibilityIdentifier("game.history")
+            }
+        }
+        .task {
+            session.refresh(game: game, modelContext: modelContext)
+        }
         .alert("Scoring Paused", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -709,6 +703,7 @@ struct LiveGameView: View {
                 existingRecords: gameRecords,
                 modelContext: modelContext
             )
+            session.refresh(game: game, modelContext: modelContext)
             feedbackTick += 1
         } catch {
             errorMessage = error.localizedDescription
@@ -723,6 +718,7 @@ struct LiveGameView: View {
                 existingRecords: gameRecords,
                 modelContext: modelContext
             )
+            session.refresh(game: game, modelContext: modelContext)
             selectedOutcome = nil
             feedbackTick += 1
         } catch {
@@ -759,6 +755,7 @@ struct LiveGameView: View {
                 existingRecords: gameRecords,
                 modelContext: modelContext
             )
+            session.refresh(game: game, modelContext: modelContext)
             feedbackTick += 1
         } catch {
             errorMessage = error.localizedDescription
@@ -778,6 +775,7 @@ struct LiveGameView: View {
                 existingRecords: gameRecords,
                 modelContext: modelContext
             )
+            session.refresh(game: game, modelContext: modelContext)
             feedbackTick += 1
         } catch {
             errorMessage = error.localizedDescription
@@ -801,6 +799,7 @@ struct LiveGameView: View {
                 existingRecords: gameRecords,
                 modelContext: modelContext
             )
+            session.refresh(game: game, modelContext: modelContext)
             feedbackTick += 1
         } catch {
             errorMessage = error.localizedDescription
@@ -824,6 +823,7 @@ struct LiveGameView: View {
                 existingRecords: gameRecords,
                 modelContext: modelContext
             )
+            session.refresh(game: game, modelContext: modelContext)
             selectedOffensiveOutcome = nil
             feedbackTick += 1
         } catch {
