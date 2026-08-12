@@ -112,6 +112,7 @@ Opponent slots rotate 1...9. Completing a PA advances the slot; 9 wraps to 1.
 ## Event invariants
 
 - Persisted events are authoritative history.
+- Undo latest count pitch removes only the latest persisted non-terminal defensive Ball, Called Strike, Swinging Strike, or Foul after exact-timeline validation. The prior count and pitcher totals are reconstructed by replay; no derived value is reverse-mutated.
 - Sequence numbers are positive and unique.
 - Same ordered valid history → same `GameState`.
 - Pitch must match current opponent batter and current pitcher contract.

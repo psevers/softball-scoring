@@ -40,6 +40,15 @@
 - Entries split into event-time top/bottom half-inning sections.
 - Accessibility XL UI coverage opens History from a deterministic live game, reads completed and pending plays, and returns to unchanged live state.
 
+## Undo latest defensive count pitch
+
+- Ball, Called Strike, Swinging Strike, and Foul candidates restore prior count and pitcher totals through full replay.
+- Only the latest persisted scoring action is eligible; terminal pitches, completed plays, malformed history, wrong-game candidates, moved latest actions, and stale exact timelines are rejected.
+- Candidate replay succeeds before deletion, save failure rolls back every record, and surviving identity/sequence/timestamp values remain unchanged.
+- A later pitch allocates from the authoritative maximum surviving sequence without collision.
+- A fresh model context and cold-store reload reconstruct the same corrected snapshot as the immediate response.
+- Accessibility XL UI coverage verifies 44-point Live Game and Play History Undo controls, exact confirmation context, cancellation, successful deletion, and return to restored live scoring.
+
 ## Base occupancy matrix for Ball In Play
 
 Exercise outcome confirmation from all eight starting base states:

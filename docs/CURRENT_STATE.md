@@ -2,7 +2,7 @@
 
 ## Window
 
-Window 1 continuation — **Slice 5.5 scorebook visual alignment remains complete and approved. Slice 6 read-only Play History is implemented locally for ticket #18; publication remains separate.**
+Window 1 continuation — **Slice 5.5 scorebook visual alignment remains complete and approved. Slice 6 read-only Play History and latest defensive count-pitch Undo are implemented through ticket #19; publication remains separate.**
 
 ## Canonical repo
 
@@ -174,13 +174,16 @@ Keep ticket #10 local until explicitly authorized to push. Before merge, publish
 
 ## Current vertical slice
 
-**Slice 6 — read-only Play History from the live game, ticket #18.**
+**Slice 6 — Undo the latest defensive count pitch, ticket #19.**
 
 The live game and Play History now share one fresh game-scoped snapshot containing replay,
 accepted-event batting projection, and a history trace. History groups event-time half-innings and
 plate appearances, pairs completed Ball In Play records, keeps pending plays visible, preserves
-component pitches, and exposes unreadable or rejected records as problem entries. Undo/edit/delete
-and pitch-count correction remain later Slice 6 work.
+component pitches, and exposes unreadable or rejected records as problem entries. Live Game and Play
+History now offer confirmed Undo when the latest action is a non-terminal defensive Ball, Called Strike,
+Swinging Strike, or Foul. The correction boundary freshly verifies the exact game timeline, previews the
+surviving replay/projection, atomically deletes with rollback, and refreshes the shared snapshot. Earlier-
+event edit/delete and pitch-count correction remain later Slice 6 work.
 
 ## Do not redo
 

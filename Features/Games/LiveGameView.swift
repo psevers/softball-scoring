@@ -20,6 +20,7 @@ struct LiveGameView: View {
     @State private var feedbackTick = 0
     @State private var selectedOutcome: BallInPlayOutcome?
     @State private var selectedOffensiveOutcome: BallInPlayOutcome?
+    @State private var isConfirmingUndo = false
 
     init(game: Game) {
         self.game = game
@@ -79,6 +80,12 @@ struct LiveGameView: View {
                 ScorebookLedger {
                     atBatCell
 
+                    if session.undoCandidate != nil {
+                        ScorebookLedgerRow {
+                            undoLatestPitchButton(identifier: "game.undoLatestPitch")
+                        }
+                    }
+
                     if validatedHomeAway == nil
                         || !replay.rejectedRecordIDs.isEmpty
                         || session.loadError != nil {
@@ -111,6 +118,18 @@ struct LiveGameView: View {
         }
         .task {
             session.refresh(game: game, modelContext: modelContext)
+        }
+        .alert(
+            "Undo latest pitch?",
+            isPresented: $isConfirmingUndo,
+            presenting: session.undoCandidate
+        ) { candidate in
+            Button("Undo \(candidate.result.label)", role: .destructive) {
+                undoLatestCountPitch(candidate)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { candidate in
+            Text(candidate.confirmationDetail)
         }
         .alert("Scoring Paused", isPresented: Binding(
             get: { errorMessage != nil },
@@ -708,6 +727,26 @@ struct LiveGameView: View {
             feedbackTick += 1
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func undoLatestCountPitch(_ candidate: UndoLatestCountPitchCandidate) {
+        do {
+            try session.undoLatestCountPitch(
+                candidate,
+                game: game,
+                modelContext: modelContext
+            )
+            feedbackTick += 1
+        } catch {
+            session.refresh(game: game, modelContext: modelContext)
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func undoLatestPitchButton(identifier: String) -> some View {
+        UndoLatestPitchButton(identifier: identifier) {
+            isConfirmingUndo = true
         }
     }
 

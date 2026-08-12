@@ -50,6 +50,7 @@ Authoritative persisted scoring envelope:
 - `payload: Data`
 
 Sequence numbers are positive and unique by invariant within a game. Semantic validation occurs on replay.
+Undo deletes the authoritative latest eligible pitch record without resequencing or rewriting survivors. Sequence gaps are valid, and the next append uses the maximum surviving sequence plus one.
 
 ### PitchEvent payload
 
@@ -64,6 +65,8 @@ Supported results in Slice 3:
 - Swinging Strike
 - Foul
 - HBP
+
+Slice 6 Undo currently accepts only non-terminal Ball, Called Strike, Swinging Strike, and Foul records. Terminal walks/strikeouts, HBP, Ball In Play, and completed plays remain unchanged by this narrow correction path.
 
 ## Derived—not persisted as competing truth
 

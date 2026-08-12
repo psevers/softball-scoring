@@ -26,9 +26,6 @@ enum LiveGameSnapshotError: LocalizedError {
 @MainActor
 enum LiveGameSnapshotLoader {
     static func load(game: Game, modelContext: ModelContext) throws -> LiveGameSnapshot {
-        guard let homeAway = HomeAway(rawValue: game.homeAwayRawValue) else {
-            throw LiveGameSnapshotError.invalidGameSide
-        }
         let gameID = game.id
         let descriptor = FetchDescriptor<GameEventRecord>(
             predicate: #Predicate { $0.gameID == gameID },
@@ -38,6 +35,16 @@ enum LiveGameSnapshotLoader {
             ]
         )
         let records = try modelContext.fetch(descriptor)
+        return try makeSnapshot(game: game, records: records)
+    }
+
+    static func makeSnapshot(game: Game, records: [GameEventRecord]) throws -> LiveGameSnapshot {
+        guard records.allSatisfy({ $0.gameID == game.id }) else {
+            throw LiveGameSnapshotError.gameMismatch
+        }
+        guard let homeAway = HomeAway(rawValue: game.homeAwayRawValue) else {
+            throw LiveGameSnapshotError.invalidGameSide
+        }
         let replay = GameEventReplay.replay(
             records: records,
             homeAway: homeAway,
@@ -58,6 +65,7 @@ final class LiveGameSession {
     let gameID: UUID
     private(set) var snapshot: LiveGameSnapshot?
     private(set) var loadError: String?
+    private(set) var undoCandidate: UndoLatestCountPitchCandidate?
 
     init(gameID: UUID) {
         self.gameID = gameID
@@ -66,13 +74,16 @@ final class LiveGameSession {
     func refresh(game: Game, modelContext: ModelContext) {
         guard game.id == gameID else {
             snapshot = nil
+            undoCandidate = nil
             loadError = LiveGameSnapshotError.gameMismatch.localizedDescription
             return
         }
         do {
             snapshot = try LiveGameSnapshotLoader.load(game: game, modelContext: modelContext)
+            undoCandidate = try availableUndoCandidate(game: game, modelContext: modelContext)
             loadError = nil
         } catch {
+            undoCandidate = nil
             loadError = error.localizedDescription
         }
     }
@@ -85,5 +96,36 @@ final class LiveGameSession {
         guard game.id == gameID else { throw LiveGameSnapshotError.gameMismatch }
         try action()
         refresh(game: game, modelContext: modelContext)
+    }
+
+    func undoLatestCountPitch(
+        _ candidate: UndoLatestCountPitchCandidate,
+        game: Game,
+        modelContext: ModelContext
+    ) throws {
+        guard game.id == gameID else { throw LiveGameSnapshotError.gameMismatch }
+        snapshot = try GameEventCorrection.undoLatestCountPitch(
+            candidate,
+            game: game,
+            modelContext: modelContext
+        )
+        undoCandidate = try availableUndoCandidate(game: game, modelContext: modelContext)
+        loadError = nil
+    }
+
+    private func availableUndoCandidate(
+        game: Game,
+        modelContext: ModelContext
+    ) throws -> UndoLatestCountPitchCandidate? {
+        do {
+            return try GameEventCorrection.prepareUndoLatestCountPitch(
+                game: game,
+                modelContext: modelContext
+            )
+        } catch GameEventCorrectionError.noUndoAvailable {
+            return nil
+        } catch GameEventCorrectionError.invalidTimeline {
+            return nil
+        }
     }
 }

@@ -51,3 +51,11 @@ A read-only scorebook projection over the authoritative event timeline. It group
 ## Problem entry
 
 A visible Play History entry for an unknown kind, malformed payload, invalid sequence, or semantically rejected record. Problem entries preserve the record's chronological position instead of crashing or disappearing.
+
+## Undo candidate
+
+The latest persisted scoring action when it is a non-terminal defensive Ball, Called Strike, Swinging Strike, or Foul. Its confirmation retains the expected game timeline so a moved or stale action cannot be removed.
+
+## Correction boundary
+
+The main-actor persistence boundary that freshly fetches one game's event records, validates a candidate timeline through replay and batting projection, and saves the event-history change atomically. Derived game state is never reverse-mutated.
