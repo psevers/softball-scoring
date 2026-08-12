@@ -1,23 +1,23 @@
-name: iOS PR Fast Verification
+name: iOS Exhaustive UI Evidence
 
 on:
-  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  pr-fast-verification:
-    name: PR Fast Verification
+  exhaustive-ui-evidence:
+    name: Exhaustive UI Evidence
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Start duration measurement
         id: lane-timing
         run: echo "started_at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
-      - name: Validate CI workflow contract
-        run: ruby Tests/CI/workflow_contract_test.rb
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate Xcode project
@@ -83,17 +83,7 @@ jobs:
             -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
             -derivedDataPath "$RUNNER_TEMP/SoftballScoringDerivedData" \
             CODE_SIGNING_ALLOWED=NO
-      - name: Run domain, scoring, and persistence tests
-        run: |
-          NSUnbufferedIO=YES xcodebuild test-without-building \
-            -project SoftballScoring.xcodeproj \
-            -scheme SoftballScoring \
-            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
-            -derivedDataPath "$RUNNER_TEMP/SoftballScoringDerivedData" \
-            -only-testing:DomainTests \
-            -only-testing:ScoringEngineTests \
-            CODE_SIGNING_ALLOWED=NO
-      - name: Verify deterministic launch and recovery smoke
+      - name: Run complete UI workflow matrix
         run: |
           NSUnbufferedIO=YES xcodebuild test-without-building \
             -project SoftballScoring.xcodeproj \
@@ -101,15 +91,15 @@ jobs:
             -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
             -derivedDataPath "$RUNNER_TEMP/SoftballScoringDerivedData" \
             -parallel-testing-enabled NO \
-            -only-testing:SoftballScoringUITests/ScrollReachabilityUITests/testUndoLatestPitchConfirmsCancelsAndRestoresLiveStateFromHistory \
+            -only-testing:SoftballScoringUITests \
             CODE_SIGNING_ALLOWED=NO
-      - name: Record fast lane duration
+      - name: Record exhaustive lane duration
         if: always()
         run: |
           finished_at="$(date +%s)"
           elapsed_seconds="$((finished_at - ${{ steps.lane-timing.outputs.started_at }}))"
           {
-            echo "### PR Fast Verification"
+            echo "### Exhaustive UI Evidence"
             echo
             echo "- Status: ${{ job.status }}"
             echo "- Elapsed duration: ${elapsed_seconds} seconds"

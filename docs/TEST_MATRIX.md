@@ -1,5 +1,29 @@
 # Test Matrix
 
+## Continuous integration lanes
+
+`iOS PR Fast Verification / PR Fast Verification` is the required pull-request check. From a clean
+checkout it generates the Xcode project, creates and boots a fresh compatible iPhone simulator,
+builds the complete scheme for testing, runs every `DomainTests` and `ScoringEngineTests` test
+(including persistence and replay coverage), and runs the deterministic
+`testUndoLatestPitchConfirmsCancelsAndRestoresLiveStateFromHistory` launch/recovery smoke test.
+
+`iOS Exhaustive UI Evidence / Exhaustive UI Evidence` is the post-merge UI matrix. It runs on every
+push to `main` and by manual dispatch, builds against a newly created simulator, and runs the entire
+`SoftballScoringUITests` target with parallel testing disabled and no skipped tests. Use the Actions
+**Run workflow** control and select the branch under test when a release, evidence capture, or
+investigation needs the matrix outside the normal `main` cadence.
+
+An implementation ticket must request and link a successful manual exhaustive run before merge when
+it changes a user workflow covered by XCUITest, UI-test fixtures or launch arguments, the UI target or
+scheme, simulator/runtime selection, or either CI workflow. It must also request the lane when its
+ticket, release plan, evidence plan, or investigation explicitly calls for the complete matrix. Other
+pull requests are gated only by PR Fast Verification; their exhaustive evidence follows on the
+resulting `main` push.
+
+Both jobs append their status and elapsed duration in seconds to the GitHub Actions job summary on
+every run, including failed runs. These per-run measurements are the CI-time regression record.
+
 ## Scorebook visual foundation
 
 - The bundled Patrick Hand resource resolves by PostScript name in the hosted app runtime.
