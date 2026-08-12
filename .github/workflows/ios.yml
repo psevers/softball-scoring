@@ -17,32 +17,52 @@ jobs:
         run: xcodegen generate
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
-      - name: Select iOS Simulator
+      - name: Create iOS Simulator
         id: simulator
         run: |
-          simulator_id="$(
-            xcrun simctl list devices available --json | /usr/bin/python3 -c '
+          runtime_id="$(
+            xcrun simctl list runtimes available --json | /usr/bin/python3 -c '
           import json
           import sys
 
-          devices = [
-              device
-              for runtime_devices in json.load(sys.stdin)["devices"].values()
-              for device in runtime_devices
-              if device.get("isAvailable") and device["name"].startswith("iPhone")
+          runtimes = [
+              runtime
+              for runtime in json.load(sys.stdin)["runtimes"]
+              if runtime.get("isAvailable") and "iOS" in runtime["identifier"]
           ]
-          preferred = next(
-              (device for device in devices if device["name"] == "iPhone 17"),
-              devices[0] if devices else None,
-          )
-          if preferred:
-              print(preferred["udid"])
+          if runtimes:
+              latest = max(runtimes, key=lambda runtime: tuple(map(int, runtime["version"].split("."))))
+              print(latest["identifier"])
           '
           )"
-          if [[ -z "$simulator_id" ]]; then
-            echo "No available iPhone simulator was found after installing the iOS platform." >&2
+          device_type_id="$(
+            xcrun simctl list devicetypes --json | /usr/bin/python3 -c '
+          import json
+          import sys
+
+          device_types = [
+              device_type
+              for device_type in json.load(sys.stdin)["devicetypes"]
+              if device_type["name"].startswith("iPhone")
+          ]
+          preferred = next(
+              (device_type for device_type in device_types if device_type["name"] == "iPhone 17"),
+              device_types[0] if device_types else None,
+          )
+          if preferred:
+              print(preferred["identifier"])
+          '
+          )"
+          if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
+            echo "No compatible iOS runtime or iPhone device type was found." >&2
             exit 1
           fi
+          simulator_id="$(
+            xcrun simctl create \
+              'Softball Scoring CI' \
+              "$device_type_id" \
+              "$runtime_id"
+          )"
           echo "id=$simulator_id" >> "$GITHUB_OUTPUT"
       - name: Boot iOS Simulator
         run: |
