@@ -298,18 +298,22 @@ struct ScorebookStat: Identifiable {
 struct ScorebookStatGrid: View {
     let stats: [ScorebookStat]
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 56), spacing: 0, alignment: .leading)
-    ]
+    @ScaledMetric(relativeTo: .body) private var minimumColumnWidth = 56.0
+
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: minimumColumnWidth), spacing: 0, alignment: .leading)]
+    }
 
     var body: some View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: 0) {
             ForEach(stats) { stat in
                 VStack(alignment: .leading, spacing: 2) {
                     ScorebookLabel(stat.label)
+                        .accessibilityIdentifier("scorebook.stat.\(stat.id).label")
                     Text(stat.value)
                         .font(AppTheme.Typography.tabularNumber)
                         .foregroundStyle(AppTheme.graphite)
+                        .accessibilityIdentifier("scorebook.stat.\(stat.id).value")
                 }
                 .padding(AppTheme.Spacing.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)

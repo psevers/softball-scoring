@@ -1,0 +1,26 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "8D51D517-AA1B-40EF-9519-AED1F963EA4E",
+        "deviceName" : "iPhone 17e",
+        "exportedFileName" : "A41F4FA6-E8F1-46B3-8C26-198977DA424B.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "batting-line-bottom_0_7E14F644-F2FD-4E86-B7E2-B1A45A8C93F2.png",
+        "timestamp" : 1786545564.224
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "8D51D517-AA1B-40EF-9519-AED1F963EA4E",
+        "deviceName" : "iPhone 17e",
+        "exportedFileName" : "2CAC131B-4C57-4141-9259-C91DC3473BDD.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "batting-line-top_0_18D610E5-3A6E-411E-9A07-FF7214913868.png",
+        "timestamp" : 1786545560.287
+      }
+    ],
+    "testIdentifier" : "ScrollReachabilityUITests/testSliceFiveFiveStandardBattingLineRemainsAligned()",
+    "testIdentifierURL" : "test://com.apple.xcode/SoftballScoring/SoftballScoringUITests/ScrollReachabilityUITests/testSliceFiveFiveStandardBattingLineRemainsAligned"
+  }
+]

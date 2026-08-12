@@ -1,0 +1,107 @@
+{
+  "ticket": 10,
+  "capturedOn": "2026-08-12",
+  "baselineCommit": "22b5c2e",
+  "reviewBaseCommit": "cda3da4",
+  "captureSource": "baseline plus ticket 10 working tree",
+  "toolchain": {
+    "xcode": "26.6 (17F113)",
+    "xcodegen": "2.46.0",
+    "iosRuntime": "26.5"
+  },
+  "launch": {
+    "orientation": "portrait",
+    "presentation": "full-screen",
+    "fixtureArgument": "-uiTesting",
+    "standardArgument": "-UIPreferredContentSizeCategoryName UICTContentSizeCategoryL",
+    "accessibilityArgument": "-UIPreferredContentSizeCategoryName UICTContentSizeCategoryAccessibilityXL"
+  },
+  "approval": {
+    "status": "approved",
+    "productOwner": "Patrick Severs",
+    "approvedOn": "2026-08-12"
+  },
+  "runs": [
+    {
+      "device": "iPhone 17",
+      "udid": "FB739517-7F6A-4309-A112-B50143709CA5",
+      "textSize": "standard",
+      "systemAppearance": "light",
+      "test": "testSliceFiveFiveStandardEvidenceSurfacesRemainReachable",
+      "resultBundle": "ticket10-pinned-regular-standard-20260812.xcresult",
+      "evidenceDirectory": "final/iphone-17/standard-large-light"
+    },
+    {
+      "device": "iPhone 17",
+      "udid": "FB739517-7F6A-4309-A112-B50143709CA5",
+      "textSize": "accessibilityXL",
+      "systemAppearance": "light",
+      "test": "testSliceFiveFiveAccessibilityEvidenceSurfacesRemainReachable",
+      "resultBundle": "ticket10-final-regular-ax-20260812.xcresult",
+      "evidenceDirectory": "final/iphone-17/accessibility-xl-light"
+    },
+    {
+      "device": "iPhone 17e",
+      "udid": "8D51D517-AA1B-40EF-9519-AED1F963EA4E",
+      "textSize": "standard",
+      "systemAppearance": "light",
+      "test": "testSliceFiveFiveStandardEvidenceSurfacesRemainReachable",
+      "resultBundle": "ticket10-pinned-small-standard-20260812.xcresult",
+      "evidenceDirectory": "final/iphone-17e/standard-large-light"
+    },
+    {
+      "device": "iPhone 17e",
+      "udid": "8D51D517-AA1B-40EF-9519-AED1F963EA4E",
+      "textSize": "accessibilityXL",
+      "systemAppearance": "light",
+      "test": "testSliceFiveFiveAccessibilityEvidenceSurfacesRemainReachable",
+      "resultBundle": "ticket10-final-small-ax-20260812.xcresult",
+      "evidenceDirectory": "final/iphone-17e/accessibility-xl-light"
+    },
+    {
+      "device": "iPhone 17",
+      "udid": "FB739517-7F6A-4309-A112-B50143709CA5",
+      "textSize": "standard",
+      "systemAppearance": "dark",
+      "test": "testSliceFiveFiveStandardEvidenceSurfacesRemainReachable",
+      "resultBundle": "ticket10-pinned-regular-standard-dark-20260812.xcresult",
+      "evidenceDirectory": "final/iphone-17/standard-large-dark-system"
+    },
+    {
+      "device": "iPhone 17",
+      "udid": "FB739517-7F6A-4309-A112-B50143709CA5",
+      "textSize": "standard",
+      "systemAppearance": "light",
+      "test": "testSliceFiveFiveStandardBattingLineRemainsAligned",
+      "resultBundle": "ticket10-pinned-regular-standard-batting-20260812.xcresult",
+      "evidenceDirectory": "final/iphone-17/standard-large-light-batting-line"
+    },
+    {
+      "device": "iPhone 17",
+      "udid": "FB739517-7F6A-4309-A112-B50143709CA5",
+      "textSize": "accessibilityXL",
+      "systemAppearance": "light",
+      "test": "testSliceFiveFiveAccessibilityBattingLineRemainsAligned",
+      "resultBundle": "ticket10-alignment-green-20260812.xcresult",
+      "evidenceDirectory": "final/iphone-17/accessibility-xl-light-batting-line-corrected"
+    },
+    {
+      "device": "iPhone 17e",
+      "udid": "8D51D517-AA1B-40EF-9519-AED1F963EA4E",
+      "textSize": "standard",
+      "systemAppearance": "light",
+      "test": "testSliceFiveFiveStandardBattingLineRemainsAligned",
+      "resultBundle": "ticket10-pinned-small-standard-batting-20260812.xcresult",
+      "evidenceDirectory": "final/iphone-17e/standard-large-light-batting-line"
+    },
+    {
+      "device": "iPhone 17e",
+      "udid": "8D51D517-AA1B-40EF-9519-AED1F963EA4E",
+      "textSize": "accessibilityXL",
+      "systemAppearance": "light",
+      "test": "testSliceFiveFiveAccessibilityBattingLineRemainsAligned",
+      "resultBundle": "ticket10-alignment-green-small-ax-20260812.xcresult",
+      "evidenceDirectory": "final/iphone-17e/accessibility-xl-light-batting-line-corrected"
+    }
+  ]
+}

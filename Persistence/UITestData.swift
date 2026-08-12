@@ -37,9 +37,11 @@ enum UITestData {
         let liveGame = Game(
             seasonID: season.id,
             opponentName: "UI Opponent",
+            gameDate: Date(timeIntervalSince1970: 1_786_562_700),
             homeAway: .away,
             status: .inProgress,
-            startingPitcherID: activePlayers[0].id
+            startingPitcherID: activePlayers[0].id,
+            startedAt: Date(timeIntervalSince1970: 1_786_562_700)
         )
         context.insert(liveGame)
         for (index, player) in activePlayers.enumerated() {
@@ -48,6 +50,25 @@ enum UITestData {
                 battingOrder: index + 1,
                 startingPosition: positions[index],
                 gameID: liveGame.id
+            ))
+        }
+
+        let defensiveGame = Game(
+            seasonID: season.id,
+            opponentName: "UI Defense Opponent",
+            gameDate: Date(timeIntervalSince1970: 1_786_476_300),
+            homeAway: .home,
+            status: .inProgress,
+            startingPitcherID: activePlayers[0].id,
+            startedAt: Date(timeIntervalSince1970: 1_786_476_300)
+        )
+        context.insert(defensiveGame)
+        for (index, player) in activePlayers.enumerated() {
+            context.insert(LineupEntry(
+                playerID: player.id,
+                battingOrder: index + 1,
+                startingPosition: positions[index],
+                gameID: defensiveGame.id
             ))
         }
 

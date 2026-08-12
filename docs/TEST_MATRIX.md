@@ -7,6 +7,17 @@
 - The app remains a coherent light-paper surface when the device uses Dark Mode.
 - Expressive text scales from semantic Dynamic Type roles; dense metadata and numerical text retain system typography.
 
+## Slice 5.5 retained evidence matrix
+
+- iPhone 17e and iPhone 17 each cover standard and Accessibility XL Dynamic Type in portrait, full-screen presentation.
+- Every primary configuration retains Games home, New Game, a complete nine-player lineup, live offense, live defense, offensive and defensive runner confirmation, Team/roster, player editor, Seasons, season editor, final game summary, and the supported Stats empty state.
+- The complete thirteen-category batting line is reachable at both text sizes on both devices; values share a consistent baseline within each visual row.
+- A representative iPhone 17 system-dark run retains the coherent light-paper app and readable native editor metadata.
+- Critical state labels remain readable, essential actions remain reachable by scrolling, numerical values remain aligned, and selected/destructive/invalid meaning has non-color structure or text.
+- Representative captures are shown beside the approved Window 1 reference, and the complete evidence set received explicit product-owner approval on August 12, 2026.
+- The final complete Xcode scheme passes on iPhone 17 / iOS 26.5: 116 tests (119 parameterized test cases), with zero failures or skips.
+- Exact capture configuration and raw Xcode attachment manifests are retained under `docs/evidence/slice5-5/`.
+
 ## Pitch/count regression
 
 - 0/1/2 ball progression.

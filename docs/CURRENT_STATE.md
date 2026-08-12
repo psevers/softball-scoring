@@ -2,7 +2,7 @@
 
 ## Window
 
-Window 1 continuation — **Slice 5.5 scorebook visual alignment is in progress; tickets #6–#8 are merged, the hosted-simulator CI fix is merged, and ticket #9 is implemented locally without publication.**
+Window 1 continuation — **Slice 5.5 scorebook visual alignment is complete locally through ticket #10. The whole device/type evidence set is retained and product-owner approved; publication remains separate.**
 
 ## Canonical repo
 
@@ -115,6 +115,17 @@ Time-limit setup coverage verifies the keyboard-free wheel at both 30 and 90 min
 - Focused simulator verification covers all four administrative surfaces and a native player editor at standard size, plus long-roster, player-editor, season, summary, and Stats reachability at Accessibility XL.
 - The complete Xcode scheme passes on iPhone 17 / iOS 26.5: 112 tests (115 parameterized test cases), with zero failures or skips.
 
+### Slice 5.5 evidence and approval — ticket #10
+
+- Repository evidence now retains Games home, New Game, a complete lineup, live offense, live defense, both runner-confirmation variants, Team/roster, player editor, Seasons and editor, final game summary, Stats empty state, and the complete batting line.
+- The primary matrix covers iPhone 17e and iPhone 17 at standard and Accessibility XL Dynamic Type. A representative iPhone 17 system-dark run proves that the intentionally light paper presentation remains coherent.
+- Exact Xcode, runtime, simulator, appearance, content-size, fixture, orientation, test, and result-bundle metadata is recorded in `docs/evidence/slice5-5/manifest.json`.
+- The evidence pass exposed misaligned Accessibility XL batting-stat values. The adaptive grid now scales its minimum column width with Dynamic Type, and XCUITest verifies reachability and value alignment for all thirteen stat categories.
+- The approved Window 1 reference is presented beside representative implementation captures in `docs/evidence/slice5-5/README.md`.
+- Patrick Severs explicitly approved the complete evidence set on August 12, 2026: "approved. this is good".
+- Final correctness/security and maintainability/scope re-reviews against `cda3da4` report no remaining P0, P1, or P2 findings.
+- Final local validation on iPhone 17 / iOS 26.5 passes the complete scheme: 116 tests (119 parameterized test cases), with zero failures or skips.
+
 Earlier source-only validation:
 
 Swift 6.2.1 Linux pure-domain harness compiled event/state/validator/reducer code and executed representative:
@@ -146,9 +157,9 @@ No unresolved P0/P1 findings. Important fixes discovered during review include:
 9. repeated writes allocate from authoritative stored history;
 10. multi-out plays explicitly classify the third out as force/batter-runner or timing.
 
-## Required before ticket #9 publication
+## Required before publication
 
-Keep ticket #9 local until explicitly authorized to push. Before merge, publish the validated branch, open a draft PR, require green GitHub CI, complete the PR adversarial checklist, and obtain product-owner approval for the current screenshot evidence.
+Keep ticket #10 local until explicitly authorized to push. Before merge, publish the validated branch, open a draft PR, require green GitHub CI, and complete the PR adversarial checklist. Product-owner visual approval is already recorded.
 
 ## Accepted limitations / backlog
 
@@ -163,9 +174,9 @@ Keep ticket #9 local until explicitly authorized to push. Before merge, publish 
 
 ## Current vertical slice
 
-**Slice 5.5 — scorebook visual alignment, ticket #9 implemented locally.**
+**Slice 5.5 — scorebook visual alignment, evidence, and approval complete locally through ticket #10.**
 
-Next, complete local review and await explicit publication direction for ticket #9. Slice 6 event-log history, undo/edit/delete through replay, and pitch-count correction remain the next functional slice in `docs/LAPTOP_HANDOFF.md`.
+Next, await explicit publication direction for ticket #10. Slice 6 event-log history, undo/edit/delete through replay, and pitch-count correction remain the next functional slice in `docs/LAPTOP_HANDOFF.md`.
 
 ## Do not redo
 
