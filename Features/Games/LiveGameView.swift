@@ -125,7 +125,7 @@ struct LiveGameView: View {
             presenting: session.undoCandidate
         ) { candidate in
             Button("Undo \(candidate.result.label)", role: .destructive) {
-                undoLatestCountPitch(candidate)
+                undoLatestPitch(candidate)
             }
             Button("Cancel", role: .cancel) {}
         } message: { candidate in
@@ -730,9 +730,9 @@ struct LiveGameView: View {
         }
     }
 
-    private func undoLatestCountPitch(_ candidate: UndoLatestCountPitchCandidate) {
+    private func undoLatestPitch(_ candidate: UndoLatestPitchCandidate) {
         do {
-            try session.undoLatestCountPitch(
+            try session.undoLatestPitch(
                 candidate,
                 game: game,
                 modelContext: modelContext

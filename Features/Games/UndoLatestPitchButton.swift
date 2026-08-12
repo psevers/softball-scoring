@@ -15,7 +15,7 @@ struct UndoLatestPitchButton: View {
         }
         .buttonStyle(.bordered)
         .tint(AppTheme.destructive)
-        .accessibilityHint("Opens a confirmation before removing the latest count pitch")
+        .accessibilityHint("Opens a confirmation before removing the latest eligible defensive pitch")
         .accessibilityIdentifier(identifier)
     }
 }

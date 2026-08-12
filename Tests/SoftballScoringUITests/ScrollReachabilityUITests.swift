@@ -165,19 +165,22 @@ final class ScrollReachabilityUITests: XCTestCase {
 
         let count = app.staticTexts["game.count"]
         XCTAssertTrue(count.waitForExistence(timeout: 3))
-        XCTAssertEqual(count.label, "1 – 1")
-        XCTAssertTrue(app.staticTexts["Pitching · 2 pitches · Opp batter 1"].exists)
+        XCTAssertEqual(count.label, "0 – 0")
+        XCTAssertTrue(app.staticTexts["Pitching · 4 pitches · Opp batter 2"].exists)
 
         let liveUndo = app.buttons["game.undoLatestPitch"]
         XCTAssertTrue(liveUndo.waitForExistence(timeout: 3))
         XCTAssertGreaterThanOrEqual(liveUndo.frame.height, 44)
         liveUndo.tap()
         XCTAssertTrue(app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "Top of inning 1, opponent batting slot 1, sequence 2: Called Strike")
+            NSPredicate(format: "label CONTAINS %@", "Top of inning 1, opponent batting slot 1, sequence 4: Ball")
         ).firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "completed the plate appearance for opponent batting slot 1")
+        ).firstMatch.exists)
         app.buttons["Cancel"].tap()
-        XCTAssertEqual(count.label, "1 – 1")
-        XCTAssertTrue(app.staticTexts["Pitching · 2 pitches · Opp batter 1"].exists)
+        XCTAssertEqual(count.label, "0 – 0")
+        XCTAssertTrue(app.staticTexts["Pitching · 4 pitches · Opp batter 2"].exists)
 
         app.buttons["game.history"].tap()
         XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
@@ -185,15 +188,46 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(historyUndo.waitForExistence(timeout: 3))
         XCTAssertGreaterThanOrEqual(historyUndo.frame.height, 44)
         historyUndo.tap()
-        XCTAssertTrue(app.buttons["Undo Called Strike"].waitForExistence(timeout: 3))
-        app.buttons["Undo Called Strike"].tap()
+        XCTAssertTrue(app.buttons["Undo Ball"].waitForExistence(timeout: 3))
+        app.buttons["Undo Ball"].tap()
         XCTAssertTrue(app.buttons["history.undoLatestPitch"].waitForExistence(timeout: 3))
 
         app.navigationBars["Play History"].buttons.firstMatch.tap()
         XCTAssertTrue(count.waitForExistence(timeout: 3))
-        XCTAssertEqual(count.label, "1 – 0")
-        XCTAssertTrue(app.staticTexts["Pitching · 1 pitches · Opp batter 1"].exists)
+        XCTAssertEqual(count.label, "3 – 0")
+        XCTAssertTrue(app.staticTexts["Pitching · 3 pitches · Opp batter 1"].exists)
         XCTAssertTrue(app.buttons["game.undoLatestPitch"].isHittable)
+    }
+
+    func testUndoThirdOutStrikeoutRestoresDefensiveHalfInning() {
+        let app = launchApp(atAccessibilityTextSize: true)
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Strikeout Undo Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        XCTAssertTrue(app.staticTexts["offense.currentBatter"].waitForExistence(timeout: 3))
+        let undo = app.buttons["game.undoLatestPitch"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 3))
+        undo.tap()
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Top of inning 1, opponent batting slot 3, sequence 9: Called Strike")
+        ).firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Undo Called Strike"].waitForExistence(timeout: 3))
+        app.buttons["Undo Called Strike"].tap()
+
+        let restoredCount = app.staticTexts["game.count"]
+        XCTAssertTrue(restoredCount.waitForExistence(timeout: 3))
+        XCTAssertEqual(restoredCount.label, "0 – 2")
+        XCTAssertTrue(app.staticTexts["Pitching · 8 pitches · Opp batter 3"].exists)
+
+        app.navigationBars["UI Strikeout Undo Opponent"].buttons.firstMatch.tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertTrue(app.staticTexts["Pitching · 8 pitches · Opp batter 3"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.staticTexts["game.count"].label, "0 – 2")
     }
 
     func testAccessibilityRunnerConfirmationStartsWithDestinationAndRBIControls() {
