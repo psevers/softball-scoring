@@ -39,8 +39,18 @@ Terminal transitions:
 
 ## Corrupt history
 
-Replay finds invalid event → display warning → block new scoring → preserve history for correction/recovery.
+Replay finds invalid event → display warning → block new scoring → show an explicit problem entry in Play History → preserve history for correction/recovery.
 
-## Next flow
+## Play History — Slice 6
 
-Slice 4 adds Ball In Play → choose outcome → confirm runners → derive runs/outs/bases.
+```text
+Live Game → History
+  ↓
+fresh one-game authoritative fetch
+  ↓
+replay + batting projection + event trace
+  ↓
+group by half-inning and logical plate appearance
+  ↓
+expand component pitches/records → Back → unchanged Live Game
+```

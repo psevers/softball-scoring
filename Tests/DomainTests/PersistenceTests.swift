@@ -973,6 +973,71 @@ extension PersistenceTests {
         #expect(records.isEmpty)
     }
 
+    @Test func liveGameSnapshotLoadsOneGameFromFreshAuthoritativeRecords() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let otherGame = makeGame()
+        context.insert(game)
+        context.insert(otherGame)
+
+        let strike = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 2,
+            body: .pitch(.init(
+                result: .calledStrike,
+                pitcherID: game.startingPitcherID!,
+                opponentBatterSlot: 1
+            ))
+        )
+        let ball = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 1,
+            body: .pitch(.init(
+                result: .ball,
+                pitcherID: game.startingPitcherID!,
+                opponentBatterSlot: 1
+            ))
+        )
+        let unrelated = try GameEventRecord(
+            gameID: otherGame.id,
+            sequenceNumber: 1,
+            body: .pitch(.init(
+                result: .ball,
+                pitcherID: otherGame.startingPitcherID!,
+                opponentBatterSlot: 1
+            ))
+        )
+        context.insert(strike)
+        context.insert(unrelated)
+        context.insert(ball)
+        try context.save()
+
+        let snapshot = try LiveGameSnapshotLoader.load(game: game, modelContext: context)
+
+        #expect(snapshot.records.map(\.id) == [ball.id, strike.id])
+        #expect(snapshot.replay.state.balls == 1)
+        #expect(snapshot.replay.state.strikes == 1)
+        #expect(snapshot.replay.state.pitchCount(for: game.startingPitcherID!).total == 2)
+        #expect(snapshot.battingLines.isEmpty)
+        #expect(snapshot.history.sections[0].entries[0].components.map(\.sequenceNumber) == [1, 2])
+    }
+
+    @Test func liveGameSessionSurfacesMismatchedGameInsteadOfKeepingStaleSnapshot() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let game = makeGame()
+        let otherGame = makeGame()
+        let session = LiveGameSession(gameID: game.id)
+
+        session.refresh(game: game, modelContext: container.mainContext)
+        #expect(session.snapshot != nil)
+
+        session.refresh(game: otherGame, modelContext: container.mainContext)
+
+        #expect(session.snapshot == nil)
+        #expect(session.loadError == "The live-game session does not match this game.")
+    }
+
     private func makeGame() -> Game {
         Game(
             seasonID: UUID(),

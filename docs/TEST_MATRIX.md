@@ -29,6 +29,17 @@
 - Ball In Play increments one pitch and enters pending-result state.
 - Another pitch while pending is rejected/ignored.
 
+## Read-only Play History
+
+- A fresh authoritative snapshot fetches exactly one game and supplies replay, batting projection, and history together.
+- Defensive and tracked-team offensive entries retain event-time batter identity and batting-order context.
+- SB/CS remains a separate offensive base-running entry without advancing the active plate appearance.
+- A Ball In Play pitch and result appear as one completed play with both component records available.
+- An unresolved Ball In Play pitch remains explicitly pending.
+- Unknown kinds, malformed payloads, and semantic rejections remain visible as problem entries.
+- Entries split into event-time top/bottom half-inning sections.
+- Accessibility XL UI coverage opens History from a deterministic live game, reads completed and pending plays, and returns to unchanged live state.
+
 ## Base occupancy matrix for Ball In Play
 
 Exercise outcome confirmation from all eight starting base states:

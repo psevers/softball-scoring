@@ -109,15 +109,22 @@ When a play creates the third out and runners touch home, `thirdOutRunsCounted` 
 SwiftData GameEventRecord[]
         ↓ ordered + validated
 GameEventReplay
-        ↓ typed DecodedGameEvent
+        ↓ accepted/rejected event trace with before/after state
 GameReducer.apply
         ↓
 GameState
-        ↓
-SwiftUI / later stat projectors
+        ↓ one authoritative game snapshot
+SwiftUI / batting projection / Play History
 ```
 
 Malformed history is surfaced rather than silently skipped; new writes are blocked while rejected records exist.
+Unknown kinds, malformed payloads, invalid sequence numbers, and semantic rejections retain
+their event-time replay position in the trace so Play History can show explicit problem entries.
+
+`LiveGameSnapshotLoader` performs one fresh fetch scoped to a single game and produces the
+ordered records, replay result, accepted-event batting projection, and read-only Play History.
+`LiveGameSession` owns that snapshot for the live scoring and history screens; successful writes
+refresh it through the same loader rather than rebuilding projections independently in each view.
 
 ## Derived game state
 
@@ -148,10 +155,10 @@ Derived state includes:
 
 No accumulated score/stat record is directly mutated by a scoring tap.
 
-## Future evolution
+## Feature evolution
 
 - Slice 5: tracked-team offensive PAs, pitch entry, SB/CS, and player attribution/stat projection inputs.
-- Slice 6: undo/edit/count correction through event history + replay.
+- Slice 6: read-only Play History is delivered; undo/edit/count correction remains on the same event-history boundary.
 - Slice 7: pitcher-change events and current-pitcher replay state.
 - MVP follow-up: non-PA runner events beyond SB/CS (WP/PB/manual advance/out).
 - Slice 8+: box-score and season-stat projectors consume the same event stream.
