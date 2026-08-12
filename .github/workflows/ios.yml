@@ -43,12 +43,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
       - name: Record fast lane duration
         if: always()
-        run: |
-          finished_at="$(date +%s)"
-          elapsed_seconds="$((finished_at - ${{ steps.lane-timing.outputs.started_at }}))"
-          {
-            echo "### PR Fast Verification"
-            echo
-            echo "- Status: ${{ job.status }}"
-            echo "- Elapsed duration: ${elapsed_seconds} seconds"
-          } >> "$GITHUB_STEP_SUMMARY"
+        uses: ./.github/actions/report-ci-duration
+        with:
+          lane-name: PR Fast Verification
+          started-at: ${{ steps.lane-timing.outputs.started_at }}
+          status: ${{ job.status }}

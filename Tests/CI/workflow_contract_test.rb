@@ -6,6 +6,7 @@ class WorkflowContractTest < Minitest::Test
   FAST_WORKFLOW = File.join(ROOT, ".github/workflows/ios.yml")
   EXHAUSTIVE_WORKFLOW = File.join(ROOT, ".github/workflows/ios-exhaustive.yml")
   PREPARE_IOS_ACTION = File.join(ROOT, ".github/actions/prepare-ios/action.yml")
+  REPORT_DURATION_ACTION = File.join(ROOT, ".github/actions/report-ci-duration/action.yml")
   RECOVERY_SMOKE = "SoftballScoringUITests/ScrollReachabilityUITests/testUndoLatestPitchConfirmsCancelsAndRestoresLiveStateFromHistory"
 
   def test_pull_requests_run_the_stable_fast_verification_contract
@@ -62,7 +63,8 @@ class WorkflowContractTest < Minitest::Test
 
   def lane_commands(job)
     prepare_ios = load_workflow(PREPARE_IOS_ACTION).fetch("runs")
-    [commands_for(job), commands_for(prepare_ios)].join("\n")
+    report_duration = load_workflow(REPORT_DURATION_ACTION).fetch("runs")
+    [commands_for(job), commands_for(prepare_ios), commands_for(report_duration)].join("\n")
   end
 
   def assert_fresh_serial_simulator(job)
@@ -77,15 +79,23 @@ class WorkflowContractTest < Minitest::Test
 
   def assert_failures_surface(job)
     prepare_steps = load_workflow(PREPARE_IOS_ACTION).fetch("runs").fetch("steps")
+    report_steps = load_workflow(REPORT_DURATION_ACTION).fetch("runs").fetch("steps")
 
-    (job.fetch("steps") + prepare_steps).each do |step|
+    (job.fetch("steps") + prepare_steps + report_steps).each do |step|
       refute step["continue-on-error"], "#{step.fetch("name", step["uses"])} must not tolerate failure"
       refute_match(/\|\|\s*true/, step.fetch("run", ""))
     end
   end
 
   def assert_duration_is_recorded(job)
-    commands = commands_for(job)
+    duration_step = job.fetch("steps").find do |step|
+      step["uses"] == "./.github/actions/report-ci-duration"
+    end
+
+    refute_nil duration_step
+    assert_equal "always()", duration_step.fetch("if")
+    assert_equal job.fetch("name"), duration_step.fetch("with").fetch("lane-name")
+    commands = lane_commands(job)
 
     assert_includes commands, "$GITHUB_STEP_SUMMARY"
     assert_includes commands, "Elapsed duration"

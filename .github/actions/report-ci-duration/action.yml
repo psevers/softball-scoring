@@ -1,0 +1,28 @@
+name: Report CI duration
+description: Append a lane's status and elapsed duration to its job summary
+
+inputs:
+  lane-name:
+    description: Stable display name for the CI lane
+    required: true
+  started-at:
+    description: Unix timestamp captured when the lane started
+    required: true
+  status:
+    description: Final GitHub Actions job status
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Record lane duration
+      shell: bash
+      run: |
+        finished_at="$(date +%s)"
+        elapsed_seconds="$((finished_at - ${{ inputs.started-at }}))"
+        {
+          echo "### ${{ inputs.lane-name }}"
+          echo
+          echo "- Status: ${{ inputs.status }}"
+          echo "- Elapsed duration: ${elapsed_seconds} seconds"
+        } >> "$GITHUB_STEP_SUMMARY"
