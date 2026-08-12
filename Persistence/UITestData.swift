@@ -138,24 +138,47 @@ enum UITestData {
                 gameID: undoGame.id
             ))
         }
-        context.insert(try GameEventRecord(
-            gameID: undoGame.id,
-            sequenceNumber: 1,
-            body: .pitch(.init(
-                result: .ball,
-                pitcherID: activePlayers[0].id,
-                opponentBatterSlot: 1
+        for sequence in 1...4 {
+            context.insert(try GameEventRecord(
+                gameID: undoGame.id,
+                sequenceNumber: sequence,
+                body: .pitch(.init(
+                    result: .ball,
+                    pitcherID: activePlayers[0].id,
+                    opponentBatterSlot: 1
+                ))
             ))
-        ))
-        context.insert(try GameEventRecord(
-            gameID: undoGame.id,
-            sequenceNumber: 2,
-            body: .pitch(.init(
-                result: .calledStrike,
-                pitcherID: activePlayers[0].id,
-                opponentBatterSlot: 1
+        }
+
+        let strikeoutUndoGame = Game(
+            seasonID: season.id,
+            opponentName: "UI Strikeout Undo Opponent",
+            gameDate: Date(timeIntervalSince1970: 1_786_260_400),
+            homeAway: .home,
+            status: .inProgress,
+            startingPitcherID: activePlayers[0].id,
+            startedAt: Date(timeIntervalSince1970: 1_786_260_400)
+        )
+        context.insert(strikeoutUndoGame)
+        for (index, player) in activePlayers.enumerated() {
+            context.insert(LineupEntry(
+                playerID: player.id,
+                battingOrder: index + 1,
+                startingPosition: positions[index],
+                gameID: strikeoutUndoGame.id
             ))
-        ))
+        }
+        for sequence in 1...9 {
+            context.insert(try GameEventRecord(
+                gameID: strikeoutUndoGame.id,
+                sequenceNumber: sequence,
+                body: .pitch(.init(
+                    result: .calledStrike,
+                    pitcherID: activePlayers[0].id,
+                    opponentBatterSlot: ((sequence - 1) / 3) + 1
+                ))
+            ))
+        }
 
         let summaryGame = Game(
             seasonID: season.id,

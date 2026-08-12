@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-struct UndoLatestCountPitchCandidate: Identifiable {
+struct UndoLatestPitchCandidate: Identifiable {
     let id: UUID
     let gameID: UUID
     let sequenceNumber: Int
@@ -9,6 +9,7 @@ struct UndoLatestCountPitchCandidate: Identifiable {
     let half: InningHalf
     let opponentBatterSlot: Int
     let result: PitchResult
+    let completedPlateAppearance: Bool
 
     fileprivate let expectedTimeline: [GameEventRecordRevision]
 
@@ -18,7 +19,11 @@ struct UndoLatestCountPitchCandidate: Identifiable {
     }
 
     var confirmationDetail: String {
-        "Remove \(confirmationMessage) The count and pitcher totals will be rebuilt from Play History."
+        let completedPlateAppearanceDetail = completedPlateAppearance
+            ? " This pitch completed the plate appearance for opponent batting slot \(opponentBatterSlot)."
+            : ""
+        return "Remove \(confirmationMessage)\(completedPlateAppearanceDetail) "
+            + "The game state and pitcher totals will be rebuilt from the remaining event history."
     }
 }
 
@@ -34,7 +39,7 @@ enum GameEventCorrectionError: LocalizedError {
         case .gameMismatch:
             "This undo action belongs to a different game."
         case .noUndoAvailable:
-            "The latest scoring action is not a count pitch that can be undone."
+            "The latest scoring action is not a defensive pitch that can be undone."
         case .invalidTimeline:
             "The remaining game history could not be replayed safely."
         case .latestActionChanged:
@@ -67,10 +72,10 @@ private struct GameEventRecordRevision: Equatable {
 enum GameEventCorrection {
     typealias Save = (ModelContext) throws -> Void
 
-    static func prepareUndoLatestCountPitch(
+    static func prepareUndoLatestPitch(
         game: Game,
         modelContext: ModelContext
-    ) throws -> UndoLatestCountPitchCandidate {
+    ) throws -> UndoLatestPitchCandidate {
         let correctionContext = freshContext(from: modelContext)
         let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
         let snapshot = try validatedSnapshot(game: game, records: records)
@@ -79,13 +84,13 @@ enum GameEventCorrection {
               latestEntry.recordID == latestRecord.id,
               latestEntry.rejection == nil,
               case .pitch(let pitch) = latestEntry.body,
-              isNonTerminalCountPitch(pitch.result, stateBefore: latestEntry.stateBefore) else {
+              isUndoEligiblePitch(pitch.result) else {
             throw GameEventCorrectionError.noUndoAvailable
         }
 
         _ = try validatedSnapshot(game: game, records: Array(records.dropLast()))
 
-        return UndoLatestCountPitchCandidate(
+        return UndoLatestPitchCandidate(
             id: latestRecord.id,
             gameID: game.id,
             sequenceNumber: latestRecord.sequenceNumber,
@@ -93,12 +98,16 @@ enum GameEventCorrection {
             half: latestEntry.stateBefore.half,
             opponentBatterSlot: pitch.opponentBatterSlot,
             result: pitch.result,
+            completedPlateAppearance: completesPlateAppearance(
+                pitch.result,
+                stateBefore: latestEntry.stateBefore
+            ),
             expectedTimeline: records.map(GameEventRecordRevision.init)
         )
     }
 
-    static func undoLatestCountPitch(
-        _ candidate: UndoLatestCountPitchCandidate,
+    static func undoLatestPitch(
+        _ candidate: UndoLatestPitchCandidate,
         game: Game,
         modelContext: ModelContext,
         save: Save = { try $0.save() }
@@ -163,19 +172,22 @@ enum GameEventCorrection {
         return snapshot
     }
 
-    private static func isNonTerminalCountPitch(
+    private static func isUndoEligiblePitch(_ result: PitchResult) -> Bool {
+        switch result {
+        case .ball, .calledStrike, .swingingStrike, .foul, .hitByPitch: true
+        case .ballInPlay: false
+        }
+    }
+
+    private static func completesPlateAppearance(
         _ result: PitchResult,
         stateBefore: GameState
     ) -> Bool {
         switch result {
-        case .ball:
-            stateBefore.balls < 3
-        case .calledStrike, .swingingStrike:
-            stateBefore.strikes < 2
-        case .foul:
-            true
-        case .ballInPlay, .hitByPitch:
-            false
+        case .ball: stateBefore.balls == 3
+        case .calledStrike, .swingingStrike: stateBefore.strikes == 2
+        case .hitByPitch: true
+        case .foul, .ballInPlay: false
         }
     }
 }

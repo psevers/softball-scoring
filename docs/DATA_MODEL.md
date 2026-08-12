@@ -66,7 +66,7 @@ Supported results in Slice 3:
 - Foul
 - HBP
 
-Slice 6 Undo currently accepts only non-terminal Ball, Called Strike, Swinging Strike, and Foul records. Terminal walks/strikeouts, HBP, Ball In Play, and completed plays remain unchanged by this narrow correction path.
+Slice 6 Undo accepts Ball, Called Strike, Swinging Strike, Foul, and HBP records, including ball four and strike three. Removing a terminal pitch reconstructs its entire plate-appearance consequence through replay. Ball In Play pitches and completed plays remain unchanged by this correction path.
 
 ## Derived—not persisted as competing truth
 

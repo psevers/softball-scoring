@@ -2,7 +2,7 @@
 
 ## Window
 
-Window 1 continuation — **Slice 5.5 scorebook visual alignment remains complete and approved. Slice 6 read-only Play History and latest defensive count-pitch Undo are implemented through ticket #19; publication remains separate.**
+Window 1 continuation — **Slice 5.5 scorebook visual alignment remains complete and approved. Slice 6 read-only Play History and latest eligible defensive-pitch Undo are implemented through ticket #28; publication remains separate.**
 
 ## Canonical repo
 
@@ -174,16 +174,19 @@ Keep ticket #10 local until explicitly authorized to push. Before merge, publish
 
 ## Current vertical slice
 
-**Slice 6 — Undo the latest defensive count pitch, ticket #19.**
+**Slice 6 — Undo the latest eligible defensive pitch, ticket #28.**
 
 The live game and Play History now share one fresh game-scoped snapshot containing replay,
 accepted-event batting projection, and a history trace. History groups event-time half-innings and
 plate appearances, pairs completed Ball In Play records, keeps pending plays visible, preserves
 component pitches, and exposes unreadable or rejected records as problem entries. Live Game and Play
-History now offer confirmed Undo when the latest action is a non-terminal defensive Ball, Called Strike,
-Swinging Strike, or Foul. The correction boundary freshly verifies the exact game timeline, previews the
-surviving replay/projection, atomically deletes with rollback, and refreshes the shared snapshot. Earlier-
-event edit/delete and pitch-count correction remain later Slice 6 work.
+History now offer confirmed Undo when the latest action is an eligible defensive Ball, Called Strike,
+Swinging Strike, Foul, or HBP. Ball four, strike three, and HBP confirmations identify the completed plate
+appearance; authoritative replay restores count, batter slot, runners, score, outs, half-inning, batting
+projection, and pitcher totals without reverse mutation. The correction boundary freshly verifies the exact
+game timeline, previews the surviving replay/projection, atomically deletes with rollback, and refreshes the
+shared snapshot. Ball In Play undo, earlier-event edit/delete, and pitch-count correction remain later Slice 6
+work.
 
 ## Do not redo
 

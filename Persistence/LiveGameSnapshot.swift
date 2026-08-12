@@ -65,7 +65,7 @@ final class LiveGameSession {
     let gameID: UUID
     private(set) var snapshot: LiveGameSnapshot?
     private(set) var loadError: String?
-    private(set) var undoCandidate: UndoLatestCountPitchCandidate?
+    private(set) var undoCandidate: UndoLatestPitchCandidate?
 
     init(gameID: UUID) {
         self.gameID = gameID
@@ -98,13 +98,13 @@ final class LiveGameSession {
         refresh(game: game, modelContext: modelContext)
     }
 
-    func undoLatestCountPitch(
-        _ candidate: UndoLatestCountPitchCandidate,
+    func undoLatestPitch(
+        _ candidate: UndoLatestPitchCandidate,
         game: Game,
         modelContext: ModelContext
     ) throws {
         guard game.id == gameID else { throw LiveGameSnapshotError.gameMismatch }
-        snapshot = try GameEventCorrection.undoLatestCountPitch(
+        snapshot = try GameEventCorrection.undoLatestPitch(
             candidate,
             game: game,
             modelContext: modelContext
@@ -116,9 +116,9 @@ final class LiveGameSession {
     private func availableUndoCandidate(
         game: Game,
         modelContext: ModelContext
-    ) throws -> UndoLatestCountPitchCandidate? {
+    ) throws -> UndoLatestPitchCandidate? {
         do {
-            return try GameEventCorrection.prepareUndoLatestCountPitch(
+            return try GameEventCorrection.prepareUndoLatestPitch(
                 game: game,
                 modelContext: modelContext
             )
