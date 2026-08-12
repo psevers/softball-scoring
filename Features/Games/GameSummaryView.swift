@@ -16,75 +16,133 @@ struct GameSummaryView: View {
     }
 
     var body: some View {
-        List {
-            Section {
-                VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-                    Text(game.homeAway == .home ? "vs \(game.opponentName)" : "@ \(game.opponentName)")
-                        .font(.title2.bold())
-                    Text(game.gameDate.formatted(date: .abbreviated, time: .shortened))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, AppTheme.Spacing.xs)
-            }
+        ZStack {
+            ScorebookRuledPaperBackground()
 
-            Section("Game") {
-                LabeledContent(
-                    "Status",
-                    value: game.status == .inProgress
-                        ? "In Progress"
-                        : game.status?.rawValue.capitalized ?? "Unreadable"
-                )
-                LabeledContent("Season", value: season?.name ?? "Unknown Season")
-                LabeledContent("Format", value: game.formatDescription)
-                if let startingPitcher {
-                    LabeledContent("Starting Pitcher", value: startingPitcher.displayName)
-                }
-            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+                    ScorebookPageHeader(
+                        title: game.homeAway == .home ? "vs \(game.opponentName)" : "@ \(game.opponentName)",
+                        subtitle: game.gameDate.formatted(date: .abbreviated, time: .shortened),
+                        systemImage: "book.closed"
+                    )
 
-            Section("Starting Lineup") {
-                ForEach(gameLineup) { entry in
-                    if let player = player(entry.playerID) {
-                        HStack {
-                            Text("\(entry.battingOrder)")
-                                .font(.headline.monospacedDigit())
-                                .frame(width: 28, alignment: .leading)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(player.displayName)
-                                if !player.jerseyNumber.isEmpty {
-                                    Text("#\(player.jerseyNumber)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                    ScorebookLedger {
+                        ScorebookPageSection("Game") {
+                            summaryRow("Status", value: statusDescription)
+                            summaryRow("Season", value: season?.name ?? "Unknown Season")
+                            summaryRow("Format", value: game.formatDescription, style: .tabular)
+                            if let startingPitcher {
+                                summaryRow(
+                                    "Starting Pitcher",
+                                    value: startingPitcher.displayName,
+                                    style: .playerName
+                                )
+                            }
+                        }
+
+                        ScorebookPageSection("Starting Lineup") {
+                            ForEach(gameLineup) { entry in
+                                if let player = player(entry.playerID) {
+                                    ScorebookLedgerRow {
+                                        HStack(spacing: AppTheme.Spacing.sm) {
+                                            Text("\(entry.battingOrder)")
+                                                .font(AppTheme.Typography.tabularNumber.weight(.semibold))
+                                                .frame(width: 28, alignment: .leading)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(player.displayName)
+                                                    .font(AppTheme.Typography.playerName)
+                                                    .foregroundStyle(AppTheme.graphite)
+                                                if !player.jerseyNumber.isEmpty {
+                                                    Text("#\(player.jerseyNumber)")
+                                                        .font(AppTheme.Typography.tabularNumber)
+                                                        .foregroundStyle(AppTheme.graphite.opacity(0.68))
+                                                }
+                                            }
+                                            Spacer()
+                                            Text(entry.startingPosition?.rawValue ?? "—")
+                                                .font(AppTheme.Typography.tabularNumber.weight(.semibold))
+                                                .foregroundStyle(AppTheme.graphite.opacity(0.72))
+                                        }
+                                    }
                                 }
                             }
-                            Spacer()
-                            Text(entry.startingPosition?.rawValue ?? "—")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                        }
+
+                        ScorebookPageSection("Scorebook") {
+                            ScorebookLedgerRow {
+                                Label(
+                                    game.status == .final ? "Game Complete" : "Saved for Live Scoring",
+                                    systemImage: "checkmark.circle.fill"
+                                )
+                                .font(AppTheme.Typography.body.weight(.semibold))
+                                .foregroundStyle(AppTheme.positive)
+                            }
                         }
                     }
                 }
+                .padding(AppTheme.Spacing.md)
             }
-
-            Section {
-                VStack(spacing: AppTheme.Spacing.sm) {
-                    Label("Ready for Live Scoring", systemImage: "checkmark.circle.fill")
-                        .font(.headline)
-                        .foregroundStyle(AppTheme.accent)
-                    Text("Pitch-by-pitch scoring lands in Vertical Slice 3. This persisted game is the state that screen will resume into.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, AppTheme.Spacing.md)
-            }
+            .overlay(alignment: .leading) { ScorebookMarginRule() }
         }
-        .scorebookFormBackground()
         .navigationTitle(game.opponentName)
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("game.summary.page")
+    }
+
+    private var statusDescription: String {
+        game.status == .inProgress
+            ? "In Progress"
+            : game.status?.rawValue.capitalized ?? "Unreadable"
+    }
+
+    private func summaryRow(
+        _ label: String,
+        value: String,
+        style: SummaryValueStyle = .body
+    ) -> some View {
+        ScorebookLedgerRow {
+            LabeledContent {
+                Text(value)
+                    .font(style.font)
+                    .foregroundStyle(AppTheme.graphite)
+            } label: {
+                ScorebookLabel(label)
+            }
+        }
     }
 
     private func player(_ id: UUID) -> Player? {
         players.first { $0.id == id }
     }
+}
+
+private enum SummaryValueStyle {
+    case body
+    case playerName
+    case tabular
+
+    var font: Font {
+        switch self {
+        case .body:
+            AppTheme.Typography.body
+        case .playerName:
+            AppTheme.Typography.playerName
+        case .tabular:
+            AppTheme.Typography.tabularNumber
+        }
+    }
+}
+
+#Preview("Game summary") {
+    let fixture = PreviewData.administrativeSurfaces
+    NavigationStack { GameSummaryView(game: fixture.game) }
+        .modelContainer(fixture.container)
+}
+
+#Preview("Game summary · Accessibility XL") {
+    let fixture = PreviewData.administrativeSurfaces
+    NavigationStack { GameSummaryView(game: fixture.game) }
+        .modelContainer(fixture.container)
+        .environment(\.dynamicTypeSize, .accessibility2)
 }

@@ -23,11 +23,14 @@ struct TeamEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Team") {
+                Section {
                     TextField("Team name", text: $name)
                     TextField("Abbreviation", text: $abbreviation)
                         .textInputAutocapitalization(.characters)
+                } header: {
+                    ScorebookLabel("Team")
                 }
+                .scorebookAdministrativeRow()
             }
             .scorebookFormBackground()
             .navigationTitle(team == nil ? "Set Up Team" : "Edit Team")
@@ -57,4 +60,15 @@ struct TeamEditorView: View {
         try? modelContext.save()
         dismiss()
     }
+}
+
+#Preview("Team editor") {
+    TeamEditorView(team: nil)
+        .modelContainer(PreviewData.administrativeSurfaces.container)
+}
+
+#Preview("Team editor · Accessibility XL") {
+    TeamEditorView(team: nil)
+        .modelContainer(PreviewData.administrativeSurfaces.container)
+        .environment(\.dynamicTypeSize, .accessibility2)
 }

@@ -450,4 +450,9 @@ extension View {
         scrollContentBackground(.hidden)
             .background { ScorebookRuledPaperBackground() }
     }
+
+    func scorebookAdministrativeRow() -> some View {
+        listRowBackground(AppTheme.paper.opacity(0.94))
+            .listRowSeparatorTint(AppTheme.rule)
+    }
 }

@@ -2,6 +2,89 @@ import XCTest
 
 @MainActor
 final class ScrollReachabilityUITests: XCTestCase {
+    func testStandardAdministrativeScorebookSurfaces() {
+        let app = launchApp()
+
+        app.tabBars.buttons["Team"].tap()
+        XCTAssertTrue(app.staticTexts["Player 01"].waitForExistence(timeout: 3))
+        captureScreenshot(named: "ticket9-standard-team", from: app)
+        let firstPlayer = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Player 01")
+        ).firstMatch
+        XCTAssertTrue(firstPlayer.waitForExistence(timeout: 3))
+        firstPlayer.tap()
+        XCTAssertTrue(app.textFields["First name"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.navigationBars["Edit Player"].exists)
+        captureScreenshot(named: "ticket9-standard-player-editor", from: app)
+        app.buttons["Cancel"].tap()
+
+        app.buttons["Seasons"].tap()
+        XCTAssertTrue(app.staticTexts["UI Test Season"].waitForExistence(timeout: 3))
+        captureScreenshot(named: "ticket9-standard-season", from: app)
+
+        app.tabBars.buttons["Games"].tap()
+        let summaryGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Summary Opponent")
+        ).firstMatch
+        XCTAssertTrue(summaryGame.waitForExistence(timeout: 3))
+        summaryGame.tap()
+        XCTAssertTrue(app.otherElements["game.summary.page"].waitForExistence(timeout: 3))
+        captureScreenshot(named: "ticket9-standard-summary", from: app)
+
+        app.tabBars.buttons["Stats"].tap()
+        XCTAssertTrue(app.otherElements["stats.empty.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["No Stats Yet"].exists)
+        captureScreenshot(named: "ticket9-standard-stats", from: app)
+    }
+
+    func testAccessibilityAdministrativeScorebookSurfacesRemainReachable() {
+        let app = launchApp(atAccessibilityTextSize: true)
+
+        app.tabBars.buttons["Team"].tap()
+        let lowerRosterPlayer = app.staticTexts["Player 08"]
+        XCTAssertTrue(swipeUntilHittable(
+            lowerRosterPlayer,
+            in: app,
+            listIdentifier: "team.roster.list"
+        ))
+        captureScreenshot(named: "ticket9-ax-team", from: app)
+        let lowerRosterPlayerButton = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Player 08")
+        ).firstMatch
+        XCTAssertTrue(lowerRosterPlayerButton.isHittable)
+        lowerRosterPlayerButton.tap()
+        XCTAssertTrue(app.textFields["First name"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.navigationBars["Edit Player"].exists)
+        captureScreenshot(named: "ticket9-ax-player-editor", from: app)
+        app.buttons["Cancel"].tap()
+
+        let roster = app.collectionViews["team.roster.list"]
+        let seasons = app.buttons["Seasons"]
+        let deadline = Date().addingTimeInterval(15)
+        while !seasons.isHittable && Date() < deadline {
+            dragDown(in: roster)
+        }
+        XCTAssertTrue(seasons.isHittable)
+        seasons.tap()
+        XCTAssertTrue(app.staticTexts["UI Test Season"].waitForExistence(timeout: 3))
+        captureScreenshot(named: "ticket9-ax-season", from: app)
+
+        app.tabBars.buttons["Games"].tap()
+        let summaryGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Summary Opponent")
+        ).firstMatch
+        XCTAssertTrue(summaryGame.waitForExistence(timeout: 3))
+        summaryGame.tap()
+        XCTAssertTrue(app.otherElements["game.summary.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Player 01"].waitForExistence(timeout: 3))
+        captureScreenshot(named: "ticket9-ax-summary", from: app)
+
+        app.tabBars.buttons["Stats"].tap()
+        XCTAssertTrue(app.otherElements["stats.empty.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["No Stats Yet"].isHittable)
+        captureScreenshot(named: "ticket9-ax-stats", from: app)
+    }
+
     func testStandardLiveGameStartsWithCompactAtBatAndPitchControls() {
         let app = launchApp()
         app.tabBars.buttons["Games"].tap()

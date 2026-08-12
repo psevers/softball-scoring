@@ -52,6 +52,24 @@ struct DesignSystemTests {
         #expect(gatedReplay.rejectedRecordIDs.count == 1)
     }
 
+    @Test @MainActor func administrativePreviewFixtureCoversRosterSeasonAndSummary() throws {
+        let fixture = PreviewData.administrativeSurfaces
+        let context = fixture.container.mainContext
+
+        let teams = try context.fetch(FetchDescriptor<Team>())
+        let seasons = try context.fetch(FetchDescriptor<Season>())
+        let players = try context.fetch(FetchDescriptor<Player>())
+        let entries = try context.fetch(FetchDescriptor<LineupEntry>())
+
+        #expect(teams.map(\.displayName) == ["Falcons"])
+        #expect(seasons.count == 2)
+        #expect(seasons.filter(\.isActive).map(\.name) == ["2026 Summer"])
+        #expect(players.count == 15)
+        #expect(players.filter(\.isActive).count == 14)
+        #expect(fixture.game.status == .final)
+        #expect(entries.filter { $0.gameID == fixture.game.id }.count == 14)
+    }
+
     @MainActor
     private func records(for fixture: PreviewData.LiveGameFixture) throws -> [GameEventRecord] {
         try fixture.container.mainContext.fetch(FetchDescriptor<GameEventRecord>())

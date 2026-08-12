@@ -20,20 +20,24 @@ struct SeasonEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Season") {
+                Section {
                     TextField("Name, e.g. 2026 Summer", text: $name)
                     DatePicker("Starts", selection: $startDate, displayedComponents: .date)
                     Toggle("Set end date", isOn: $hasEndDate.animation())
                     if hasEndDate {
                         DatePicker("Ends", selection: $endDate, in: startDate..., displayedComponents: .date)
                     }
+                } header: {
+                    ScorebookLabel("Season")
                 }
+                .scorebookAdministrativeRow()
 
                 Section {
                     Toggle("Make active season", isOn: $makeActive)
                 } footer: {
                     Text("New games will default to the active season. Only one season can be active at a time.")
                 }
+                .scorebookAdministrativeRow()
             }
             .scorebookFormBackground()
             .navigationTitle("New Season")
@@ -65,4 +69,15 @@ struct SeasonEditorView: View {
         try? modelContext.save()
         dismiss()
     }
+}
+
+#Preview("Season editor") {
+    SeasonEditorView(existingSeasons: [])
+        .modelContainer(PreviewData.administrativeSurfaces.container)
+}
+
+#Preview("Season editor · Accessibility XL") {
+    SeasonEditorView(existingSeasons: [])
+        .modelContainer(PreviewData.administrativeSurfaces.container)
+        .environment(\.dynamicTypeSize, .accessibility2)
 }

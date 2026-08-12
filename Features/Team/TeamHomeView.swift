@@ -8,8 +8,7 @@ struct TeamHomeView: View {
     @Query(sort: \Season.startDate, order: .reverse) private var seasons: [Season]
 
     @State private var selectedSection: TeamSection = .roster
-    @State private var showingPlayerEditor = false
-    @State private var editingPlayer: Player?
+    @State private var playerEditorPresentation: PlayerEditorPresentation?
     @State private var showingSeasonEditor = false
     @State private var showingTeamEditor = false
 
@@ -42,13 +41,13 @@ struct TeamHomeView: View {
         }
         .accessibilityIdentifier("team.roster.list")
         .scorebookFormBackground()
+        .listStyle(.plain)
         .navigationTitle("Team")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     if selectedSection == .roster {
-                        editingPlayer = nil
-                        showingPlayerEditor = true
+                        playerEditorPresentation = .add
                     } else {
                         showingSeasonEditor = true
                     }
@@ -58,8 +57,8 @@ struct TeamHomeView: View {
                 .accessibilityIdentifier("team.add")
             }
         }
-        .sheet(isPresented: $showingPlayerEditor) {
-            PlayerEditorView(player: editingPlayer)
+        .sheet(item: $playerEditorPresentation) { presentation in
+            PlayerEditorView(player: presentation.player)
         }
         .sheet(isPresented: $showingSeasonEditor) {
             SeasonEditorView(existingSeasons: seasons)
@@ -76,23 +75,23 @@ struct TeamHomeView: View {
                 showingTeamEditor = true
             } label: {
                 HStack(spacing: AppTheme.Spacing.md) {
-                    Image(systemName: "shield.fill")
-                        .font(.title2)
+                    Image(systemName: "shield")
+                        .font(.title2.weight(.medium))
+                        .foregroundStyle(AppTheme.graphite.opacity(0.78))
                         .frame(width: AppTheme.TouchTarget.minimum, height: AppTheme.TouchTarget.minimum)
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
                     VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
                         Text(team?.displayName ?? "Set Up Your Team")
-                            .font(.headline)
-                            .foregroundStyle(.primary)
+                            .font(AppTheme.Typography.teamName)
+                            .foregroundStyle(AppTheme.graphite)
                         if let activeSeason {
                             Text("Active season: \(activeSeason.name)")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .font(AppTheme.Typography.body)
+                                .foregroundStyle(AppTheme.graphite.opacity(0.72))
                         } else {
                             Text("Add a season before your first game")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .font(AppTheme.Typography.body)
+                                .foregroundStyle(AppTheme.graphite.opacity(0.72))
                         }
                     }
                     Spacer()
@@ -103,32 +102,41 @@ struct TeamHomeView: View {
             }
             .buttonStyle(.plain)
         }
+        .scorebookAdministrativeRow()
     }
 
     @ViewBuilder
     private var rosterContent: some View {
         if players.isEmpty {
             Section {
-                EmptyStateView(
+                ScorebookEmptyLedger(
                     systemImage: "person.badge.plus",
                     title: "Build Your Roster",
                     message: "Add players now so game setup is fast at the field."
                 )
                 .frame(maxWidth: .infinity)
+                .listRowInsets(EdgeInsets())
             }
+            .scorebookAdministrativeRow()
         } else {
-            Section("Active Roster · \(activePlayers.count)") {
+            Section {
                 ForEach(activePlayers) { player in
                     playerRow(player)
                 }
+            } header: {
+                ScorebookLabel("Active Roster · \(activePlayers.count)")
             }
+            .scorebookAdministrativeRow()
 
             if !inactivePlayers.isEmpty {
-                Section("Inactive") {
+                Section {
                     ForEach(inactivePlayers) { player in
                         playerRow(player)
                     }
+                } header: {
+                    ScorebookLabel("Inactive")
                 }
+                .scorebookAdministrativeRow()
             }
         }
     }
@@ -137,15 +145,17 @@ struct TeamHomeView: View {
     private var seasonsContent: some View {
         if seasons.isEmpty {
             Section {
-                EmptyStateView(
+                ScorebookEmptyLedger(
                     systemImage: "calendar.badge.plus",
                     title: "Create a Season",
                     message: "Games and season statistics will be grouped under the season you choose."
                 )
                 .frame(maxWidth: .infinity)
+                .listRowInsets(EdgeInsets())
             }
+            .scorebookAdministrativeRow()
         } else {
-            Section("Seasons") {
+            Section {
                 ForEach(seasons) { season in
                     Button {
                         activate(season)
@@ -153,10 +163,11 @@ struct TeamHomeView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
                                 Text(season.name)
-                                    .foregroundStyle(.primary)
+                                    .font(AppTheme.Typography.playerName)
+                                    .foregroundStyle(AppTheme.graphite)
                                 Text(season.dateRangeDescription)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(AppTheme.Typography.tabularNumber)
+                                    .foregroundStyle(AppTheme.graphite.opacity(0.68))
                             }
                             Spacer()
                             if season.isActive {
@@ -169,14 +180,16 @@ struct TeamHomeView: View {
                     }
                     .buttonStyle(.plain)
                 }
+            } header: {
+                ScorebookLabel("Seasons")
             }
+            .scorebookAdministrativeRow()
         }
     }
 
     private func playerRow(_ player: Player) -> some View {
         Button {
-            editingPlayer = player
-            showingPlayerEditor = true
+            playerEditorPresentation = .edit(player)
         } label: {
             HStack(spacing: AppTheme.Spacing.sm) {
                 Text(player.jerseyNumber.isEmpty ? "—" : "#\(player.jerseyNumber)")
@@ -186,7 +199,8 @@ struct TeamHomeView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(player.displayName)
-                        .foregroundStyle(.primary)
+                        .font(AppTheme.Typography.playerName)
+                        .foregroundStyle(AppTheme.graphite)
                     HStack(spacing: AppTheme.Spacing.sm) {
                         if let position = player.defaultPosition {
                             Text(position.rawValue)
@@ -211,17 +225,48 @@ struct TeamHomeView: View {
         }
         .buttonStyle(.plain)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(player.isActive ? "Deactivate" : "Activate") {
-                player.isActive.toggle()
-                try? modelContext.save()
+            if player.isActive {
+                Button("Deactivate", role: .destructive) {
+                    player.isActive = false
+                    try? modelContext.save()
+                }
+                .tint(AppTheme.destructive)
+            } else {
+                Button("Activate") {
+                    player.isActive = true
+                    try? modelContext.save()
+                }
+                .tint(AppTheme.accent)
             }
-            .tint(player.isActive ? .orange : AppTheme.accent)
         }
     }
 
     private func activate(_ season: Season) {
         SeasonSelection.activate(season, among: seasons)
         try? modelContext.save()
+    }
+}
+
+private enum PlayerEditorPresentation: Identifiable {
+    case add
+    case edit(Player)
+
+    var id: String {
+        switch self {
+        case .add:
+            "add"
+        case let .edit(player):
+            player.id.uuidString
+        }
+    }
+
+    var player: Player? {
+        switch self {
+        case .add:
+            nil
+        case let .edit(player):
+            player
+        }
     }
 }
 
@@ -233,5 +278,11 @@ private enum TeamSection: String, CaseIterable, Identifiable {
 
 #Preview {
     NavigationStack { TeamHomeView() }
-        .modelContainer(PreviewData.container)
+        .modelContainer(PreviewData.administrativeSurfaces.container)
+}
+
+#Preview("Team · Accessibility XL") {
+    NavigationStack { TeamHomeView() }
+        .modelContainer(PreviewData.administrativeSurfaces.container)
+        .environment(\.dynamicTypeSize, .accessibility2)
 }
