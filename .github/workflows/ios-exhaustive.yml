@@ -18,77 +18,15 @@ jobs:
         id: lane-timing
         run: echo "started_at=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
-      - name: Install XcodeGen
-        run: brew install xcodegen
-      - name: Generate Xcode project
-        run: xcodegen generate
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
-      - name: Create iOS Simulator
-        id: simulator
-        run: |
-          runtime_id="$(
-            xcrun simctl list runtimes available --json | /usr/bin/python3 -c '
-          import json
-          import sys
-
-          runtimes = [
-              runtime
-              for runtime in json.load(sys.stdin)["runtimes"]
-              if runtime.get("isAvailable") and "iOS" in runtime["identifier"]
-          ]
-          if runtimes:
-              latest = max(runtimes, key=lambda runtime: tuple(map(int, runtime["version"].split("."))))
-              print(latest["identifier"])
-          '
-          )"
-          device_type_id="$(
-            xcrun simctl list devicetypes --json | /usr/bin/python3 -c '
-          import json
-          import sys
-
-          device_types = [
-              device_type
-              for device_type in json.load(sys.stdin)["devicetypes"]
-              if device_type["name"].startswith("iPhone")
-          ]
-          preferred = next(
-              (device_type for device_type in device_types if device_type["name"] == "iPhone 17"),
-              device_types[0] if device_types else None,
-          )
-          if preferred:
-              print(preferred["identifier"])
-          '
-          )"
-          if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
-            echo "No compatible iOS runtime or iPhone device type was found." >&2
-            exit 1
-          fi
-          simulator_id="$(
-            xcrun simctl create \
-              'Softball Scoring CI' \
-              "$device_type_id" \
-              "$runtime_id"
-          )"
-          echo "id=$simulator_id" >> "$GITHUB_OUTPUT"
-      - name: Boot iOS Simulator
-        run: |
-          xcrun simctl boot '${{ steps.simulator.outputs.id }}'
-          xcrun simctl bootstatus '${{ steps.simulator.outputs.id }}' -b
-      - name: Build for testing
-        run: |
-          NSUnbufferedIO=YES xcodebuild build-for-testing \
-            -project SoftballScoring.xcodeproj \
-            -scheme SoftballScoring \
-            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
-            -derivedDataPath "$RUNNER_TEMP/SoftballScoringDerivedData" \
-            CODE_SIGNING_ALLOWED=NO
+      - name: Prepare iOS test environment
+        id: ios
+        uses: ./.github/actions/prepare-ios
       - name: Run complete UI workflow matrix
         run: |
           NSUnbufferedIO=YES xcodebuild test-without-building \
             -project SoftballScoring.xcodeproj \
             -scheme SoftballScoring \
-            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
+            -destination 'platform=iOS Simulator,id=${{ steps.ios.outputs.simulator-id }}' \
             -derivedDataPath "$RUNNER_TEMP/SoftballScoringDerivedData" \
             -parallel-testing-enabled NO \
             -only-testing:SoftballScoringUITests \

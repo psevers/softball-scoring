@@ -5,13 +5,14 @@ class WorkflowContractTest < Minitest::Test
   ROOT = File.expand_path("../..", __dir__)
   FAST_WORKFLOW = File.join(ROOT, ".github/workflows/ios.yml")
   EXHAUSTIVE_WORKFLOW = File.join(ROOT, ".github/workflows/ios-exhaustive.yml")
+  PREPARE_IOS_ACTION = File.join(ROOT, ".github/actions/prepare-ios/action.yml")
   RECOVERY_SMOKE = "SoftballScoringUITests/ScrollReachabilityUITests/testUndoLatestPitchConfirmsCancelsAndRestoresLiveStateFromHistory"
 
   def test_pull_requests_run_the_stable_fast_verification_contract
     workflow = load_workflow(FAST_WORKFLOW)
     triggers = workflow_triggers(workflow)
     job = workflow.fetch("jobs").fetch("pr-fast-verification")
-    commands = commands_for(job)
+    commands = lane_commands(job)
 
     assert_equal "iOS PR Fast Verification", workflow.fetch("name")
     assert_equal ["pull_request"], triggers.keys.map(&:to_s).sort
@@ -32,7 +33,7 @@ class WorkflowContractTest < Minitest::Test
     workflow = load_workflow(EXHAUSTIVE_WORKFLOW)
     triggers = workflow_triggers(workflow)
     job = workflow.fetch("jobs").fetch("exhaustive-ui-evidence")
-    commands = commands_for(job)
+    commands = lane_commands(job)
 
     assert_equal "iOS Exhaustive UI Evidence", workflow.fetch("name")
     assert_equal ["push", "workflow_dispatch"], triggers.keys.map(&:to_s).sort
@@ -59,8 +60,15 @@ class WorkflowContractTest < Minitest::Test
     job.fetch("steps").map { |step| step["run"] }.compact.join("\n")
   end
 
+  def lane_commands(job)
+    prepare_ios = load_workflow(PREPARE_IOS_ACTION).fetch("runs")
+    [commands_for(job), commands_for(prepare_ios)].join("\n")
+  end
+
   def assert_fresh_serial_simulator(job)
-    commands = commands_for(job)
+    assert_includes job.fetch("steps").map { |step| step["uses"] }.compact,
+                    "./.github/actions/prepare-ios"
+    commands = lane_commands(job)
 
     assert_includes commands, "xcrun simctl create"
     assert_includes commands, "xcrun simctl bootstatus"
@@ -68,7 +76,9 @@ class WorkflowContractTest < Minitest::Test
   end
 
   def assert_failures_surface(job)
-    job.fetch("steps").each do |step|
+    prepare_steps = load_workflow(PREPARE_IOS_ACTION).fetch("runs").fetch("steps")
+
+    (job.fetch("steps") + prepare_steps).each do |step|
       refute step["continue-on-error"], "#{step.fetch("name", step["uses"])} must not tolerate failure"
       refute_match(/\|\|\s*true/, step.fetch("run", ""))
     end
