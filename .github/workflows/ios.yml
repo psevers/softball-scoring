@@ -44,6 +44,10 @@ jobs:
             exit 1
           fi
           echo "id=$simulator_id" >> "$GITHUB_OUTPUT"
+      - name: Boot iOS Simulator
+        run: |
+          xcrun simctl boot '${{ steps.simulator.outputs.id }}'
+          xcrun simctl bootstatus '${{ steps.simulator.outputs.id }}' -b
       - name: Build for testing
         run: |
           NSUnbufferedIO=YES xcodebuild build-for-testing \
