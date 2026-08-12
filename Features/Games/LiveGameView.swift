@@ -697,13 +697,14 @@ struct LiveGameView: View {
 
     private func recordPitch(_ result: PitchResult) {
         do {
-            try GameEventRecorder.recordPitch(
-                result: result,
-                game: game,
-                existingRecords: gameRecords,
-                modelContext: modelContext
-            )
-            session.refresh(game: game, modelContext: modelContext)
+            try session.performRecording(game: game, modelContext: modelContext) {
+                try GameEventRecorder.recordPitch(
+                    result: result,
+                    game: game,
+                    existingRecords: gameRecords,
+                    modelContext: modelContext
+                )
+            }
             feedbackTick += 1
         } catch {
             errorMessage = error.localizedDescription
@@ -712,13 +713,14 @@ struct LiveGameView: View {
 
     private func recordBallInPlay(_ play: BallInPlayEvent) {
         do {
-            try GameEventRecorder.recordBallInPlay(
-                play: play,
-                game: game,
-                existingRecords: gameRecords,
-                modelContext: modelContext
-            )
-            session.refresh(game: game, modelContext: modelContext)
+            try session.performRecording(game: game, modelContext: modelContext) {
+                try GameEventRecorder.recordBallInPlay(
+                    play: play,
+                    game: game,
+                    existingRecords: gameRecords,
+                    modelContext: modelContext
+                )
+            }
             selectedOutcome = nil
             feedbackTick += 1
         } catch {
@@ -745,17 +747,18 @@ struct LiveGameView: View {
         }
 
         do {
-            try GameEventRecorder.recordOffensivePlateAppearance(
-                expectedBatter: expectedBatter,
-                result: result,
-                movements: movementSuggestion.movements,
-                rbi: movementSuggestion.rbi,
-                countedRunSources: movementSuggestion.countedRunSources,
-                game: game,
-                existingRecords: gameRecords,
-                modelContext: modelContext
-            )
-            session.refresh(game: game, modelContext: modelContext)
+            try session.performRecording(game: game, modelContext: modelContext) {
+                try GameEventRecorder.recordOffensivePlateAppearance(
+                    expectedBatter: expectedBatter,
+                    result: result,
+                    movements: movementSuggestion.movements,
+                    rbi: movementSuggestion.rbi,
+                    countedRunSources: movementSuggestion.countedRunSources,
+                    game: game,
+                    existingRecords: gameRecords,
+                    modelContext: modelContext
+                )
+            }
             feedbackTick += 1
         } catch {
             errorMessage = error.localizedDescription
@@ -768,14 +771,15 @@ struct LiveGameView: View {
             return
         }
         do {
-            try GameEventRecorder.recordOffensivePitch(
-                expectedBatter: expectedBatter,
-                result: result,
-                game: game,
-                existingRecords: gameRecords,
-                modelContext: modelContext
-            )
-            session.refresh(game: game, modelContext: modelContext)
+            try session.performRecording(game: game, modelContext: modelContext) {
+                try GameEventRecorder.recordOffensivePitch(
+                    expectedBatter: expectedBatter,
+                    result: result,
+                    game: game,
+                    existingRecords: gameRecords,
+                    modelContext: modelContext
+                )
+            }
             feedbackTick += 1
         } catch {
             errorMessage = error.localizedDescription
@@ -791,15 +795,16 @@ struct LiveGameView: View {
             return
         }
         do {
-            try GameEventRecorder.recordOffensiveBaseRunning(
-                expectedRunnerID: expectedRunnerID,
-                source: source,
-                result: result,
-                game: game,
-                existingRecords: gameRecords,
-                modelContext: modelContext
-            )
-            session.refresh(game: game, modelContext: modelContext)
+            try session.performRecording(game: game, modelContext: modelContext) {
+                try GameEventRecorder.recordOffensiveBaseRunning(
+                    expectedRunnerID: expectedRunnerID,
+                    source: source,
+                    result: result,
+                    game: game,
+                    existingRecords: gameRecords,
+                    modelContext: modelContext
+                )
+            }
             feedbackTick += 1
         } catch {
             errorMessage = error.localizedDescription
@@ -812,18 +817,19 @@ struct LiveGameView: View {
             return
         }
         do {
-            try GameEventRecorder.recordOffensivePlateAppearance(
-                expectedBatter: expectedBatter,
-                result: draft.result,
-                movements: draft.movements,
-                rbi: draft.rbi,
-                countedRunSources: draft.countedRunSources,
-                thirdOutClassification: draft.thirdOutClassification,
-                game: game,
-                existingRecords: gameRecords,
-                modelContext: modelContext
-            )
-            session.refresh(game: game, modelContext: modelContext)
+            try session.performRecording(game: game, modelContext: modelContext) {
+                try GameEventRecorder.recordOffensivePlateAppearance(
+                    expectedBatter: expectedBatter,
+                    result: draft.result,
+                    movements: draft.movements,
+                    rbi: draft.rbi,
+                    countedRunSources: draft.countedRunSources,
+                    thirdOutClassification: draft.thirdOutClassification,
+                    game: game,
+                    existingRecords: gameRecords,
+                    modelContext: modelContext
+                )
+            }
             selectedOffensiveOutcome = nil
             feedbackTick += 1
         } catch {

@@ -11,11 +11,14 @@ struct LiveGameSnapshot {
 
 enum LiveGameSnapshotError: LocalizedError {
     case invalidGameSide
+    case gameMismatch
 
     var errorDescription: String? {
         switch self {
         case .invalidGameSide:
             "The saved home/away value is unreadable."
+        case .gameMismatch:
+            "The live-game session does not match this game."
         }
     }
 }
@@ -61,12 +64,26 @@ final class LiveGameSession {
     }
 
     func refresh(game: Game, modelContext: ModelContext) {
-        guard game.id == gameID else { return }
+        guard game.id == gameID else {
+            snapshot = nil
+            loadError = LiveGameSnapshotError.gameMismatch.localizedDescription
+            return
+        }
         do {
             snapshot = try LiveGameSnapshotLoader.load(game: game, modelContext: modelContext)
             loadError = nil
         } catch {
             loadError = error.localizedDescription
         }
+    }
+
+    func performRecording(
+        game: Game,
+        modelContext: ModelContext,
+        action: () throws -> Void
+    ) throws {
+        guard game.id == gameID else { throw LiveGameSnapshotError.gameMismatch }
+        try action()
+        refresh(game: game, modelContext: modelContext)
     }
 }

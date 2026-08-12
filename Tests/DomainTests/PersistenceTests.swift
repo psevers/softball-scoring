@@ -1023,6 +1023,21 @@ extension PersistenceTests {
         #expect(snapshot.history.sections[0].entries[0].components.map(\.sequenceNumber) == [1, 2])
     }
 
+    @Test func liveGameSessionSurfacesMismatchedGameInsteadOfKeepingStaleSnapshot() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let game = makeGame()
+        let otherGame = makeGame()
+        let session = LiveGameSession(gameID: game.id)
+
+        session.refresh(game: game, modelContext: container.mainContext)
+        #expect(session.snapshot != nil)
+
+        session.refresh(game: otherGame, modelContext: container.mainContext)
+
+        #expect(session.snapshot == nil)
+        #expect(session.loadError == "The live-game session does not match this game.")
+    }
+
     private func makeGame() -> Game {
         Game(
             seasonID: UUID(),

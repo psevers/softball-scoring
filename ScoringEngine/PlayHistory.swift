@@ -46,15 +46,16 @@ enum PlayHistoryProjector {
         let actor: String
         let actorContext: String
         var components: [PlayHistoryComponent]
+        let initialState: GameState
         var latestState: GameState
         var completedSummary: String?
         var pendingBallInPlay = false
     }
 
     static func project(replay: GameEventReplay.Result) -> PlayHistory {
-        let identities = eventTimeIdentities(in: replay.entries)
         var sections: [PlayHistorySection] = []
         var pending: PendingPlateAppearance?
+        var identities: [UUID: (identity: TrackedBatterIdentity, orderSize: Int)] = [:]
 
         func append(_ entry: PlayHistoryEntry) {
             let sectionID = "\(entry.inning)-\(entry.half.rawValue)"
@@ -77,7 +78,6 @@ enum PlayHistoryProjector {
 
         for trace in replay.entries {
             if let rejection = trace.rejection {
-                flushPending()
                 append(problemEntry(for: trace, rejection: rejection))
                 continue
             }
@@ -118,19 +118,15 @@ enum PlayHistoryProjector {
                     pending: &pending,
                     flush: flushPending
                 )
-                pending?.components.append(playComponent(trace: trace, play: play))
+                let component = playComponent(trace: trace, play: play)
+                pending?.components.append(component)
                 pending?.latestState = trace.stateAfter
                 pending?.pendingBallInPlay = false
-                pending?.completedSummary = completedPlaySummary(
-                    notation: play.outcome.shortLabel,
-                    movements: play.movements,
-                    runs: countedRuns(in: play, stateBefore: trace.stateBefore),
-                    outs: play.movements.filter { $0.destination == .out }.count,
-                    rbi: play.rbi
-                )
+                pending?.completedSummary = component.summary
                 flushPending()
 
             case .offensivePitch(let pitch):
+                identities[pitch.batter.playerID] = (pitch.batter, pitch.battingOrderSize)
                 beginOrContinue(
                     trace: trace,
                     actor: pitch.batter.displayName,
@@ -142,6 +138,10 @@ enum PlayHistoryProjector {
                 pending?.latestState = trace.stateAfter
 
             case .offensivePlateAppearance(let plateAppearance):
+                identities[plateAppearance.batter.playerID] = (
+                    plateAppearance.batter,
+                    plateAppearance.battingOrderSize
+                )
                 beginOrContinue(
                     trace: trace,
                     actor: plateAppearance.batter.displayName,
@@ -152,18 +152,13 @@ enum PlayHistoryProjector {
                     pending: &pending,
                     flush: flushPending
                 )
-                pending?.components.append(plateAppearanceComponent(
+                let component = plateAppearanceComponent(
                     trace: trace,
                     plateAppearance: plateAppearance
-                ))
-                pending?.latestState = trace.stateAfter
-                pending?.completedSummary = completedPlaySummary(
-                    notation: notation(for: plateAppearance.result),
-                    movements: plateAppearance.movements,
-                    runs: plateAppearance.countedRunSources.count,
-                    outs: plateAppearance.movements.filter { $0.destination == .out }.count,
-                    rbi: plateAppearance.rbi
                 )
+                pending?.components.append(component)
+                pending?.latestState = trace.stateAfter
+                pending?.completedSummary = component.summary
                 flushPending()
 
             case .offensiveBaseRunning(let event):
@@ -195,6 +190,9 @@ enum PlayHistoryProjector {
         }
 
         flushPending()
+        for index in sections.indices {
+            sections[index].entries.sort { firstSequence(in: $0) < firstSequence(in: $1) }
+        }
         return PlayHistory(sections: sections)
     }
 
@@ -219,6 +217,7 @@ enum PlayHistoryProjector {
                 actor: actor,
                 actorContext: actorContext,
                 components: [],
+                initialState: trace.stateBefore,
                 latestState: trace.stateBefore
             )
         }
@@ -234,12 +233,17 @@ enum PlayHistoryProjector {
             summary = "Plate appearance in progress · \(pending.latestState.balls)–\(pending.latestState.strikes) count"
         }
         let pitchCount = pending.components.filter(\.isPitch).count
-        let detail: String
+        let pitchDetail: String
         switch pitchCount {
-        case 0: detail = "No component pitches recorded"
-        case 1: detail = "1 pitch"
-        default: detail = "\(pitchCount) pitches"
+        case 0: pitchDetail = "No component pitches recorded"
+        case 1: pitchDetail = "1 pitch"
+        default: pitchDetail = "\(pitchCount) pitches"
         }
+        let materialChange = stateChangeDescription(
+            from: pending.initialState,
+            to: pending.latestState
+        )
+        let detail = "\(pitchDetail) · \(materialChange)"
         return PlayHistoryEntry(
             id: pending.id,
             inning: pending.inning,
@@ -467,24 +471,8 @@ enum PlayHistoryProjector {
         return parts.joined(separator: " · ")
     }
 
-    private static func eventTimeIdentities(
-        in entries: [GameEventReplay.Entry]
-    ) -> [UUID: (identity: TrackedBatterIdentity, orderSize: Int)] {
-        var result: [UUID: (identity: TrackedBatterIdentity, orderSize: Int)] = [:]
-        for entry in entries where entry.rejection == nil {
-            switch entry.body {
-            case .offensivePitch(let pitch):
-                result[pitch.batter.playerID] = (pitch.batter, pitch.battingOrderSize)
-            case .offensivePlateAppearance(let plateAppearance):
-                result[plateAppearance.batter.playerID] = (
-                    plateAppearance.batter,
-                    plateAppearance.battingOrderSize
-                )
-            default:
-                break
-            }
-        }
-        return result
+    private static func firstSequence(in entry: PlayHistoryEntry) -> Int {
+        entry.components.map(\.sequenceNumber).min() ?? .max
     }
 
     private static func countedRuns(in play: BallInPlayEvent, stateBefore: GameState) -> Int {
