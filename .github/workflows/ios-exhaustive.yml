@@ -1,0 +1,40 @@
+name: iOS Exhaustive UI Evidence
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exhaustive-ui-evidence:
+    name: Exhaustive UI Evidence
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Start duration measurement
+        id: lane-timing
+        run: echo "started_at=$(date +%s)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+      - name: Prepare iOS test environment
+        id: ios
+        uses: ./.github/actions/prepare-ios
+      - name: Run complete UI workflow matrix
+        run: |
+          NSUnbufferedIO=YES xcodebuild test-without-building \
+            -project SoftballScoring.xcodeproj \
+            -scheme SoftballScoring \
+            -destination 'platform=iOS Simulator,id=${{ steps.ios.outputs.simulator-id }}' \
+            -derivedDataPath "$RUNNER_TEMP/SoftballScoringDerivedData" \
+            -parallel-testing-enabled NO \
+            -only-testing:SoftballScoringUITests \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Record exhaustive lane duration
+        if: always()
+        uses: ./.github/actions/report-ci-duration
+        with:
+          lane-name: Exhaustive UI Evidence
+          started-at: ${{ steps.lane-timing.outputs.started_at }}
+          status: ${{ job.status }}

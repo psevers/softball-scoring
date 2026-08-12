@@ -43,7 +43,8 @@ List every adversarial finding and resolution. Use `Accepted risk:` only when th
 
 ## Merge gate
 
-- [ ] CI green
+- [ ] `PR Fast Verification` is green
+- [ ] `Exhaustive UI Evidence` is not required, or the successful pre-merge run is linked
 - [ ] No unresolved P0/P1 adversarial findings
 - [ ] Required regression tests added
 - [ ] `docs/CURRENT_STATE.md` updated when architecture/state changed
