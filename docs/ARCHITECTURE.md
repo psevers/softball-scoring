@@ -143,7 +143,7 @@ Derived state includes:
 
 ## Write path
 
-`GameEventRecorder` is the main-actor persistence boundary:
+`GameEventRecorder` is the main-actor append boundary:
 
 1. Validate supplied records belong to the game.
 2. Replay and reject corrupt history.
@@ -158,7 +158,9 @@ No accumulated score/stat record is directly mutated by a scoring tap.
 ## Feature evolution
 
 - Slice 5: tracked-team offensive PAs, pitch entry, SB/CS, and player attribution/stat projection inputs.
-- Slice 6: read-only Play History is delivered; undo/edit/count correction remains on the same event-history boundary.
+- `GameEventCorrection` is the adjacent main-actor correction boundary. Its first narrow operation uses an isolated fresh SwiftData context to fetch one game, captures an exact expected timeline, previews removal of the latest eligible defensive count pitch through the same snapshot/replay/projection path, rejects stale confirmation, and atomically deletes the record with rollback on save failure. Pending UI-context changes cannot become the candidate or join the correction save.
+- Surviving records retain identity, sequence, and timestamp. A later append still allocates from the maximum authoritative surviving sequence rather than cached UI state.
+- Slice 6: read-only Play History and Undo latest defensive count pitch are delivered; earlier-event edit/delete and pitch-total reconciliation remain later work on the correction boundary.
 - Slice 7: pitcher-change events and current-pitcher replay state.
 - MVP follow-up: non-PA runner events beyond SB/CS (WP/PB/manual advance/out).
 - Slice 8+: box-score and season-stat projectors consume the same event stream.

@@ -7,6 +7,8 @@ struct PlayHistoryView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var isConfirmingUndo = false
+    @State private var correctionError: String?
 
     var body: some View {
         ZStack {
@@ -19,6 +21,10 @@ struct PlayHistoryView: View {
                         subtitle: "Authoritative scorebook timeline",
                         systemImage: "clock.arrow.circlepath"
                     )
+
+                    if session.undoCandidate != nil {
+                        undoLatestPitchButton
+                    }
 
                     historyContent
                 }
@@ -36,6 +42,26 @@ struct PlayHistoryView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .task {
             session.refresh(game: game, modelContext: modelContext)
+        }
+        .alert(
+            "Undo latest pitch?",
+            isPresented: $isConfirmingUndo,
+            presenting: session.undoCandidate
+        ) { candidate in
+            Button("Undo \(candidate.result.label)", role: .destructive) {
+                undoLatestCountPitch(candidate)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { candidate in
+            Text(candidate.confirmationDetail)
+        }
+        .alert("Undo Failed", isPresented: Binding(
+            get: { correctionError != nil },
+            set: { if !$0 { correctionError = nil } }
+        )) {
+            Button("OK", role: .cancel) { correctionError = nil }
+        } message: {
+            Text(correctionError ?? "The pitch could not be removed.")
         }
     }
 
@@ -163,5 +189,24 @@ struct PlayHistoryView: View {
 
     private func componentColor(_ entry: PlayHistoryEntry) -> Color {
         entry.isProblem ? AppTheme.destructive : AppTheme.graphite
+    }
+
+    private var undoLatestPitchButton: some View {
+        UndoLatestPitchButton(identifier: "history.undoLatestPitch") {
+            isConfirmingUndo = true
+        }
+    }
+
+    private func undoLatestCountPitch(_ candidate: UndoLatestCountPitchCandidate) {
+        do {
+            try session.undoLatestCountPitch(
+                candidate,
+                game: game,
+                modelContext: modelContext
+            )
+        } catch {
+            session.refresh(game: game, modelContext: modelContext)
+            correctionError = error.localizedDescription
+        }
     }
 }
