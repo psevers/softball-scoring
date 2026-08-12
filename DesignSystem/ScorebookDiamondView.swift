@@ -16,14 +16,17 @@ struct ScorebookDiamondView: View {
             let third = CGPoint(x: center.x - radius, y: center.y)
 
             ZStack {
-                Path { path in
-                    path.move(to: home)
-                    path.addLine(to: first)
-                    path.addLine(to: second)
-                    path.addLine(to: third)
-                    path.closeSubpath()
-                }
-                .stroke(AppTheme.graphite.opacity(0.72), style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+                diamondPath(home: home, first: first, second: second, third: third)
+                    .stroke(
+                        AppTheme.graphite.opacity(0.68),
+                        style: StrokeStyle(lineWidth: 1.35, lineCap: .round, lineJoin: .round)
+                    )
+                diamondPath(home: home, first: first, second: second, third: third)
+                    .stroke(
+                        AppTheme.graphite.opacity(0.16),
+                        style: StrokeStyle(lineWidth: 0.75, lineCap: .round, lineJoin: .round)
+                    )
+                    .offset(x: 1.1, y: -0.8)
 
                 base(at: home, runner: nil, label: "H")
                 base(at: first, runner: firstBaseRunner, label: "1")
@@ -36,11 +39,38 @@ struct ScorebookDiamondView: View {
         .accessibilityLabel(accessibilityDescription)
     }
 
+    private func diamondPath(
+        home: CGPoint,
+        first: CGPoint,
+        second: CGPoint,
+        third: CGPoint
+    ) -> Path {
+        Path { path in
+            path.move(to: home)
+            path.addLine(to: first)
+            path.addLine(to: second)
+            path.addLine(to: third)
+            path.closeSubpath()
+        }
+    }
+
     private func base(at point: CGPoint, runner: Int?, label: String) -> some View {
         ZStack {
             Rectangle()
-                .fill(runner == nil ? AppTheme.paper : AppTheme.graphite.opacity(0.82))
-                .overlay(Rectangle().stroke(AppTheme.graphite.opacity(0.72), lineWidth: 1))
+                .stroke(AppTheme.graphite.opacity(0.16), lineWidth: 0.75)
+                .frame(width: 18, height: 18)
+                .rotationEffect(.degrees(45))
+                .offset(x: 1.1, y: -0.8)
+
+            Rectangle()
+                .fill(runner == nil ? AppTheme.paper : AppTheme.positive.opacity(0.90))
+                .overlay {
+                    Rectangle()
+                        .stroke(
+                            runner == nil ? AppTheme.graphite.opacity(0.68) : AppTheme.positive,
+                            lineWidth: 1
+                        )
+                }
                 .frame(width: 18, height: 18)
                 .rotationEffect(.degrees(45))
 

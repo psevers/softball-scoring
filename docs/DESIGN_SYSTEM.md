@@ -43,6 +43,18 @@ Roster/season editors may remain closer to native Forms. Apply the paper backgro
 
 Game setup and lineup are scorebook pages rather than generic administration. They use contiguous ruled rows, a faint scorebook margin, graphite marks, handwritten headings and player names, and tabular numerals while retaining native fields, wheel pickers, menus, reorder/delete controls, and buttons. Sections meet at hairline rules with no floating-card gaps.
 
+### Live scoring and runner confirmation
+
+Live offense, live defense, and runner confirmation are contiguous ledger surfaces optimized for rapid scoring:
+
+- Live scoring begins with one compact 180–200pt at-bat cell containing inning/half, score, game format or timer, current batter or pitcher, count, outs, and base state. Pitch and scoring actions immediately follow the cell.
+- The standard-size score and count remain monospaced; team/player identity and concise result notation are expressive. Accessibility sizes use a concise textual game summary and system headline/body roles instead of enlarging decorative marks.
+- The full batting line uses `ScorebookStatGrid` so all supported categories stay aligned and reflow rather than truncate at accessibility sizes.
+- The full batting line follows the primary scoring controls; it never delays pitch or result entry.
+- Live actions use `ScorebookKeyButtonStyle` at the 52pt game-action minimum. Safe/advancing outcomes may use muted green; caught stealing, validation failure, and history protection use explicit destructive red alongside textual meaning.
+- Base and out marks use lightly offset graphite strokes for pencil character. Occupied bases retain a runner number and accessibility description; out state includes a numeric text label.
+- Runner confirmation starts with the outcome and a short destination instruction, then native destination menus, steppers, toggles, Cancel, and Record actions. Longer attribution guidance follows the controls in a native disclosure.
+
 ### Interaction invariants
 
 - 44pt minimum target.

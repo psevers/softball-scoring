@@ -98,6 +98,16 @@ Across representative:
 - A 14-player batting order can be built by touch, its final batter remains reachable, and Start Game saves and opens the live game.
 - With accessibility-extra-large Dynamic Type encoded in the app launch, New Game scrolls to the time-limit wheel and Set Lineup action; the fourteen-batter lineup scrolls between its last batter, pitcher control, and summary before saving.
 
+## Live scorebook visual alignment
+
+- Deterministic fixtures replay into an offensive state with prior batting totals, a 1–1 count, and runners on second/third; a defensive state with one out, a 1–1 count, and a runner on first; and a rejected corrupt-history state that gates scoring.
+- SwiftUI previews cover offense, defense, occupied bases, outs/count, the complete batting-total grid, history protection, both runner-confirmation sheets, and Accessibility XL reflow.
+- At deterministic Accessibility XL, the quick-result workflow reaches Walk, Home Run, a confirmed 1B, Record, back navigation, and persisted batter progression.
+- At deterministic Accessibility XL, the normal-pitch workflow reaches count entry, SB, CS, the earlier pitch section after runner scoring, strikeout completion, and the next batter.
+- At standard size, the initial live viewport exposes the current batter, count, Ball, and Strike before opening runner confirmation.
+- At Accessibility XL, destination and RBI controls remain in the initial runner-confirmation viewport and retain stable accessibility identifiers.
+- Standard and Accessibility XL simulator inspection checks the compact at-bat hierarchy, readable identity/numerical roles, non-overlapping runner controls, and preserved native navigation/toolbars. The final post-review ticket #8 evidence was explicitly approved on August 11, 2026.
+
 ## Tracked-team offense
 
 - Offensive event codec preserves historical player identity and explicit counted-run sources.
