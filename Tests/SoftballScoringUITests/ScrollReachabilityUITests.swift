@@ -2,6 +2,22 @@ import XCTest
 
 @MainActor
 final class ScrollReachabilityUITests: XCTestCase {
+    func testSliceFiveFiveStandardEvidenceSurfacesRemainReachable() {
+        captureSliceFiveFiveEvidence(atAccessibilityTextSize: false)
+    }
+
+    func testSliceFiveFiveAccessibilityEvidenceSurfacesRemainReachable() {
+        captureSliceFiveFiveEvidence(atAccessibilityTextSize: true)
+    }
+
+    func testSliceFiveFiveStandardBattingLineRemainsAligned() {
+        captureSliceFiveFiveBattingLine(atAccessibilityTextSize: false)
+    }
+
+    func testSliceFiveFiveAccessibilityBattingLineRemainsAligned() {
+        captureSliceFiveFiveBattingLine(atAccessibilityTextSize: true)
+    }
+
     func testStandardAdministrativeScorebookSurfaces() {
         let app = launchApp()
 
@@ -319,16 +335,206 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(waitForLabel("0 – 0", on: count))
     }
 
+    private func captureSliceFiveFiveEvidence(atAccessibilityTextSize: Bool) {
+        let app = launchApp(atAccessibilityTextSize: atAccessibilityTextSize)
+
+        XCTAssertTrue(app.scrollViews["games.home.ledger"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["New Game"].isHittable)
+        captureScreenshot(named: "games-home", from: app)
+
+        let defensiveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Defense Opponent")
+        ).firstMatch
+        XCTAssertTrue(defensiveGame.waitForExistence(timeout: 3))
+        defensiveGame.tap()
+        XCTAssertTrue(app.navigationBars["UI Defense Opponent"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Ball"].isHittable)
+        XCTAssertTrue(app.buttons["Called Strike"].isHittable)
+        captureScreenshot(named: "live-defense", from: app)
+        app.buttons["Ball In Play"].tap()
+        XCTAssertTrue(app.buttons["1B"].waitForExistence(timeout: 3))
+        app.buttons["1B"].tap()
+        XCTAssertTrue(app.navigationBars["Record Play"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["runner.destination.batter"].isHittable)
+        XCTAssertTrue(app.steppers["runner.rbi"].exists)
+        captureScreenshot(named: "runner-confirmation-defense", from: app)
+        app.buttons["Cancel"].tap()
+        app.navigationBars["UI Defense Opponent"].buttons.firstMatch.tap()
+
+        app.buttons["New Game"].tap()
+        XCTAssertTrue(app.navigationBars["New Game"].waitForExistence(timeout: 3))
+        captureScreenshot(named: "new-game", from: app)
+        app.textFields["Opponent"].tap()
+        app.textFields["Opponent"].typeText("Evidence Opponent")
+        app.keyboards.buttons["return"].tap()
+        let setLineup = app.buttons["Set Lineup"]
+        XCTAssertTrue(swipeUntilHittable(
+            setLineup,
+            in: app,
+            listIdentifier: "game.setup.form"
+        ))
+        setLineup.tap()
+        addStartingLineup(in: app)
+        let lineupSummary = app.staticTexts["lineup.summary"]
+        XCTAssertTrue(swipeDownUntilHittable(
+            lineupSummary,
+            in: app,
+            listIdentifier: "lineup.list"
+        ))
+        XCTAssertEqual(lineupSummary.label, "9 batters · 9 / 9 fielders")
+        XCTAssertTrue(app.buttons["Start Game"].isEnabled)
+        captureScreenshot(named: "lineup", from: app)
+        app.navigationBars["Set Lineup"].buttons.firstMatch.tap()
+        app.buttons["Cancel"].tap()
+
+        let offensiveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Opponent")
+        ).firstMatch
+        XCTAssertTrue(offensiveGame.waitForExistence(timeout: 3))
+        offensiveGame.tap()
+        XCTAssertTrue(app.staticTexts["offense.currentBatter"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["offense.pitch.ball"].isHittable)
+        captureScreenshot(named: "live-offense", from: app)
+        let single = app.buttons["1B"]
+        XCTAssertTrue(scrollUntilHittable(single, in: app))
+        single.tap()
+        XCTAssertTrue(app.navigationBars["Record Our Play"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["runner.destination.batter"].isHittable)
+        XCTAssertTrue(app.steppers["runner.rbi"].exists)
+        captureScreenshot(named: "runner-confirmation", from: app)
+        app.buttons["Cancel"].tap()
+        app.navigationBars["UI Opponent"].buttons.firstMatch.tap()
+
+        app.tabBars.buttons["Team"].tap()
+        XCTAssertTrue(app.staticTexts["Player 01"].waitForExistence(timeout: 3))
+        captureScreenshot(named: "team-roster", from: app)
+        let firstPlayer = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Player 01")
+        ).firstMatch
+        XCTAssertTrue(firstPlayer.isHittable)
+        firstPlayer.tap()
+        XCTAssertTrue(app.navigationBars["Edit Player"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.textFields["First name"].isHittable)
+        captureScreenshot(named: "player-editor", from: app)
+        app.buttons["Cancel"].tap()
+        app.buttons["Seasons"].tap()
+        XCTAssertTrue(app.staticTexts["UI Test Season"].waitForExistence(timeout: 3))
+        captureScreenshot(named: "season-list", from: app)
+        app.buttons["team.add"].tap()
+        XCTAssertTrue(app.navigationBars["New Season"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.textFields["Name, e.g. 2026 Summer"].isHittable)
+        captureScreenshot(named: "season-editor", from: app)
+        app.buttons["Cancel"].tap()
+
+        app.tabBars.buttons["Games"].tap()
+        let summaryGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Summary Opponent")
+        ).firstMatch
+        XCTAssertTrue(summaryGame.waitForExistence(timeout: 3))
+        summaryGame.tap()
+        XCTAssertTrue(app.otherElements["game.summary.page"].waitForExistence(timeout: 3))
+        captureScreenshot(named: "game-summary", from: app)
+
+        app.tabBars.buttons["Stats"].tap()
+        XCTAssertTrue(app.otherElements["stats.empty.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["No Stats Yet"].isHittable)
+        captureScreenshot(named: "stats-empty", from: app)
+    }
+
+    private func addStartingLineup(in app: XCUIApplication) {
+        let startGame = app.buttons["Start Game"]
+        for index in 1...9 {
+            let playerName = String(format: "Player %02d", index)
+            let addPlayer = app.buttons["lineup.add.\(playerName)"]
+            XCTAssertTrue(
+                swipeUntilHittable(addPlayer, in: app, above: startGame),
+                "\(playerName) was not reachable"
+            )
+            addPlayer.tap()
+            XCTAssertTrue(
+                waitForValue("\(index) batters, \(index) of 9 fielders", on: startGame),
+                "\(playerName) was not added"
+            )
+        }
+    }
+
+    private func captureSliceFiveFiveBattingLine(atAccessibilityTextSize: Bool) {
+        let app = launchApp(atAccessibilityTextSize: atAccessibilityTextSize)
+        let offensiveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Opponent")
+        ).firstMatch
+        XCTAssertTrue(offensiveGame.waitForExistence(timeout: 3))
+        offensiveGame.tap()
+
+        let battingLine = app.otherElements["offense.battingLine"]
+        XCTAssertTrue(scrollUntilHittable(battingLine, in: app))
+        let stats = [
+            (id: "pa", label: "PA"), (id: "ab", label: "AB"), (id: "r", label: "R"),
+            (id: "h", label: "H"), (id: "2b", label: "2B"), (id: "3b", label: "3B"),
+            (id: "hr", label: "HR"), (id: "rbi", label: "RBI"), (id: "bb", label: "BB"),
+            (id: "hbp", label: "HBP"), (id: "so", label: "SO"), (id: "sb", label: "SB"),
+            (id: "cs", label: "CS")
+        ]
+        for (index, stat) in stats.enumerated() {
+            let column = battingLine.staticTexts[stat.label]
+            XCTAssertTrue(
+                scrollUntilHittable(column, in: app),
+                "Batting column \(stat.label) was not reachable"
+            )
+            if index == 0 {
+                captureScreenshot(named: "batting-line-top", from: app)
+            }
+        }
+        assertBattingStatValuesAlign(stats, in: battingLine)
+        captureScreenshot(named: "batting-line-bottom", from: app)
+    }
+
+    private func assertBattingStatValuesAlign(
+        _ expectedStats: [(id: String, label: String)],
+        in battingLine: XCUIElement
+    ) {
+        let stats = expectedStats.map { stat in
+            (
+                label: battingLine.staticTexts["scorebook.stat.\(stat.id).label"],
+                value: battingLine.staticTexts["scorebook.stat.\(stat.id).value"]
+            )
+        }
+
+        for stat in stats {
+            XCTAssertTrue(stat.label.exists, "Missing batting-stat label")
+            XCTAssertTrue(stat.value.exists, "Missing batting-stat value")
+        }
+
+        var visualRows: [[(label: XCUIElement, value: XCUIElement)]] = []
+        for stat in stats {
+            if let previous = visualRows.last?.last,
+               stat.label.frame.minX > previous.label.frame.minX {
+                visualRows[visualRows.count - 1].append(stat)
+            } else {
+                visualRows.append([stat])
+            }
+        }
+        for row in visualRows where row.count > 1 {
+            let valueBaselines = row.map { Int($0.value.frame.minY.rounded()) }
+            XCTAssertEqual(
+                Set(valueBaselines).count,
+                1,
+                "Batting-stat values must align within each visual row; got \(valueBaselines)"
+            )
+        }
+    }
+
     private func launchApp(atAccessibilityTextSize: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-uiTesting"]
-        if atAccessibilityTextSize {
-            app.launchArguments += [
-                "-UIPreferredContentSizeCategoryName",
-                "UICTContentSizeCategoryAccessibilityXL"
-            ]
-        }
+        let contentSizeCategory = atAccessibilityTextSize
+            ? "UICTContentSizeCategoryAccessibilityXL"
+            : "UICTContentSizeCategoryL"
+        app.launchArguments = [
+            "-uiTesting",
+            "-UIPreferredContentSizeCategoryName",
+            contentSizeCategory
+        ]
         app.launch()
         return app
     }

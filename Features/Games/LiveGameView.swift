@@ -555,6 +555,7 @@ struct LiveGameView: View {
                         ScorebookStatGrid(stats: battingStats(line))
                     }
                 }
+                .accessibilityIdentifier("offense.battingLine")
             }
         }
     }
