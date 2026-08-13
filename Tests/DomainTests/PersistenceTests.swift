@@ -3702,7 +3702,7 @@ extension PersistenceTests {
         )
 
         #expect(!preview.canSave)
-        #expect(preview.firstInvalidRecord == DefensivePitchEditInvalidRecord(
+        #expect(preview.firstInvalidRecord == DefensivePitchCorrectionInvalidRecord(
             id: result.id,
             sequenceNumber: 2,
             summary: "Play conflicts with the proposed pitch"
@@ -3813,6 +3813,64 @@ extension PersistenceTests {
         #expect(stored.map(\.id) == [original.id, newer.id])
     }
 
+    @Test func pitchDeletionDoesNotSaveOrRollbackPendingUIContextChanges() throws {
+        struct SaveFailure: Error {}
+
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let original = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 1,
+            body: .pitch(.init(
+                result: .ball,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        context.insert(original)
+        try context.save()
+
+        let pendingPlayer = Player(
+            firstName: "Pending",
+            lastName: "Change",
+            jerseyNumber: "99"
+        )
+        context.insert(pendingPlayer)
+        let session = try GameEventCorrection.prepareDefensivePitchDeletion(
+            recordID: original.id,
+            game: game,
+            modelContext: context
+        )
+        let preview = try GameEventCorrection.stageDefensivePitchDeletion(
+            session,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(throws: SaveFailure.self) {
+            _ = try GameEventCorrection.saveDefensivePitchDeletion(
+                preview,
+                game: game,
+                modelContext: context,
+                save: { _ in throw SaveFailure() }
+            )
+        }
+        #expect(try context.fetch(FetchDescriptor<Player>()).map(\.id) == [pendingPlayer.id])
+
+        _ = try GameEventCorrection.saveDefensivePitchDeletion(
+            preview,
+            game: game,
+            modelContext: context
+        )
+
+        let freshContext = ModelContext(container)
+        #expect(try freshContext.fetch(FetchDescriptor<Player>()).isEmpty)
+        #expect(try freshContext.fetch(FetchDescriptor<GameEventRecord>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<Player>()).map(\.id) == [pendingPlayer.id])
+    }
+
     @Test func recordingAfterPitchDeletionUsesMaximumSurvivingSequence() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext
@@ -3885,23 +3943,32 @@ extension PersistenceTests {
                 startingPitcherID: pitcherID
             )
             context.insert(game)
-            let records = try [PitchResult.ball, .calledStrike, .foul]
-                .enumerated()
-                .map { index, result in
-                    try GameEventRecord(
-                        gameID: gameID,
-                        sequenceNumber: index + 1,
-                        body: .pitch(.init(
-                            result: result,
-                            pitcherID: pitcherID,
-                            opponentBatterSlot: 1
-                        ))
-                    )
-                }
+            let bodies: [GameEventBody] = [
+                .pitch(.init(result: .ball, pitcherID: pitcherID, opponentBatterSlot: 1)),
+                .pitch(.init(result: .calledStrike, pitcherID: pitcherID, opponentBatterSlot: 1)),
+                .pitch(.init(result: .swingingStrike, pitcherID: pitcherID, opponentBatterSlot: 1)),
+                .pitch(.init(result: .calledStrike, pitcherID: pitcherID, opponentBatterSlot: 1)),
+                .pitch(.init(result: .ballInPlay, pitcherID: pitcherID, opponentBatterSlot: 2)),
+                .ballInPlay(.init(
+                    outcome: .single,
+                    opponentBatterSlot: 2,
+                    movements: [.init(source: .batter, destination: .first)],
+                    rbi: 0,
+                    thirdOutRunsCounted: nil
+                )),
+                .pitch(.init(result: .ball, pitcherID: pitcherID, opponentBatterSlot: 3))
+            ]
+            let records = try bodies.enumerated().map { index, body in
+                try GameEventRecord(
+                    gameID: gameID,
+                    sequenceNumber: index + 1,
+                    body: body
+                )
+            }
             records.forEach(context.insert)
             try context.save()
             let session = try GameEventCorrection.prepareDefensivePitchDeletion(
-                recordID: records[1].id,
+                recordID: records[0].id,
                 game: game,
                 modelContext: context
             )
@@ -3925,17 +3992,21 @@ extension PersistenceTests {
             modelContext: reloadedContext
         )
 
-        #expect(reloaded.records.map(\.sequenceNumber) == [1, 3])
+        #expect(reloaded.records.map(\.sequenceNumber) == [2, 3, 4, 5, 6, 7])
+        #expect(reloaded.replay.rejectedRecordIDs.isEmpty)
+        #expect(reloaded.replay.state.inning == 1)
+        #expect(reloaded.replay.state.half == .top)
+        #expect(reloaded.replay.state.outs == 1)
+        #expect(reloaded.replay.state.currentOpponentBatterSlot == 3)
+        #expect(reloaded.replay.state.firstBaseRunnerSlot == 2)
         #expect(reloaded.replay.state.balls == 1)
-        #expect(reloaded.replay.state.strikes == 1)
+        #expect(reloaded.replay.state.strikes == 0)
         #expect(reloaded.replay.state.pitchCount(for: pitcherID) == PitchCount(
-            total: 2,
+            total: 5,
             balls: 1,
-            strikes: 1
+            strikes: 4
         ))
-        #expect(reloaded.history.sections[0].entries[0].components.map(\.summary) == [
-            "Ball", "Foul"
-        ])
+        #expect(reloaded.history.sections.flatMap(\.entries).count == 3)
     }
 
     @Test func stagedDefensivePitchEditReplaysBeforeSavingAndPreservesRecordIdentity() throws {
@@ -4317,7 +4388,7 @@ extension PersistenceTests {
         )
 
         #expect(!preview.canSave)
-        #expect(preview.firstInvalidRecord == DefensivePitchEditInvalidRecord(
+        #expect(preview.firstInvalidRecord == DefensivePitchCorrectionInvalidRecord(
             id: records[3].id,
             sequenceNumber: 4,
             summary: "Play conflicts with the proposed pitch"

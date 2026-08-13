@@ -123,7 +123,7 @@ struct DefensivePitchEditSession: Identifiable {
     fileprivate let expectedTimeline: [GameEventRecordRevision]
 }
 
-struct DefensivePitchEditInvalidRecord: Equatable {
+struct DefensivePitchCorrectionInvalidRecord: Equatable {
     let id: UUID
     let sequenceNumber: Int
     let summary: String
@@ -133,7 +133,7 @@ struct DefensivePitchEditPreview {
     let session: DefensivePitchEditSession
     let proposedResult: PitchResult
     let snapshot: LiveGameSnapshot
-    let firstInvalidRecord: DefensivePitchEditInvalidRecord?
+    let firstInvalidRecord: DefensivePitchCorrectionInvalidRecord?
 
     var canSave: Bool {
         proposedResult != session.originalResult && firstInvalidRecord == nil
@@ -149,9 +149,7 @@ struct DefensivePitchDeletionSession: Identifiable {
     let inning: Int
     let half: InningHalf
     let opponentBatterSlot: Int
-    let pitcherID: UUID
     let originalResult: PitchResult
-    let stateBefore: GameState
     let originalStateAfter: GameState
 
     fileprivate let expectedTimeline: [GameEventRecordRevision]
@@ -170,7 +168,7 @@ struct DefensivePitchDeletionSession: Identifiable {
 struct DefensivePitchDeletionPreview {
     let session: DefensivePitchDeletionSession
     let snapshot: LiveGameSnapshot
-    let firstInvalidRecord: DefensivePitchEditInvalidRecord?
+    let firstInvalidRecord: DefensivePitchCorrectionInvalidRecord?
 
     var canSave: Bool {
         firstInvalidRecord == nil
@@ -414,7 +412,7 @@ enum GameEventCorrection {
         let invalidRecord = snapshot.replay.entries
             .first(where: { $0.rejection != nil })
             .map { entry in
-                DefensivePitchEditInvalidRecord(
+                DefensivePitchCorrectionInvalidRecord(
                     id: entry.recordID,
                     sequenceNumber: entry.sequenceNumber,
                     summary: invalidSummary(for: entry.rejection)
@@ -499,9 +497,7 @@ enum GameEventCorrection {
             inning: entry.stateBefore.inning,
             half: entry.stateBefore.half,
             opponentBatterSlot: pitch.opponentBatterSlot,
-            pitcherID: pitch.pitcherID,
             originalResult: pitch.result,
-            stateBefore: entry.stateBefore,
             originalStateAfter: entry.stateAfter,
             expectedTimeline: records.map(GameEventRecordRevision.init)
         )
@@ -531,7 +527,7 @@ enum GameEventCorrection {
         let invalidRecord = snapshot.replay.entries
             .first(where: { $0.rejection != nil })
             .map { entry in
-                DefensivePitchEditInvalidRecord(
+                DefensivePitchCorrectionInvalidRecord(
                     id: entry.recordID,
                     sequenceNumber: entry.sequenceNumber,
                     summary: invalidSummary(for: entry.rejection)
@@ -558,7 +554,8 @@ enum GameEventCorrection {
             throw GameEventCorrectionError.invalidCandidate
         }
 
-        let records = try fetchRecords(gameID: game.id, modelContext: modelContext)
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
         guard records.map(GameEventRecordRevision.init) == preview.session.expectedTimeline else {
             throw GameEventCorrectionError.staleTimeline
         }
@@ -571,11 +568,11 @@ enum GameEventCorrection {
         guard let record = records.first(where: { $0.id == preview.session.recordID }) else {
             throw GameEventCorrectionError.staleTimeline
         }
-        modelContext.delete(record)
+        correctionContext.delete(record)
         do {
-            try save(modelContext)
+            try save(correctionContext)
         } catch {
-            modelContext.rollback()
+            correctionContext.rollback()
             throw error
         }
         return correctedSnapshot
