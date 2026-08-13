@@ -68,10 +68,11 @@ struct DefensivePitchEditView: View {
                             correctionSession: correctionSession,
                             proposedSummary: "Proposed: \(selectedResult.label) · "
                                 + countDescription(proposedState(in: correctionSession)),
-                            proposedIdentifier: "pitchEdit.proposed"
-                        ) { problem in
-                            repairView(for: problem, in: correctionSession)
-                        }
+                            proposedIdentifier: "pitchEdit.proposed",
+                            stageChange: { problem, action in
+                                stageRepair(recordID: problem.id, action: action)
+                            }
+                        )
                     }
                 }
 
@@ -157,37 +158,16 @@ struct DefensivePitchEditView: View {
         })?.stateAfter ?? correctionSession.snapshot.replay.state
     }
 
-    private func repairView(
-        for problem: DefensivePitchCorrectionProblem,
-        in correctionSession: DefensivePitchCorrectionSession
-    ) -> some View {
-        DefensivePitchCorrectionProblemView(
-            problem: problem,
-            historyEntry: correctionSession.historyEntry(for: problem.id),
-            stageChange: { stageRepair(recordID: problem.id, action: $0) }
-        )
-    }
-
     private func stageRepair(recordID: UUID, action: DefensivePitchRepairAction) {
         guard let correctionSession else { return }
         do {
-            switch action {
-            case .edit(let result):
-                self.correctionSession = try GameEventCorrection.stagePitchEdit(
-                    recordID: recordID,
-                    result: result,
-                    in: correctionSession,
-                    game: game,
-                    modelContext: modelContext
-                )
-            case .delete:
-                self.correctionSession = try GameEventCorrection.stagePitchDeletion(
-                    recordID: recordID,
-                    in: correctionSession,
-                    game: game,
-                    modelContext: modelContext
-                )
-            }
+            self.correctionSession = try stagingPitchRepair(
+                recordID: recordID,
+                action: action,
+                in: correctionSession,
+                game: game,
+                modelContext: modelContext
+            )
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -228,10 +208,11 @@ struct DefensivePitchDeletionView: View {
 
                     if let correctionSession {
                         DefensivePitchCorrectionSections(
-                            correctionSession: correctionSession
-                        ) { problem in
-                            repairView(for: problem, in: correctionSession)
-                        }
+                            correctionSession: correctionSession,
+                            stageChange: { problem, action in
+                                stageRepair(recordID: problem.id, action: action)
+                            }
+                        )
                     } else if errorMessage == nil {
                         Section("Candidate replay") {
                             ProgressView("Replaying complete history…")
@@ -310,37 +291,16 @@ struct DefensivePitchDeletionView: View {
         }
     }
 
-    private func repairView(
-        for problem: DefensivePitchCorrectionProblem,
-        in correctionSession: DefensivePitchCorrectionSession
-    ) -> some View {
-        DefensivePitchCorrectionProblemView(
-            problem: problem,
-            historyEntry: correctionSession.historyEntry(for: problem.id),
-            stageChange: { stageRepair(recordID: problem.id, action: $0) }
-        )
-    }
-
     private func stageRepair(recordID: UUID, action: DefensivePitchRepairAction) {
         guard let correctionSession else { return }
         do {
-            switch action {
-            case .edit(let result):
-                self.correctionSession = try GameEventCorrection.stagePitchEdit(
-                    recordID: recordID,
-                    result: result,
-                    in: correctionSession,
-                    game: game,
-                    modelContext: modelContext
-                )
-            case .delete:
-                self.correctionSession = try GameEventCorrection.stagePitchDeletion(
-                    recordID: recordID,
-                    in: correctionSession,
-                    game: game,
-                    modelContext: modelContext
-                )
-            }
+            self.correctionSession = try stagingPitchRepair(
+                recordID: recordID,
+                action: action,
+                in: correctionSession,
+                game: game,
+                modelContext: modelContext
+            )
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -356,6 +316,33 @@ private enum DefensivePitchRepairAction {
     case delete
 }
 
+@MainActor
+private func stagingPitchRepair(
+    recordID: UUID,
+    action: DefensivePitchRepairAction,
+    in correctionSession: DefensivePitchCorrectionSession,
+    game: Game,
+    modelContext: ModelContext
+) throws -> DefensivePitchCorrectionSession {
+    switch action {
+    case .edit(let result):
+        try GameEventCorrection.stagePitchEdit(
+            recordID: recordID,
+            result: result,
+            in: correctionSession,
+            game: game,
+            modelContext: modelContext
+        )
+    case .delete:
+        try GameEventCorrection.stagePitchDeletion(
+            recordID: recordID,
+            in: correctionSession,
+            game: game,
+            modelContext: modelContext
+        )
+    }
+}
+
 private extension DefensivePitchCorrectionSession {
     func historyEntry(for recordID: UUID) -> PlayHistoryEntry? {
         snapshot.history.sections
@@ -364,22 +351,25 @@ private extension DefensivePitchCorrectionSession {
     }
 }
 
-private struct DefensivePitchCorrectionSections<ProblemDestination: View>: View {
+private struct DefensivePitchCorrectionSections: View {
     let correctionSession: DefensivePitchCorrectionSession
     let proposedSummary: String?
     let proposedIdentifier: String?
-    let problemDestination: (DefensivePitchCorrectionProblem) -> ProblemDestination
+    let stageChange: (DefensivePitchCorrectionProblem, DefensivePitchRepairAction) -> Void
 
     init(
         correctionSession: DefensivePitchCorrectionSession,
         proposedSummary: String? = nil,
         proposedIdentifier: String? = nil,
-        @ViewBuilder problemDestination: @escaping (DefensivePitchCorrectionProblem) -> ProblemDestination
+        stageChange: @escaping (
+            DefensivePitchCorrectionProblem,
+            DefensivePitchRepairAction
+        ) -> Void
     ) {
         self.correctionSession = correctionSession
         self.proposedSummary = proposedSummary
         self.proposedIdentifier = proposedIdentifier
-        self.problemDestination = problemDestination
+        self.stageChange = stageChange
     }
 
     var body: some View {
@@ -391,7 +381,11 @@ private struct DefensivePitchCorrectionSections<ProblemDestination: View>: View 
 
             if let invalid = correctionSession.firstInvalidRecord {
                 NavigationLink {
-                    problemDestination(invalid)
+                    DefensivePitchCorrectionProblemView(
+                        problem: invalid,
+                        historyEntry: correctionSession.historyEntry(for: invalid.id),
+                        stageChange: { stageChange(invalid, $0) }
+                    )
                 } label: {
                     VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
                         Label(

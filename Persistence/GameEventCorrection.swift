@@ -185,6 +185,21 @@ struct DefensivePitchEditPreview {
     let proposedResult: PitchResult
     let snapshot: LiveGameSnapshot
     let firstInvalidRecord: DefensivePitchCorrectionInvalidRecord?
+    fileprivate let correctionSession: DefensivePitchCorrectionSession?
+
+    init(
+        session: DefensivePitchEditSession,
+        proposedResult: PitchResult,
+        snapshot: LiveGameSnapshot,
+        firstInvalidRecord: DefensivePitchCorrectionInvalidRecord?,
+        correctionSession: DefensivePitchCorrectionSession? = nil
+    ) {
+        self.session = session
+        self.proposedResult = proposedResult
+        self.snapshot = snapshot
+        self.firstInvalidRecord = firstInvalidRecord
+        self.correctionSession = correctionSession
+    }
 
     var canSave: Bool {
         proposedResult != session.originalResult && firstInvalidRecord == nil
@@ -220,6 +235,19 @@ struct DefensivePitchDeletionPreview {
     let session: DefensivePitchDeletionSession
     let snapshot: LiveGameSnapshot
     let firstInvalidRecord: DefensivePitchCorrectionInvalidRecord?
+    fileprivate let correctionSession: DefensivePitchCorrectionSession?
+
+    init(
+        session: DefensivePitchDeletionSession,
+        snapshot: LiveGameSnapshot,
+        firstInvalidRecord: DefensivePitchCorrectionInvalidRecord?,
+        correctionSession: DefensivePitchCorrectionSession? = nil
+    ) {
+        self.session = session
+        self.snapshot = snapshot
+        self.firstInvalidRecord = firstInvalidRecord
+        self.correctionSession = correctionSession
+    }
 
     var canSave: Bool {
         firstInvalidRecord == nil
@@ -558,35 +586,27 @@ enum GameEventCorrection {
             throw GameEventCorrectionError.pitchNotEditable
         }
 
-        let correctionContext = freshContext(from: modelContext)
-        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
-        guard records.map(GameEventRecordRevision.init) == session.expectedTimeline else {
+        let correctionSession = try beginDefensivePitchCorrection(
+            game: game,
+            modelContext: modelContext
+        )
+        guard correctionSession.expectedTimeline == session.expectedTimeline else {
             throw GameEventCorrectionError.staleTimeline
         }
-        let candidateRecords = try replacingPitch(
-            in: records,
-            session: session,
-            with: proposedResult
-        )
-        let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
+        let stagedCorrection = try stagePitchEdit(
+            recordID: session.recordID,
+            result: proposedResult,
+            in: correctionSession,
             game: game,
-            records: candidateRecords,
+            modelContext: modelContext,
             projectBattingLines: projectBattingLines
         )
-        let invalidRecord = snapshot.replay.entries
-            .first(where: { $0.rejection != nil })
-            .map { entry in
-                DefensivePitchCorrectionInvalidRecord(
-                    id: entry.recordID,
-                    sequenceNumber: entry.sequenceNumber,
-                    summary: invalidSummary(for: entry.rejection)
-                )
-            }
         return DefensivePitchEditPreview(
             session: session,
             proposedResult: proposedResult,
-            snapshot: snapshot,
-            firstInvalidRecord: invalidRecord
+            snapshot: stagedCorrection.snapshot,
+            firstInvalidRecord: legacyInvalidRecord(in: stagedCorrection),
+            correctionSession: stagedCorrection
         )
     }
 
@@ -606,38 +626,16 @@ enum GameEventCorrection {
         guard preview.canSave else {
             throw GameEventCorrectionError.invalidCandidate
         }
-
-        let records = try fetchRecords(gameID: game.id, modelContext: modelContext)
-        guard records.map(GameEventRecordRevision.init) == preview.session.expectedTimeline else {
-            throw GameEventCorrectionError.staleTimeline
+        guard let correctionSession = preview.correctionSession else {
+            throw GameEventCorrectionError.invalidCandidate
         }
-        let candidateRecords = try replacingPitch(
-            in: records,
-            session: preview.session,
-            with: preview.proposedResult
-        )
-        let correctedSnapshot = try validatedSnapshot(
+        return try saveDefensivePitchCorrection(
+            correctionSession,
             game: game,
-            records: candidateRecords,
-            projectBattingLines: projectBattingLines
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines,
+            save: save
         )
-        guard let record = records.first(where: { $0.id == preview.session.recordID }) else {
-            throw GameEventCorrectionError.staleTimeline
-        }
-        let encoded = try GameEventCodec.encode(.pitch(PitchEvent(
-            result: preview.proposedResult,
-            pitcherID: preview.session.pitcherID,
-            opponentBatterSlot: preview.session.opponentBatterSlot
-        )))
-        record.kindRawValue = encoded.kind.rawValue
-        record.payload = encoded.payload
-        do {
-            try save(modelContext)
-        } catch {
-            modelContext.rollback()
-            throw error
-        }
-        return correctedSnapshot
     }
 
     static func prepareDefensivePitchDeletion(
@@ -677,30 +675,25 @@ enum GameEventCorrection {
             throw GameEventCorrectionError.gameMismatch
         }
 
-        let correctionContext = freshContext(from: modelContext)
-        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
-        guard records.map(GameEventRecordRevision.init) == session.expectedTimeline else {
+        let correctionSession = try beginDefensivePitchCorrection(
+            game: game,
+            modelContext: modelContext
+        )
+        guard correctionSession.expectedTimeline == session.expectedTimeline else {
             throw GameEventCorrectionError.staleTimeline
         }
-        let candidateRecords = try deletingPitch(in: records, session: session)
-        let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
+        let stagedCorrection = try stagePitchDeletion(
+            recordID: session.recordID,
+            in: correctionSession,
             game: game,
-            records: candidateRecords,
+            modelContext: modelContext,
             projectBattingLines: projectBattingLines
         )
-        let invalidRecord = snapshot.replay.entries
-            .first(where: { $0.rejection != nil })
-            .map { entry in
-                DefensivePitchCorrectionInvalidRecord(
-                    id: entry.recordID,
-                    sequenceNumber: entry.sequenceNumber,
-                    summary: invalidSummary(for: entry.rejection)
-                )
-            }
         return DefensivePitchDeletionPreview(
             session: session,
-            snapshot: snapshot,
-            firstInvalidRecord: invalidRecord
+            snapshot: stagedCorrection.snapshot,
+            firstInvalidRecord: legacyInvalidRecord(in: stagedCorrection),
+            correctionSession: stagedCorrection
         )
     }
 
@@ -717,29 +710,16 @@ enum GameEventCorrection {
         guard preview.canSave else {
             throw GameEventCorrectionError.invalidCandidate
         }
-
-        let correctionContext = freshContext(from: modelContext)
-        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
-        guard records.map(GameEventRecordRevision.init) == preview.session.expectedTimeline else {
-            throw GameEventCorrectionError.staleTimeline
+        guard let correctionSession = preview.correctionSession else {
+            throw GameEventCorrectionError.invalidCandidate
         }
-        let candidateRecords = try deletingPitch(in: records, session: preview.session)
-        let correctedSnapshot = try validatedSnapshot(
+        return try saveDefensivePitchCorrection(
+            correctionSession,
             game: game,
-            records: candidateRecords,
-            projectBattingLines: projectBattingLines
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines,
+            save: save
         )
-        guard let record = records.first(where: { $0.id == preview.session.recordID }) else {
-            throw GameEventCorrectionError.staleTimeline
-        }
-        correctionContext.delete(record)
-        do {
-            try save(correctionContext)
-        } catch {
-            correctionContext.rollback()
-            throw error
-        }
-        return correctedSnapshot
     }
 
     private static func stagePitchChange(
@@ -930,38 +910,18 @@ enum GameEventCorrection {
         }
     }
 
-    private static func replacingPitch(
-        in records: [GameEventRecord],
-        session: DefensivePitchEditSession,
-        with result: PitchResult
-    ) throws -> [GameEventRecord] {
-        guard records.contains(where: { $0.id == session.recordID }) else {
-            throw GameEventCorrectionError.staleTimeline
-        }
-        return try records.map { record in
-            guard record.id == session.recordID else { return record }
-            return try GameEventRecord(
-                id: record.id,
-                gameID: record.gameID,
-                sequenceNumber: record.sequenceNumber,
-                timestamp: record.timestamp,
-                body: .pitch(PitchEvent(
-                    result: result,
-                    pitcherID: session.pitcherID,
-                    opponentBatterSlot: session.opponentBatterSlot
-                ))
-            )
-        }
-    }
-
-    private static func deletingPitch(
-        in records: [GameEventRecord],
-        session: DefensivePitchDeletionSession
-    ) throws -> [GameEventRecord] {
-        guard records.contains(where: { $0.id == session.recordID }) else {
-            throw GameEventCorrectionError.staleTimeline
-        }
-        return records.filter { $0.id != session.recordID }
+    private static func legacyInvalidRecord(
+        in correctionSession: DefensivePitchCorrectionSession
+    ) -> DefensivePitchCorrectionInvalidRecord? {
+        correctionSession.snapshot.replay.entries
+            .first(where: { $0.rejection != nil })
+            .map { entry in
+                DefensivePitchCorrectionInvalidRecord(
+                    id: entry.recordID,
+                    sequenceNumber: entry.sequenceNumber,
+                    summary: invalidSummary(for: entry.rejection)
+                )
+            }
     }
 
     private static func invalidSummary(for rejection: GameEventReplay.Rejection?) -> String {
