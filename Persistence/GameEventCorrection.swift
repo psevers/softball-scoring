@@ -5,12 +5,14 @@ enum UndoLatestAction: Equatable {
     case pitch(PitchResult)
     case ballInPlayResult(BallInPlayOutcome)
     case offensivePitch(OffensivePitchResult)
+    case offensivePlateAppearance(OffensivePlateAppearanceEvent)
 
     var label: String {
         switch self {
         case .pitch(let result): result.label
         case .ballInPlayResult(let outcome): "\(outcome.shortLabel) Result"
         case .offensivePitch(let result): result.label
+        case .offensivePlateAppearance(let plateAppearance): plateAppearance.result.label
         }
     }
 
@@ -18,6 +20,7 @@ enum UndoLatestAction: Equatable {
         switch self {
         case .pitch, .offensivePitch: "Undo Latest Pitch"
         case .ballInPlayResult: "Undo Latest Result"
+        case .offensivePlateAppearance: "Undo Latest Play"
         }
     }
 }
@@ -49,6 +52,7 @@ struct UndoLatestActionCandidate: Identifiable {
         switch action {
         case .pitch, .offensivePitch: "Undo latest pitch?"
         case .ballInPlayResult: "Undo latest result?"
+        case .offensivePlateAppearance: "Undo latest plate appearance?"
         }
     }
 
@@ -82,6 +86,13 @@ struct UndoLatestActionCandidate: Identifiable {
         case .offensivePitch:
             return "Remove \(confirmationMessage) The event-time tracked batter and batting-order size "
                 + "will remain unchanged, and the offensive count will be rebuilt from the remaining event history."
+        case .offensivePlateAppearance(let plateAppearance):
+            let movements = plateAppearance.movements
+                .map { "\($0.source.label) to \($0.destination.label)" }
+                .joined(separator: "; ")
+            return "Remove \(confirmationMessage) Runner movements: \(movements). "
+                + "Runs: \(plateAppearance.countedRunSources.count). RBI: \(plateAppearance.rbi). "
+                + "The game state and batting projection will be rebuilt from the remaining event history."
         }
     }
 }
@@ -175,6 +186,14 @@ enum GameEventCorrection {
             actor = .trackedBatter(pitch.batter, battingOrderSize: pitch.battingOrderSize)
             completedPlateAppearance = false
             precedingPitchSequenceNumber = nil
+        case .offensivePlateAppearance(let plateAppearance):
+            action = .offensivePlateAppearance(plateAppearance)
+            actor = .trackedBatter(
+                plateAppearance.batter,
+                battingOrderSize: plateAppearance.battingOrderSize
+            )
+            completedPlateAppearance = true
+            precedingPitchSequenceNumber = nil
         default:
             throw GameEventCorrectionError.noUndoAvailable
         }
@@ -199,6 +218,7 @@ enum GameEventCorrection {
         _ candidate: UndoLatestActionCandidate,
         game: Game,
         modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project,
         save: Save = { try $0.save() }
     ) throws -> LiveGameSnapshot {
         guard candidate.gameID == game.id else {
@@ -214,7 +234,11 @@ enum GameEventCorrection {
             throw GameEventCorrectionError.staleTimeline
         }
 
-        let correctedSnapshot = try validatedSnapshot(game: game, records: Array(records.dropLast()))
+        let correctedSnapshot = try validatedSnapshot(
+            game: game,
+            records: Array(records.dropLast()),
+            projectBattingLines: projectBattingLines
+        )
         guard let record = records.last else {
             throw GameEventCorrectionError.latestActionChanged
         }
@@ -251,9 +275,14 @@ enum GameEventCorrection {
 
     private static func validatedSnapshot(
         game: Game,
-        records: [GameEventRecord]
+        records: [GameEventRecord],
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
     ) throws -> LiveGameSnapshot {
-        let snapshot = try LiveGameSnapshotLoader.makeSnapshot(game: game, records: records)
+        let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
+            game: game,
+            records: records,
+            projectBattingLines: projectBattingLines
+        )
         guard snapshot.replay.rejectedRecordIDs.isEmpty else {
             throw GameEventCorrectionError.invalidTimeline
         }

@@ -25,6 +25,8 @@ enum LiveGameSnapshotError: LocalizedError {
 
 @MainActor
 enum LiveGameSnapshotLoader {
+    typealias ProjectBattingLines = ([DecodedGameEvent]) throws -> [UUID: BattingLine]
+
     static func load(game: Game, modelContext: ModelContext) throws -> LiveGameSnapshot {
         let gameID = game.id
         let descriptor = FetchDescriptor<GameEventRecord>(
@@ -38,7 +40,11 @@ enum LiveGameSnapshotLoader {
         return try makeSnapshot(game: game, records: records)
     }
 
-    static func makeSnapshot(game: Game, records: [GameEventRecord]) throws -> LiveGameSnapshot {
+    static func makeSnapshot(
+        game: Game,
+        records: [GameEventRecord],
+        projectBattingLines: ProjectBattingLines = BattingStatProjector.project
+    ) throws -> LiveGameSnapshot {
         guard records.allSatisfy({ $0.gameID == game.id }) else {
             throw LiveGameSnapshotError.gameMismatch
         }
@@ -53,7 +59,7 @@ enum LiveGameSnapshotLoader {
         return LiveGameSnapshot(
             records: records,
             replay: replay,
-            battingLines: BattingStatProjector.project(events: replay.acceptedEvents),
+            battingLines: try projectBattingLines(replay.acceptedEvents),
             history: PlayHistoryProjector.project(replay: replay)
         )
     }

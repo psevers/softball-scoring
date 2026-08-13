@@ -252,6 +252,104 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertEqual(currentBatter.label, "Player 01")
     }
 
+    func testUndoTrackedTeamScoringPlateAppearanceRestoresBatterScoreAndBattingLine() {
+        let app = launchApp(atAccessibilityTextSize: true)
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let currentBatter = app.staticTexts["offense.currentBatter"]
+        XCTAssertTrue(currentBatter.waitForExistence(timeout: 3))
+        XCTAssertEqual(currentBatter.label, "Player 01")
+        let homeRun = app.buttons["Home Run"]
+        XCTAssertTrue(scrollUntilHittable(homeRun, in: app))
+        homeRun.tap()
+        XCTAssertTrue(waitForLabel("Player 02", on: currentBatter))
+
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        let undo = app.buttons["history.undoLatestAction"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 3))
+        XCTAssertEqual(undo.label, "Undo Latest Play")
+        undo.tap()
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(
+                format: "label CONTAINS %@",
+                "Top of inning 1, Player 01, batting slot 1 of 14, sequence 1: Home Run"
+            )
+        ).firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Runner movements: Batter to Home")
+        ).firstMatch.exists)
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Runs: 1. RBI: 1")
+        ).firstMatch.exists)
+        app.buttons["Undo Home Run"].tap()
+
+        XCTAssertTrue(app.staticTexts["No Plays Yet"].waitForExistence(timeout: 3))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertTrue(waitForLabel("Player 01", on: currentBatter))
+        XCTAssertTrue(app.staticTexts["Us 0 · Opp 0"].exists)
+        let battingLine = app.otherElements["offense.battingLine"]
+        XCTAssertTrue(scrollUntilHittable(battingLine, in: app))
+        XCTAssertEqual(battingLine.staticTexts["scorebook.stat.pa.value"].label, "0")
+        XCTAssertEqual(battingLine.staticTexts["scorebook.stat.hr.value"].label, "0")
+        XCTAssertEqual(battingLine.staticTexts["scorebook.stat.r.value"].label, "0")
+        XCTAssertEqual(battingLine.staticTexts["scorebook.stat.rbi.value"].label, "0")
+    }
+
+    func testUndoTrackedTeamThirdOutPlateAppearanceRestoresOffensiveHalfAndBatter() {
+        let app = launchApp(atAccessibilityTextSize: true)
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        for expectedBatter in ["Player 02", "Player 03"] {
+            let strikeout = app.buttons["Strikeout"]
+            XCTAssertTrue(scrollUntilHittable(strikeout, in: app))
+            strikeout.tap()
+            XCTAssertTrue(waitForLabel(expectedBatter, on: app.staticTexts["offense.currentBatter"]))
+        }
+        let thirdStrikeout = app.buttons["Strikeout"]
+        XCTAssertTrue(scrollUntilHittable(thirdStrikeout, in: app))
+        thirdStrikeout.tap()
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Pitching · 0 pitches · Opp batter 1")
+        ).firstMatch.waitForExistence(timeout: 3))
+
+        let undo = app.buttons["game.undoLatestAction"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 3))
+        XCTAssertEqual(undo.label, "Undo Latest Play")
+        undo.tap()
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(
+                format: "label CONTAINS %@",
+                "Top of inning 1, Player 03, batting slot 3 of 14, sequence 3: Strikeout"
+            )
+        ).firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Runner movements: Batter to Out")
+        ).firstMatch.exists)
+        app.buttons["Undo Strikeout"].tap()
+
+        let restoredBatter = app.staticTexts["offense.currentBatter"]
+        XCTAssertTrue(restoredBatter.waitForExistence(timeout: 3))
+        XCTAssertEqual(restoredBatter.label, "Player 03")
+        XCTAssertEqual(app.staticTexts["game.count"].label, "0 – 0")
+
+        app.navigationBars["UI Opponent"].buttons.firstMatch.tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertTrue(restoredBatter.waitForExistence(timeout: 3))
+        XCTAssertEqual(restoredBatter.label, "Player 03")
+    }
+
     func testUndoLatestPitchConfirmsCancelsAndRestoresLiveStateFromHistory() {
         let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()

@@ -3,7 +3,7 @@ import Testing
 @testable import SoftballScoring
 
 struct BattingStatProjectorTests {
-    @Test func walkCreditsPlateAppearanceAndWalkWithoutAtBat() {
+    @Test func walkCreditsPlateAppearanceAndWalkWithoutAtBat() throws {
         let batter = TrackedBatterIdentity(
             playerID: UUID(),
             lineupSlot: 1,
@@ -25,7 +25,7 @@ struct BattingStatProjectorTests {
             ))
         )
 
-        let projection = BattingStatProjector.project(events: [event])
+        let projection = try BattingStatProjector.project(events: [event])
 
         #expect(projection[batter.playerID] == BattingLine(
             plateAppearances: 1,
@@ -42,7 +42,7 @@ struct BattingStatProjectorTests {
         ))
     }
 
-    @Test func laterBatterCreditsRunToOriginalRunnerAndRBIToCurrentBatter() {
+    @Test func laterBatterCreditsRunToOriginalRunnerAndRBIToCurrentBatter() throws {
         let runner = batter(slot: 1, name: "Runner")
         let hitter = batter(slot: 2, name: "Hitter")
         let events = [
@@ -65,13 +65,35 @@ struct BattingStatProjectorTests {
             )
         ]
 
-        let projection = BattingStatProjector.project(events: events)
+        let projection = try BattingStatProjector.project(events: events)
 
         #expect(projection[runner.playerID]?.runs == 1)
         #expect(projection[runner.playerID]?.hits == 1)
         #expect(projection[hitter.playerID]?.doubles == 1)
         #expect(projection[hitter.playerID]?.runsBattedIn == 1)
         #expect(projection[hitter.playerID]?.runs == 0)
+    }
+
+    @Test func missingEventTimeRunnerIdentityRejectsProjection() {
+        let hitter = batter(slot: 1, name: "Hitter")
+        let malformedAttribution = event(
+            sequence: 4,
+            batter: hitter,
+            result: .double,
+            movements: [
+                .init(source: .batter, destination: .second),
+                .init(source: .first, destination: .home)
+            ],
+            rbi: 1,
+            countedRunSources: [.first]
+        )
+
+        #expect(throws: BattingStatProjectionError.missingRunnerIdentity(
+            sequenceNumber: 4,
+            source: .first
+        )) {
+            _ = try BattingStatProjector.project(events: [malformedAttribution])
+        }
     }
 
     @Test func everyPlateAppearanceResultProjectsCanonicalCountingStats() throws {
@@ -83,7 +105,7 @@ struct BattingStatProjectorTests {
 
         for result in OffensivePlateAppearanceResult.allCases {
             let batter = batter(slot: 1, name: result.rawValue)
-            let projection = BattingStatProjector.project(events: [event(
+            let projection = try BattingStatProjector.project(events: [event(
                 sequence: 1,
                 batter: batter,
                 result: result,
@@ -118,7 +140,7 @@ struct BattingStatProjectorTests {
                 result: .stolenBase
             ))
         )
-        let projection = BattingStatProjector.project(events: [
+        let projection = try BattingStatProjector.project(events: [
             event(
                 sequence: 1,
                 batter: runner,
