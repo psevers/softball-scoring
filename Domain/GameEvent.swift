@@ -72,6 +72,15 @@ enum OffensivePitchResult: String, CaseIterable, Codable, Identifiable, Sendable
 
     var id: String { rawValue }
 
+    var label: String {
+        switch self {
+        case .ball: "Ball"
+        case .calledStrike: "Called Strike"
+        case .swingingStrike: "Swinging Strike"
+        case .foul: "Foul"
+        }
+    }
+
     var shortLabel: String {
         switch self {
         case .ball: "Ball"

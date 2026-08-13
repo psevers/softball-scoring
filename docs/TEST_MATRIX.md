@@ -64,7 +64,7 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Entries split into event-time top/bottom half-inning sections.
 - Accessibility XL UI coverage opens History from a deterministic live game, reads completed and pending plays, and returns to unchanged live state.
 
-## Undo latest eligible defensive action
+## Undo latest eligible action
 
 - Ball, Called Strike, Swinging Strike, Foul, and HBP candidates restore prior state and pitcher totals through full replay.
 - Bases-loaded ball four restores the three-ball count, completed batter slot, forced runner positions, run, and pitcher totals.
@@ -76,7 +76,11 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Candidate replay succeeds before deletion, save failure rolls back every record, and surviving identity/sequence/timestamp values remain unchanged.
 - A later pitch allocates from the authoritative maximum surviving sequence without collision.
 - A fresh model context and cold-store reload reconstruct terminal-pitch state and pitcher totals identically to the immediate response.
-- Accessibility XL UI coverage verifies a ball-four award path, a third-out strikeout path, and a completed Ball In Play result replacement from Play History, including exact confirmation, cancellation, successful deletion, and refreshed live scoring.
+- Tracked-team Ball, Called Strike, Swinging Strike, and Foul candidates restore the prior offensive count while preserving event-time batter identity and batting-order size; a two-strike foul remains pitcher-independent and restores two strikes.
+- Tracked-team cancellation, stale identity, mismatched-batter replay, and save failure preserve the original timeline and batting projection.
+- Tracked-team surviving IDs, timestamps, and sequence gaps remain stable; later offensive scoring allocates from the authoritative surviving maximum.
+- A fresh model context and cold-store reload reproduce the same tracked batter and offensive count.
+- Accessibility XL UI coverage verifies a ball-four award path, a third-out strikeout path, a completed Ball In Play result replacement, and tracked-team count-pitch undo from Play History, including exact confirmation, cancellation, successful deletion, and refreshed live scoring.
 
 ## Base occupancy matrix for Ball In Play
 
