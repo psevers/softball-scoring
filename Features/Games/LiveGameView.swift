@@ -230,6 +230,7 @@ struct LiveGameView: View {
             .accessibilityLabel(
                 "\(state.half.displayName) of inning \(state.inning). \(awayTeamName) \(state.awayScore), \(homeTeamName) \(state.homeScore)"
             )
+            .accessibilityIdentifier("game.score")
 
             gameStatus
 
@@ -240,6 +241,9 @@ struct LiveGameView: View {
                 .monospacedDigit()
                 .foregroundStyle(AppTheme.graphite.opacity(0.78))
                 .accessibilityLabel("\(state.balls) – \(state.strikes)")
+                .accessibilityValue(
+                    "\(state.outs) \(state.outs == 1 ? "out" : "outs"), \(baseStateSummary)"
+                )
                 .accessibilityHint(
                     "\(state.outs) \(state.outs == 1 ? "out" : "outs"), \(baseStateSummary)"
                 )
@@ -353,6 +357,9 @@ struct LiveGameView: View {
                 .font(.system(.title3, design: .monospaced, weight: .semibold))
                 .monospacedDigit()
                 .accessibilityLabel("Count \(state.balls) and \(state.strikes)")
+                .accessibilityValue(
+                    "\(state.outs) \(state.outs == 1 ? "out" : "outs"), \(baseStateSummary)"
+                )
                 .accessibilityIdentifier("game.count")
 
             HStack(spacing: AppTheme.Spacing.xs) {

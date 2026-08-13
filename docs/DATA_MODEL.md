@@ -55,6 +55,8 @@ An earlier defensive pitch edit replaces only the selected record's encoded pitc
 An earlier defensive pitch deletion removes only the selected record after exact-timeline validation and complete candidate replay. Every survivor retains its ID, game ID, sequence number, and timestamp; the deleted sequence remains a gap and the next append still uses the authoritative maximum surviving sequence plus one.
 A correction session may retain multiple pitch edits and deletions keyed by their original record IDs. Each candidate rebuild preserves original order and envelope metadata for surviving records. Saving applies all payload replacements and deletions through one isolated SwiftData context and one save; no intermediate candidate is durable.
 
+A completed non-scoring defensive Ball In Play correction replaces only the result record payload. Its paired In Play pitch remains unchanged and counted. The replacement keeps the result ID, game ID, sequence number, and timestamp; full replay derives the corrected bases, outs, opponent batter slot, pitcher totals, and later history before Save becomes available.
+
 ### PitchEvent payload
 
 - `result`

@@ -2,6 +2,198 @@ import Observation
 import SwiftData
 import SwiftUI
 
+struct DefensiveBallInPlayEditView: View {
+    private static let supportedOutcomes: [BallInPlayOutcome] = [
+        .single, .double, .triple, .reachedOnError, .fieldersChoice,
+        .groundOut, .flyOut, .lineOut, .popOut, .sacrificeBunt
+    ]
+
+    let game: Game
+    let editSession: DefensiveBallInPlayEditSession
+    let liveSession: LiveGameSession
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @State private var selectedOutcome: BallInPlayOutcome
+    @State private var isConfirmingRunners = false
+    @State private var proposedPlay: BallInPlayEvent?
+    @State private var correction = DefensivePitchCorrectionCoordinator()
+
+    init(
+        game: Game,
+        editSession: DefensiveBallInPlayEditSession,
+        liveSession: LiveGameSession
+    ) {
+        self.game = game
+        self.editSession = editSession
+        self.liveSession = liveSession
+        _selectedOutcome = State(initialValue: editSession.originalPlay.outcome)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Form {
+                    Section("Completed play") {
+                        Text(
+                            "\(editSession.half.displayName) \(editSession.inning) · "
+                                + "Opponent batter \(editSession.opponentBatterSlot) · "
+                                + "Result sequence \(editSession.sequenceNumber)"
+                        )
+                        .font(.body.monospacedDigit())
+                        Text("Ball In Play pitch · Sequence \(editSession.precedingPitchSequenceNumber) · Counted")
+                            .font(.body.monospacedDigit())
+                            .accessibilityIdentifier("playEdit.countedPitch")
+                        Text("Current: \(playSummary(editSession.originalPlay))")
+                            .accessibilityIdentifier("playEdit.current")
+                    }
+
+                    Section("Correct result") {
+                        ForEach(Self.supportedOutcomes) { outcome in
+                            Button {
+                                selectedOutcome = outcome
+                                proposedPlay = nil
+                                correction.session = nil
+                            } label: {
+                                HStack {
+                                    Text(outcome.label)
+                                    Spacer()
+                                    if outcome == selectedOutcome {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                                .frame(minHeight: AppTheme.TouchTarget.minimum)
+                            }
+                            .accessibilityIdentifier("playEdit.outcome.\(outcome.rawValue)")
+                        }
+
+                        Button("Confirm Runner Destinations") {
+                            isConfirmingRunners = true
+                        }
+                        .frame(minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("playEdit.confirmRunners")
+                    }
+
+                    if let proposedPlay, let correctionSession = correction.session {
+                        DefensivePitchCorrectionSections(
+                            correctionSession: correctionSession,
+                            proposedSummary: "Proposed: \(playSummary(proposedPlay)) · "
+                                + stateSummary(correctionSession.snapshot.replay.state),
+                            proposedIdentifier: "playEdit.proposed",
+                            stageChange: { problem, action in
+                                correction.stageRepair(
+                                    recordID: problem.id,
+                                    action: action,
+                                    game: game,
+                                    modelContext: modelContext
+                                )
+                            }
+                        )
+                    }
+                }
+
+                Divider()
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    Button("Cancel") { dismiss() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("playEdit.cancel")
+
+                    Button("Save") { save() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .disabled(correction.session?.canSave != true)
+                        .accessibilityIdentifier("playEdit.save")
+                }
+                .padding(.horizontal, AppTheme.Spacing.md)
+                .padding(.vertical, AppTheme.Spacing.sm)
+                .background(.bar)
+            }
+            .navigationTitle("Edit Play")
+            .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $isConfirmingRunners) {
+                RunnerConfirmationSheet(
+                    outcome: selectedOutcome,
+                    state: editSession.stateBefore,
+                    homeAway: editSession.homeAway,
+                    initialPlay: initialPlay,
+                    allowsScoring: false,
+                    title: "Confirm Correction",
+                    confirmationTitle: "Preview",
+                    onCancel: { isConfirmingRunners = false },
+                    onRecord: stage
+                )
+            }
+            .alert("Play Edit Failed", isPresented: Binding(
+                get: { correction.errorMessage != nil },
+                set: { if !$0 { correction.errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { correction.errorMessage = nil }
+            } message: {
+                Text(correction.errorMessage ?? "The proposed play could not be replayed safely.")
+            }
+        }
+    }
+
+    private var initialPlay: BallInPlayEvent {
+        let movements = proposedPlay?.outcome == selectedOutcome
+            ? proposedPlay?.movements ?? editSession.originalPlay.movements
+            : editSession.originalPlay.movements
+        return BallInPlayEvent(
+            outcome: selectedOutcome,
+            opponentBatterSlot: editSession.opponentBatterSlot,
+            movements: movements,
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+    }
+
+    private func stage(_ play: BallInPlayEvent) {
+        do {
+            let preview = try GameEventCorrection.stageDefensiveBallInPlayEdit(
+                play,
+                in: editSession,
+                game: game,
+                modelContext: modelContext
+            )
+            proposedPlay = play
+            correction.session = preview.correctionSession
+            isConfirmingRunners = false
+        } catch {
+            correction.errorMessage = error.localizedDescription
+        }
+    }
+
+    private func save() {
+        if correction.save(
+            liveSession: liveSession,
+            game: game,
+            modelContext: modelContext
+        ) {
+            dismiss()
+        }
+    }
+
+    private func playSummary(_ play: BallInPlayEvent) -> String {
+        let movements = play.movements
+            .map { "\($0.source.baseLabel) to \($0.destination.label)" }
+            .joined(separator: "; ")
+        return "\(play.outcome.label) · \(movements)"
+    }
+
+    private func stateSummary(_ state: GameState) -> String {
+        let bases = [
+            state.firstBaseRunnerSlot.map { "1B \($0)" },
+            state.secondBaseRunnerSlot.map { "2B \($0)" },
+            state.thirdBaseRunnerSlot.map { "3B \($0)" }
+        ].compactMap { $0 }.joined(separator: ", ")
+        return "Outs \(state.outs) · Bases \(bases.isEmpty ? "empty" : bases) · "
+            + "Opponent batter \(state.currentOpponentBatterSlot)"
+    }
+}
+
 struct DefensivePitchEditView: View {
     private static let supportedResults: [PitchResult] = [
         .ball, .calledStrike, .swingingStrike, .foul
@@ -413,6 +605,11 @@ private struct DefensivePitchCorrectionSections: View {
         }
 
         Section("Staged changes") {
+            ForEach(correctionSession.stagedBallInPlayChanges) { change in
+                Text(change.summary)
+                    .font(.body.monospacedDigit())
+                    .accessibilityIdentifier("correction.change.\(change.sequenceNumber)")
+            }
             ForEach(correctionSession.stagedChanges) { change in
                 Text(change.summary)
                     .font(.body.monospacedDigit())

@@ -117,6 +117,15 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Fresh-context and cold-store reload reproduce the corrected game state, pitcher totals, batting projection, and Play History.
 - Accessibility XXXL UI coverage invalidates a downstream defensive pitch, navigates to it, stages the repair, saves once, and returns to live scoring.
 
+## Completed non-scoring defensive Ball In Play correction
+
+- The persistence/replay boundary replaces a saved result while retaining the paired counted In Play pitch and stable result ID, sequence, and timestamp.
+- Single, double, triple, reached-on-error, fielder's-choice, ordinary-out, and sacrifice-bunt paths replay expected bases, outs, opponent batter slot, and pitcher totals.
+- Existing movement validation rejects missing, duplicate, unexpected, backward, passing, colliding, excess-out, and outcome-inconsistent proposals; home, multi-out, and third-out corrections remain unavailable.
+- An invalid downstream play identifies its exact record and disables Save without mutating durable history.
+- Wrong-game, stale-session, projection, and failed-save paths preserve the original records; fresh-context and cold-store reload reproduce the corrected state.
+- Accessibility XXXL UI coverage distinguishes the counted pitch from the editable result, reconfirms runner destinations, previews state, saves, and reopens the game with corrected bases and outs.
+
 ## Base occupancy matrix for Ball In Play
 
 Exercise outcome confirmation from all eight starting base states:

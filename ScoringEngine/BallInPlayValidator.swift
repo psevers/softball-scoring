@@ -20,6 +20,23 @@ enum BallInPlayValidationError: Error, Equatable, Sendable {
 }
 
 enum BallInPlayValidator {
+    static func supportsNonScoringCorrection(
+        _ play: BallInPlayEvent,
+        stateBefore: GameState
+    ) -> Bool {
+        let supportedOutcomes: Set<BallInPlayOutcome> = [
+            .single, .double, .triple, .reachedOnError, .fieldersChoice,
+            .groundOut, .flyOut, .lineOut, .popOut, .sacrificeBunt
+        ]
+        let outsOnPlay = play.movements.filter { $0.destination == .out }.count
+        return supportedOutcomes.contains(play.outcome)
+            && !play.movements.contains { $0.destination == .home }
+            && play.rbi == 0
+            && play.thirdOutRunsCounted == nil
+            && play.thirdOutClassification == nil
+            && stateBefore.outs + outsOnPlay < 3
+    }
+
     static func validate(
         _ play: BallInPlayEvent,
         state: GameState,

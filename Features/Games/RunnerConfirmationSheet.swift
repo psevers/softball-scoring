@@ -4,6 +4,9 @@ struct RunnerConfirmationSheet: View {
     let outcome: BallInPlayOutcome
     let state: GameState
     let homeAway: HomeAway
+    let allowsScoring: Bool
+    let title: String
+    let confirmationTitle: String
     let onCancel: () -> Void
     let onRecord: (BallInPlayEvent) -> Void
 
@@ -18,19 +21,28 @@ struct RunnerConfirmationSheet: View {
         outcome: BallInPlayOutcome,
         state: GameState,
         homeAway: HomeAway,
+        initialPlay: BallInPlayEvent? = nil,
+        allowsScoring: Bool = true,
+        title: String = "Record Play",
+        confirmationTitle: String = "Record",
         onCancel: @escaping () -> Void,
         onRecord: @escaping (BallInPlayEvent) -> Void
     ) {
         self.outcome = outcome
         self.state = state
         self.homeAway = homeAway
+        self.allowsScoring = allowsScoring
+        self.title = title
+        self.confirmationTitle = confirmationTitle
         self.onCancel = onCancel
         self.onRecord = onRecord
 
-        let suggestions = Self.suggestedDestinations(outcome: outcome, state: state)
+        let suggestions = initialPlay.map { play in
+            Dictionary(uniqueKeysWithValues: play.movements.map { ($0.source, $0.destination) })
+        } ?? Self.suggestedDestinations(outcome: outcome, state: state)
         _destinations = State(initialValue: suggestions)
         let suggestedRuns = suggestions.values.filter { $0 == .home }.count
-        _rbi = State(initialValue: outcome == .reachedOnError ? 0 : suggestedRuns)
+        _rbi = State(initialValue: initialPlay?.rbi ?? (outcome == .reachedOnError ? 0 : suggestedRuns))
     }
 
     private var movements: [RunnerMovementEvent] {
@@ -103,7 +115,8 @@ struct RunnerConfirmationSheet: View {
                             }
                         }
 
-                        ScorebookPageSection(dynamicTypeSize.isAccessibilitySize ? nil : "Scoring") {
+                        if allowsScoring {
+                            ScorebookPageSection(dynamicTypeSize.isAccessibilitySize ? nil : "Scoring") {
                             ScorebookLedgerRow {
                                 Stepper("RBI  \(rbi)", value: $rbi, in: 0...maximumRBI)
                                     .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.notation)
@@ -128,6 +141,7 @@ struct RunnerConfirmationSheet: View {
                                             .foregroundStyle(AppTheme.graphite.opacity(0.68))
                                     }
                                 }
+                            }
                             }
                         }
 
@@ -159,14 +173,14 @@ struct RunnerConfirmationSheet: View {
                     ScorebookMarginRule()
                 }
             }
-            .navigationTitle("Record Play")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", action: onCancel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Record") { validateAndRecord() }
+                    Button(confirmationTitle) { validateAndRecord() }
                         .fontWeight(.semibold)
                 }
             }
@@ -235,7 +249,7 @@ struct RunnerConfirmationSheet: View {
     }
 
     private func legalDestinations(for source: RunnerSource) -> [RunnerDestination] {
-        switch source {
+        let destinations: [RunnerDestination] = switch source {
         case .batter, .first:
             RunnerDestination.allCases
         case .second:
@@ -243,6 +257,7 @@ struct RunnerConfirmationSheet: View {
         case .third:
             [.third, .home, .out]
         }
+        return allowsScoring ? destinations : destinations.filter { $0 != .home }
     }
 
     private func validateAndRecord() {
