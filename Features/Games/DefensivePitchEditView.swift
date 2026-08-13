@@ -147,18 +147,12 @@ struct DefensivePitchEditView: View {
     }
 
     private func save() {
-        guard let correctionSession = correction.session, correctionSession.canSave else {
-            return
-        }
-        do {
-            try liveSession.saveDefensivePitchCorrection(
-                correctionSession,
-                game: game,
-                modelContext: modelContext
-            )
+        if correction.save(
+            liveSession: liveSession,
+            game: game,
+            modelContext: modelContext
+        ) {
             dismiss()
-        } catch {
-            correction.errorMessage = error.localizedDescription
         }
     }
 
@@ -280,18 +274,12 @@ struct DefensivePitchDeletionView: View {
     }
 
     private func save() {
-        guard let correctionSession = correction.session, correctionSession.canSave else {
-            return
-        }
-        do {
-            try liveSession.saveDefensivePitchCorrection(
-                correctionSession,
-                game: game,
-                modelContext: modelContext
-            )
+        if correction.save(
+            liveSession: liveSession,
+            game: game,
+            modelContext: modelContext
+        ) {
             dismiss()
-        } catch {
-            correction.errorMessage = error.localizedDescription
         }
     }
 
@@ -338,6 +326,26 @@ private final class DefensivePitchCorrectionCoordinator {
             }
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    func save(
+        liveSession: LiveGameSession,
+        game: Game,
+        modelContext: ModelContext
+    ) -> Bool {
+        guard let session, session.canSave else { return false }
+        do {
+            try liveSession.saveDefensivePitchCorrection(
+                session,
+                game: game,
+                modelContext: modelContext
+            )
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
         }
     }
 }
