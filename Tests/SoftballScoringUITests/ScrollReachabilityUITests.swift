@@ -154,6 +154,55 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(app.buttons["game.history"].isHittable)
     }
 
+    func testUndoBallInPlayResultRecordsReplacementAndRefreshesLiveState() {
+        let app = launchApp(atAccessibilityTextSize: true)
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Ball In Play Undo Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        XCTAssertTrue(app.staticTexts["Pitching · 1 pitches · Opp batter 2"].waitForExistence(timeout: 3))
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        let completedSingle = app.buttons["history.entry.1"]
+        XCTAssertTrue(completedSingle.waitForExistence(timeout: 3))
+        XCTAssertTrue(completedSingle.label.contains("1B · Batter to 1B"))
+
+        let undo = app.buttons["history.undoLatestAction"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 3))
+        XCTAssertEqual(undo.label, "Undo Latest Result")
+        undo.tap()
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "sequence 2: 1B Result")
+        ).firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Only the completed Single result will be removed")
+        ).firstMatch.exists)
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Ball In Play pitch at sequence 1 will remain counted")
+        ).firstMatch.exists)
+        app.buttons["Undo 1B Result"].tap()
+
+        let pendingPlay = app.buttons["history.entry.1"]
+        XCTAssertTrue(pendingPlay.waitForExistence(timeout: 3))
+        XCTAssertTrue(pendingPlay.label.contains("Ball In Play · Pending"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+
+        XCTAssertTrue(app.staticTexts["What happened?"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["The pitch is already counted. Finish this play before scoring the next pitch."].exists)
+        app.buttons["2B"].tap()
+        XCTAssertTrue(app.navigationBars["Record Play"].waitForExistence(timeout: 3))
+        app.buttons["Record"].tap()
+
+        XCTAssertTrue(app.staticTexts["Pitching · 1 pitches · Opp batter 2"].waitForExistence(timeout: 3))
+        app.buttons["game.history"].tap()
+        let correctedDouble = app.buttons["history.entry.1"]
+        XCTAssertTrue(correctedDouble.waitForExistence(timeout: 3))
+        XCTAssertTrue(correctedDouble.label.contains("2B · Batter to 2B"))
+    }
+
     func testUndoLatestPitchConfirmsCancelsAndRestoresLiveStateFromHistory() {
         let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()
@@ -168,7 +217,7 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertEqual(count.label, "0 – 0")
         XCTAssertTrue(app.staticTexts["Pitching · 4 pitches · Opp batter 2"].exists)
 
-        let liveUndo = app.buttons["game.undoLatestPitch"]
+        let liveUndo = app.buttons["game.undoLatestAction"]
         XCTAssertTrue(liveUndo.waitForExistence(timeout: 3))
         XCTAssertGreaterThanOrEqual(liveUndo.frame.height, 44)
         liveUndo.tap()
@@ -184,19 +233,19 @@ final class ScrollReachabilityUITests: XCTestCase {
 
         app.buttons["game.history"].tap()
         XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
-        let historyUndo = app.buttons["history.undoLatestPitch"]
+        let historyUndo = app.buttons["history.undoLatestAction"]
         XCTAssertTrue(historyUndo.waitForExistence(timeout: 3))
         XCTAssertGreaterThanOrEqual(historyUndo.frame.height, 44)
         historyUndo.tap()
         XCTAssertTrue(app.buttons["Undo Ball"].waitForExistence(timeout: 3))
         app.buttons["Undo Ball"].tap()
-        XCTAssertTrue(app.buttons["history.undoLatestPitch"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["history.undoLatestAction"].waitForExistence(timeout: 3))
 
         app.navigationBars["Play History"].buttons.firstMatch.tap()
         XCTAssertTrue(count.waitForExistence(timeout: 3))
         XCTAssertEqual(count.label, "3 – 0")
         XCTAssertTrue(app.staticTexts["Pitching · 3 pitches · Opp batter 1"].exists)
-        XCTAssertTrue(app.buttons["game.undoLatestPitch"].isHittable)
+        XCTAssertTrue(app.buttons["game.undoLatestAction"].isHittable)
     }
 
     func testUndoThirdOutStrikeoutRestoresDefensiveHalfInning() {
@@ -209,7 +258,7 @@ final class ScrollReachabilityUITests: XCTestCase {
         liveGame.tap()
 
         XCTAssertTrue(app.staticTexts["offense.currentBatter"].waitForExistence(timeout: 3))
-        let undo = app.buttons["game.undoLatestPitch"]
+        let undo = app.buttons["game.undoLatestAction"]
         XCTAssertTrue(undo.waitForExistence(timeout: 3))
         undo.tap()
         XCTAssertTrue(app.staticTexts.matching(

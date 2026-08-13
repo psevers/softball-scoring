@@ -120,6 +120,45 @@ enum UITestData {
             ))
         ))
 
+        let ballInPlayUndoGame = Game(
+            seasonID: season.id,
+            opponentName: "UI Ball In Play Undo Opponent",
+            gameDate: Date(timeIntervalSince1970: 1_786_346_800),
+            homeAway: .home,
+            status: .inProgress,
+            startingPitcherID: activePlayers[0].id,
+            startedAt: Date(timeIntervalSince1970: 1_786_346_800)
+        )
+        context.insert(ballInPlayUndoGame)
+        for (index, player) in activePlayers.enumerated() {
+            context.insert(LineupEntry(
+                playerID: player.id,
+                battingOrder: index + 1,
+                startingPosition: positions[index],
+                gameID: ballInPlayUndoGame.id
+            ))
+        }
+        context.insert(try GameEventRecord(
+            gameID: ballInPlayUndoGame.id,
+            sequenceNumber: 1,
+            body: .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: activePlayers[0].id,
+                opponentBatterSlot: 1
+            ))
+        ))
+        context.insert(try GameEventRecord(
+            gameID: ballInPlayUndoGame.id,
+            sequenceNumber: 2,
+            body: .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ))
+        ))
+
         let undoGame = Game(
             seasonID: season.id,
             opponentName: "UI Undo Opponent",

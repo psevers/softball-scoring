@@ -82,7 +82,7 @@ struct LiveGameView: View {
 
                     if session.undoCandidate != nil {
                         ScorebookLedgerRow {
-                            undoLatestPitchButton(identifier: "game.undoLatestPitch")
+                            undoLatestActionButton(identifier: "game.undoLatestAction")
                         }
                     }
 
@@ -120,12 +120,12 @@ struct LiveGameView: View {
             session.refresh(game: game, modelContext: modelContext)
         }
         .alert(
-            "Undo latest pitch?",
+            session.undoCandidate?.confirmationTitle ?? "Undo latest action?",
             isPresented: $isConfirmingUndo,
             presenting: session.undoCandidate
         ) { candidate in
-            Button("Undo \(candidate.result.label)", role: .destructive) {
-                undoLatestPitch(candidate)
+            Button("Undo \(candidate.action.label)", role: .destructive) {
+                undoLatestAction(candidate)
             }
             Button("Cancel", role: .cancel) {}
         } message: { candidate in
@@ -730,9 +730,9 @@ struct LiveGameView: View {
         }
     }
 
-    private func undoLatestPitch(_ candidate: UndoLatestPitchCandidate) {
+    private func undoLatestAction(_ candidate: UndoLatestActionCandidate) {
         do {
-            try session.undoLatestPitch(
+            try session.undoLatestAction(
                 candidate,
                 game: game,
                 modelContext: modelContext
@@ -744,8 +744,11 @@ struct LiveGameView: View {
         }
     }
 
-    private func undoLatestPitchButton(identifier: String) -> some View {
-        UndoLatestPitchButton(identifier: identifier) {
+    private func undoLatestActionButton(identifier: String) -> some View {
+        UndoLatestActionButton(
+            title: session.undoCandidate?.action.buttonTitle ?? "Undo Latest Action",
+            identifier: identifier
+        ) {
             isConfirmingUndo = true
         }
     }

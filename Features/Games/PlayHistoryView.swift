@@ -23,7 +23,7 @@ struct PlayHistoryView: View {
                     )
 
                     if session.undoCandidate != nil {
-                        undoLatestPitchButton
+                        undoLatestActionButton
                     }
 
                     historyContent
@@ -44,12 +44,12 @@ struct PlayHistoryView: View {
             session.refresh(game: game, modelContext: modelContext)
         }
         .alert(
-            "Undo latest pitch?",
+            session.undoCandidate?.confirmationTitle ?? "Undo latest action?",
             isPresented: $isConfirmingUndo,
             presenting: session.undoCandidate
         ) { candidate in
-            Button("Undo \(candidate.result.label)", role: .destructive) {
-                undoLatestPitch(candidate)
+            Button("Undo \(candidate.action.label)", role: .destructive) {
+                undoLatestAction(candidate)
             }
             Button("Cancel", role: .cancel) {}
         } message: { candidate in
@@ -61,7 +61,7 @@ struct PlayHistoryView: View {
         )) {
             Button("OK", role: .cancel) { correctionError = nil }
         } message: {
-            Text(correctionError ?? "The pitch could not be removed.")
+            Text(correctionError ?? "The scoring action could not be removed.")
         }
     }
 
@@ -191,15 +191,18 @@ struct PlayHistoryView: View {
         entry.isProblem ? AppTheme.destructive : AppTheme.graphite
     }
 
-    private var undoLatestPitchButton: some View {
-        UndoLatestPitchButton(identifier: "history.undoLatestPitch") {
+    private var undoLatestActionButton: some View {
+        UndoLatestActionButton(
+            title: session.undoCandidate?.action.buttonTitle ?? "Undo Latest Action",
+            identifier: "history.undoLatestAction"
+        ) {
             isConfirmingUndo = true
         }
     }
 
-    private func undoLatestPitch(_ candidate: UndoLatestPitchCandidate) {
+    private func undoLatestAction(_ candidate: UndoLatestActionCandidate) {
         do {
-            try session.undoLatestPitch(
+            try session.undoLatestAction(
                 candidate,
                 game: game,
                 modelContext: modelContext

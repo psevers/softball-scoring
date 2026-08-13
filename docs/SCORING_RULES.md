@@ -112,7 +112,7 @@ Opponent slots rotate 1...9. Completing a PA advances the slot; 9 wraps to 1.
 ## Event invariants
 
 - Persisted events are authoritative history.
-- Undo latest defensive pitch removes only the latest persisted Ball, Called Strike, Swinging Strike, Foul, or HBP after exact-timeline validation. Replaying the surviving timeline restores count and pitcher totals; for ball four, strike three, and HBP it also restores batter slot, runners, score, outs, and half-inning together. No derived value is reverse-mutated.
+- Undo latest defensive action removes only the latest persisted Ball, Called Strike, Swinging Strike, Foul, HBP, or completed Ball In Play result after exact-timeline validation. Replaying the surviving timeline restores count and pitcher totals; for ball four, strike three, and HBP it also restores batter slot, runners, score, outs, and half-inning together. Undoing a completed Ball In Play removes its result record only, preserves the counted In Play pitch, and restores the pre-result bases, outs, score, opponent batter slot, pitcher totals, and pending-result state. No derived value is reverse-mutated.
 - Sequence numbers are positive and unique.
 - Same ordered valid history → same `GameState`.
 - Pitch must match current opponent batter and current pitcher contract.

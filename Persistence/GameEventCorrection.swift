@@ -1,29 +1,64 @@
 import Foundation
 import SwiftData
 
-struct UndoLatestPitchCandidate: Identifiable {
+enum UndoLatestAction: Equatable {
+    case pitch(PitchResult)
+    case ballInPlayResult(BallInPlayOutcome)
+
+    var label: String {
+        switch self {
+        case .pitch(let result): result.label
+        case .ballInPlayResult(let outcome): "\(outcome.shortLabel) Result"
+        }
+    }
+
+    var buttonTitle: String {
+        switch self {
+        case .pitch: "Undo Latest Pitch"
+        case .ballInPlayResult: "Undo Latest Result"
+        }
+    }
+}
+
+struct UndoLatestActionCandidate: Identifiable {
     let id: UUID
     let gameID: UUID
     let sequenceNumber: Int
     let inning: Int
     let half: InningHalf
     let opponentBatterSlot: Int
-    let result: PitchResult
+    let action: UndoLatestAction
     let completedPlateAppearance: Bool
+    let precedingBallInPlayPitchSequenceNumber: Int?
 
     fileprivate let expectedTimeline: [GameEventRecordRevision]
 
+    var confirmationTitle: String {
+        switch action {
+        case .pitch: "Undo latest pitch?"
+        case .ballInPlayResult: "Undo latest result?"
+        }
+    }
+
     var confirmationMessage: String {
         "\(half.displayName) of inning \(inning), opponent batting slot \(opponentBatterSlot), "
-            + "sequence \(sequenceNumber): \(result.label)."
+            + "sequence \(sequenceNumber): \(action.label)."
     }
 
     var confirmationDetail: String {
-        let completedPlateAppearanceDetail = completedPlateAppearance
-            ? " This pitch completed the plate appearance for opponent batting slot \(opponentBatterSlot)."
-            : ""
-        return "Remove \(confirmationMessage)\(completedPlateAppearanceDetail) "
-            + "The game state and pitcher totals will be rebuilt from the remaining event history."
+        switch action {
+        case .pitch:
+            let completedPlateAppearanceDetail = completedPlateAppearance
+                ? " This pitch completed the plate appearance for opponent batting slot \(opponentBatterSlot)."
+                : ""
+            return "Remove \(confirmationMessage)\(completedPlateAppearanceDetail) "
+                + "The game state and pitcher totals will be rebuilt from the remaining event history."
+        case .ballInPlayResult(let outcome):
+            let pitchSequence = precedingBallInPlayPitchSequenceNumber.map(String.init) ?? "unknown"
+            return "Remove \(confirmationMessage) Only the completed \(outcome.label) result will be removed. "
+                + "The preceding Ball In Play pitch at sequence \(pitchSequence) will remain counted, "
+                + "and the game will return to pending outcome entry."
+        }
     }
 }
 
@@ -39,7 +74,7 @@ enum GameEventCorrectionError: LocalizedError {
         case .gameMismatch:
             "This undo action belongs to a different game."
         case .noUndoAvailable:
-            "The latest scoring action is not a defensive pitch that can be undone."
+            "The latest scoring action cannot be undone."
         case .invalidTimeline:
             "The remaining game history could not be replayed safely."
         case .latestActionChanged:
@@ -72,42 +107,64 @@ private struct GameEventRecordRevision: Equatable {
 enum GameEventCorrection {
     typealias Save = (ModelContext) throws -> Void
 
-    static func prepareUndoLatestPitch(
+    static func prepareUndoLatestAction(
         game: Game,
         modelContext: ModelContext
-    ) throws -> UndoLatestPitchCandidate {
+    ) throws -> UndoLatestActionCandidate {
         let correctionContext = freshContext(from: modelContext)
         let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
         let snapshot = try validatedSnapshot(game: game, records: records)
         guard let latestRecord = records.last,
               let latestEntry = snapshot.replay.entries.last,
               latestEntry.recordID == latestRecord.id,
-              latestEntry.rejection == nil,
-              case .pitch(let pitch) = latestEntry.body,
-              isUndoEligiblePitch(pitch.result) else {
+              latestEntry.rejection == nil else {
+            throw GameEventCorrectionError.noUndoAvailable
+        }
+
+        let action: UndoLatestAction
+        let completedPlateAppearance: Bool
+        let precedingPitchSequenceNumber: Int?
+        switch latestEntry.body {
+        case .pitch(let pitch) where isUndoEligiblePitch(pitch.result):
+            action = .pitch(pitch.result)
+            completedPlateAppearance = completesPlateAppearance(
+                pitch.result,
+                stateBefore: latestEntry.stateBefore
+            )
+            precedingPitchSequenceNumber = nil
+        case .ballInPlay(let play):
+            guard let precedingEntry = snapshot.replay.entries.dropLast().last,
+                  precedingEntry.rejection == nil,
+                  case .pitch(let pitch) = precedingEntry.body,
+                  pitch.result == .ballInPlay,
+                  pitch.opponentBatterSlot == play.opponentBatterSlot else {
+                throw GameEventCorrectionError.invalidTimeline
+            }
+            action = .ballInPlayResult(play.outcome)
+            completedPlateAppearance = true
+            precedingPitchSequenceNumber = precedingEntry.sequenceNumber
+        default:
             throw GameEventCorrectionError.noUndoAvailable
         }
 
         _ = try validatedSnapshot(game: game, records: Array(records.dropLast()))
 
-        return UndoLatestPitchCandidate(
+        return UndoLatestActionCandidate(
             id: latestRecord.id,
             gameID: game.id,
             sequenceNumber: latestRecord.sequenceNumber,
             inning: latestEntry.stateBefore.inning,
             half: latestEntry.stateBefore.half,
-            opponentBatterSlot: pitch.opponentBatterSlot,
-            result: pitch.result,
-            completedPlateAppearance: completesPlateAppearance(
-                pitch.result,
-                stateBefore: latestEntry.stateBefore
-            ),
+            opponentBatterSlot: latestEntry.stateBefore.currentOpponentBatterSlot,
+            action: action,
+            completedPlateAppearance: completedPlateAppearance,
+            precedingBallInPlayPitchSequenceNumber: precedingPitchSequenceNumber,
             expectedTimeline: records.map(GameEventRecordRevision.init)
         )
     }
 
-    static func undoLatestPitch(
-        _ candidate: UndoLatestPitchCandidate,
+    static func undoLatestAction(
+        _ candidate: UndoLatestActionCandidate,
         game: Game,
         modelContext: ModelContext,
         save: Save = { try $0.save() }
@@ -125,8 +182,7 @@ enum GameEventCorrection {
             throw GameEventCorrectionError.staleTimeline
         }
 
-        let survivingRecords = Array(records.dropLast())
-        let correctedSnapshot = try validatedSnapshot(game: game, records: survivingRecords)
+        let correctedSnapshot = try validatedSnapshot(game: game, records: Array(records.dropLast()))
         guard let record = records.last else {
             throw GameEventCorrectionError.latestActionChanged
         }
