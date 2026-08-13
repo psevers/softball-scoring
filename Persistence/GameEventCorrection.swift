@@ -140,6 +140,43 @@ struct DefensivePitchEditPreview {
     }
 }
 
+struct DefensivePitchDeletionSession: Identifiable {
+    var id: UUID { recordID }
+
+    let recordID: UUID
+    let gameID: UUID
+    let sequenceNumber: Int
+    let inning: Int
+    let half: InningHalf
+    let opponentBatterSlot: Int
+    let pitcherID: UUID
+    let originalResult: PitchResult
+    let stateBefore: GameState
+    let originalStateAfter: GameState
+
+    fileprivate let expectedTimeline: [GameEventRecordRevision]
+
+    var confirmationTitle: String {
+        "Delete \(originalResult.label) pitch?"
+    }
+
+    var confirmationDetail: String {
+        "\(half.displayName) of inning \(inning), opponent batting slot "
+            + "\(opponentBatterSlot), sequence \(sequenceNumber): \(originalResult.label). "
+            + "The deletion remains staged until Save."
+    }
+}
+
+struct DefensivePitchDeletionPreview {
+    let session: DefensivePitchDeletionSession
+    let snapshot: LiveGameSnapshot
+    let firstInvalidRecord: DefensivePitchEditInvalidRecord?
+
+    var canSave: Bool {
+        firstInvalidRecord == nil
+    }
+}
+
 enum GameEventCorrectionError: LocalizedError {
     case gameMismatch
     case noUndoAvailable
@@ -441,6 +478,109 @@ enum GameEventCorrection {
         return correctedSnapshot
     }
 
+    static func prepareDefensivePitchDeletion(
+        recordID: UUID,
+        game: Game,
+        modelContext: ModelContext
+    ) throws -> DefensivePitchDeletionSession {
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        let snapshot = try validatedSnapshot(game: game, records: records)
+        guard let record = records.first(where: { $0.id == recordID }),
+              let entry = snapshot.replay.entries.first(where: { $0.recordID == recordID }),
+              case .pitch(let pitch) = entry.body else {
+            throw GameEventCorrectionError.pitchNotEditable
+        }
+
+        return DefensivePitchDeletionSession(
+            recordID: record.id,
+            gameID: game.id,
+            sequenceNumber: record.sequenceNumber,
+            inning: entry.stateBefore.inning,
+            half: entry.stateBefore.half,
+            opponentBatterSlot: pitch.opponentBatterSlot,
+            pitcherID: pitch.pitcherID,
+            originalResult: pitch.result,
+            stateBefore: entry.stateBefore,
+            originalStateAfter: entry.stateAfter,
+            expectedTimeline: records.map(GameEventRecordRevision.init)
+        )
+    }
+
+    static func stageDefensivePitchDeletion(
+        _ session: DefensivePitchDeletionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
+    ) throws -> DefensivePitchDeletionPreview {
+        guard session.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        guard records.map(GameEventRecordRevision.init) == session.expectedTimeline else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        let candidateRecords = try deletingPitch(in: records, session: session)
+        let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
+            game: game,
+            records: candidateRecords,
+            projectBattingLines: projectBattingLines
+        )
+        let invalidRecord = snapshot.replay.entries
+            .first(where: { $0.rejection != nil })
+            .map { entry in
+                DefensivePitchEditInvalidRecord(
+                    id: entry.recordID,
+                    sequenceNumber: entry.sequenceNumber,
+                    summary: invalidSummary(for: entry.rejection)
+                )
+            }
+        return DefensivePitchDeletionPreview(
+            session: session,
+            snapshot: snapshot,
+            firstInvalidRecord: invalidRecord
+        )
+    }
+
+    static func saveDefensivePitchDeletion(
+        _ preview: DefensivePitchDeletionPreview,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project,
+        save: Save = { try $0.save() }
+    ) throws -> LiveGameSnapshot {
+        guard preview.session.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        guard preview.canSave else {
+            throw GameEventCorrectionError.invalidCandidate
+        }
+
+        let records = try fetchRecords(gameID: game.id, modelContext: modelContext)
+        guard records.map(GameEventRecordRevision.init) == preview.session.expectedTimeline else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        let candidateRecords = try deletingPitch(in: records, session: preview.session)
+        let correctedSnapshot = try validatedSnapshot(
+            game: game,
+            records: candidateRecords,
+            projectBattingLines: projectBattingLines
+        )
+        guard let record = records.first(where: { $0.id == preview.session.recordID }) else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        modelContext.delete(record)
+        do {
+            try save(modelContext)
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
+        return correctedSnapshot
+    }
+
     private static func freshContext(from modelContext: ModelContext) -> ModelContext {
         let context = ModelContext(modelContext.container)
         context.autosaveEnabled = false
@@ -513,6 +653,16 @@ enum GameEventCorrection {
                 ))
             )
         }
+    }
+
+    private static func deletingPitch(
+        in records: [GameEventRecord],
+        session: DefensivePitchDeletionSession
+    ) throws -> [GameEventRecord] {
+        guard records.contains(where: { $0.id == session.recordID }) else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        return records.filter { $0.id != session.recordID }
     }
 
     private static func invalidSummary(for rejection: GameEventReplay.Rejection?) -> String {

@@ -95,6 +95,17 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Fresh-context and cold-store reload reproduce corrected count, pitcher totals, record identity, and History.
 - Accessibility XL UI coverage verifies exact current/proposed event-time summaries, reachable 44-point actions, Cancel, valid Save, refreshed History/live state, and reopen persistence.
 
+## Earlier defensive pitch deletion
+
+- Every defensive pitch component exposes an explicit Delete action with exact inning, half, opponent slot, result, and sequence confirmation.
+- Staging removes only the selected record from the in-memory candidate and replays/projects the complete remaining timeline without durable mutation.
+- The first invalid downstream record disables Save; candidate rejection leaves every original record unchanged.
+- Wrong-game, stale-timeline, projection-failure, and save-failure paths preserve every original record.
+- Valid Save atomically deletes only the selected record; survivor IDs, sequence numbers, and timestamps remain unchanged with a sequence gap.
+- The next scoring write uses the maximum authoritative surviving sequence plus one.
+- Fresh-context and cold-store reload reproduce corrected count, pitcher totals, later game state, and History.
+- Accessibility XXXL UI coverage verifies exact confirmation, Cancel, replay preview, Save, refreshed live state, and reopen persistence.
+
 ## Base occupancy matrix for Ball In Play
 
 Exercise outcome confirmation from all eight starting base states:
