@@ -13,7 +13,7 @@ struct DefensivePitchEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var selectedResult: PitchResult
-    @State private var preview: DefensivePitchEditPreview?
+    @State private var correctionSession: DefensivePitchCorrectionSession?
     @State private var errorMessage: String?
 
     init(
@@ -63,39 +63,14 @@ struct DefensivePitchEditView: View {
                         }
                     }
 
-                    if let preview {
-                        Section("Candidate replay") {
-                            Text(
-                                "Proposed: \(preview.proposedResult.label) · "
-                                    + countDescription(proposedState(in: preview))
-                            )
-                            .accessibilityIdentifier("pitchEdit.proposed")
-
-                            if let invalid = preview.firstInvalidRecord {
-                                Label(
-                                    "Sequence \(invalid.sequenceNumber): \(invalid.summary)",
-                                    systemImage: "exclamationmark.triangle.fill"
-                                )
-                                .foregroundStyle(AppTheme.destructive)
-                            } else {
-                                Label(
-                                    "Candidate timeline replays cleanly",
-                                    systemImage: "checkmark.circle"
-                                )
-                            }
-                        }
-
-                        Section("Preview") {
-                            ForEach(preview.snapshot.history.sections) { section in
-                                VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
-                                    Text(section.title)
-                                        .font(.caption.bold())
-                                    ForEach(section.entries) { entry in
-                                        Text("\(entry.actor): \(entry.summary)")
-                                            .font(.body)
-                                    }
-                                }
-                            }
+                    if let correctionSession {
+                        DefensivePitchCorrectionSections(
+                            correctionSession: correctionSession,
+                            proposedSummary: "Proposed: \(selectedResult.label) · "
+                                + countDescription(proposedState(in: correctionSession)),
+                            proposedIdentifier: "pitchEdit.proposed"
+                        ) { problem in
+                            repairView(for: problem, in: correctionSession)
                         }
                     }
                 }
@@ -118,7 +93,7 @@ struct DefensivePitchEditView: View {
                             maxWidth: .infinity,
                             minHeight: AppTheme.TouchTarget.minimum
                         )
-                        .disabled(preview?.canSave != true)
+                        .disabled(correctionSession?.canSave != true)
                         .accessibilityIdentifier("pitchEdit.save")
                 }
                 .padding(.horizontal, AppTheme.Spacing.md)
@@ -141,27 +116,32 @@ struct DefensivePitchEditView: View {
     private func select(_ result: PitchResult) {
         selectedResult = result
         guard result != editSession.originalResult else {
-            preview = nil
+            correctionSession = nil
             return
         }
         do {
-            preview = try GameEventCorrection.stageDefensivePitchEdit(
-                result,
-                in: editSession,
+            let session = try GameEventCorrection.beginDefensivePitchCorrection(
+                game: game,
+                modelContext: modelContext
+            )
+            correctionSession = try GameEventCorrection.stagePitchEdit(
+                recordID: editSession.recordID,
+                result: result,
+                in: session,
                 game: game,
                 modelContext: modelContext
             )
         } catch {
-            preview = nil
+            correctionSession = nil
             errorMessage = error.localizedDescription
         }
     }
 
     private func save() {
-        guard let preview, preview.canSave else { return }
+        guard let correctionSession, correctionSession.canSave else { return }
         do {
-            try liveSession.saveDefensivePitchEdit(
-                preview,
+            try liveSession.saveDefensivePitchCorrection(
+                correctionSession,
                 game: game,
                 modelContext: modelContext
             )
@@ -171,10 +151,46 @@ struct DefensivePitchEditView: View {
         }
     }
 
-    private func proposedState(in preview: DefensivePitchEditPreview) -> GameState {
-        preview.snapshot.replay.entries.first(where: {
+    private func proposedState(in correctionSession: DefensivePitchCorrectionSession) -> GameState {
+        correctionSession.snapshot.replay.entries.first(where: {
             $0.recordID == editSession.recordID
-        })?.stateAfter ?? preview.snapshot.replay.state
+        })?.stateAfter ?? correctionSession.snapshot.replay.state
+    }
+
+    private func repairView(
+        for problem: DefensivePitchCorrectionProblem,
+        in correctionSession: DefensivePitchCorrectionSession
+    ) -> some View {
+        DefensivePitchCorrectionProblemView(
+            problem: problem,
+            historyEntry: correctionSession.historyEntry(for: problem.id),
+            stageChange: { stageRepair(recordID: problem.id, action: $0) }
+        )
+    }
+
+    private func stageRepair(recordID: UUID, action: DefensivePitchRepairAction) {
+        guard let correctionSession else { return }
+        do {
+            switch action {
+            case .edit(let result):
+                self.correctionSession = try GameEventCorrection.stagePitchEdit(
+                    recordID: recordID,
+                    result: result,
+                    in: correctionSession,
+                    game: game,
+                    modelContext: modelContext
+                )
+            case .delete:
+                self.correctionSession = try GameEventCorrection.stagePitchDeletion(
+                    recordID: recordID,
+                    in: correctionSession,
+                    game: game,
+                    modelContext: modelContext
+                )
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func countDescription(_ state: GameState) -> String {
@@ -189,7 +205,7 @@ struct DefensivePitchDeletionView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @State private var preview: DefensivePitchDeletionPreview?
+    @State private var correctionSession: DefensivePitchCorrectionSession?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -210,33 +226,11 @@ struct DefensivePitchDeletionView: View {
                         .accessibilityIdentifier("pitchDelete.current")
                     }
 
-                    if let preview {
-                        Section("Candidate replay") {
-                            if let invalid = preview.firstInvalidRecord {
-                                Label(
-                                    "Sequence \(invalid.sequenceNumber): \(invalid.summary)",
-                                    systemImage: "exclamationmark.triangle.fill"
-                                )
-                                .foregroundStyle(AppTheme.destructive)
-                            } else {
-                                Label(
-                                    "Candidate timeline replays cleanly",
-                                    systemImage: "checkmark.circle"
-                                )
-                            }
-                        }
-
-                        Section("Preview") {
-                            ForEach(preview.snapshot.history.sections) { section in
-                                VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
-                                    Text(section.title)
-                                        .font(.caption.bold())
-                                    ForEach(section.entries) { entry in
-                                        Text("\(entry.actor): \(entry.summary)")
-                                            .font(.body)
-                                    }
-                                }
-                            }
+                    if let correctionSession {
+                        DefensivePitchCorrectionSections(
+                            correctionSession: correctionSession
+                        ) { problem in
+                            repairView(for: problem, in: correctionSession)
                         }
                     } else if errorMessage == nil {
                         Section("Candidate replay") {
@@ -263,7 +257,7 @@ struct DefensivePitchDeletionView: View {
                             maxWidth: .infinity,
                             minHeight: AppTheme.TouchTarget.minimum
                         )
-                        .disabled(preview?.canSave != true)
+                        .disabled(correctionSession?.canSave != true)
                         .accessibilityIdentifier("pitchDelete.save")
                 }
                 .padding(.horizontal, AppTheme.Spacing.md)
@@ -285,10 +279,15 @@ struct DefensivePitchDeletionView: View {
     }
 
     private func stage() {
-        guard preview == nil else { return }
+        guard correctionSession == nil else { return }
         do {
-            preview = try GameEventCorrection.stageDefensivePitchDeletion(
-                deletionSession,
+            let session = try GameEventCorrection.beginDefensivePitchCorrection(
+                game: game,
+                modelContext: modelContext
+            )
+            correctionSession = try GameEventCorrection.stagePitchDeletion(
+                recordID: deletionSession.recordID,
+                in: session,
                 game: game,
                 modelContext: modelContext
             )
@@ -298,10 +297,10 @@ struct DefensivePitchDeletionView: View {
     }
 
     private func save() {
-        guard let preview, preview.canSave else { return }
+        guard let correctionSession, correctionSession.canSave else { return }
         do {
-            try liveSession.saveDefensivePitchDeletion(
-                preview,
+            try liveSession.saveDefensivePitchCorrection(
+                correctionSession,
                 game: game,
                 modelContext: modelContext
             )
@@ -311,7 +310,196 @@ struct DefensivePitchDeletionView: View {
         }
     }
 
+    private func repairView(
+        for problem: DefensivePitchCorrectionProblem,
+        in correctionSession: DefensivePitchCorrectionSession
+    ) -> some View {
+        DefensivePitchCorrectionProblemView(
+            problem: problem,
+            historyEntry: correctionSession.historyEntry(for: problem.id),
+            stageChange: { stageRepair(recordID: problem.id, action: $0) }
+        )
+    }
+
+    private func stageRepair(recordID: UUID, action: DefensivePitchRepairAction) {
+        guard let correctionSession else { return }
+        do {
+            switch action {
+            case .edit(let result):
+                self.correctionSession = try GameEventCorrection.stagePitchEdit(
+                    recordID: recordID,
+                    result: result,
+                    in: correctionSession,
+                    game: game,
+                    modelContext: modelContext
+                )
+            case .delete:
+                self.correctionSession = try GameEventCorrection.stagePitchDeletion(
+                    recordID: recordID,
+                    in: correctionSession,
+                    game: game,
+                    modelContext: modelContext
+                )
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func countDescription(_ state: GameState) -> String {
         "Count \(state.balls)–\(state.strikes)"
+    }
+}
+
+private enum DefensivePitchRepairAction {
+    case edit(PitchResult)
+    case delete
+}
+
+private extension DefensivePitchCorrectionSession {
+    func historyEntry(for recordID: UUID) -> PlayHistoryEntry? {
+        snapshot.history.sections
+            .flatMap(\.entries)
+            .first(where: { entry in entry.components.contains { $0.recordID == recordID } })
+    }
+}
+
+private struct DefensivePitchCorrectionSections<ProblemDestination: View>: View {
+    let correctionSession: DefensivePitchCorrectionSession
+    let proposedSummary: String?
+    let proposedIdentifier: String?
+    let problemDestination: (DefensivePitchCorrectionProblem) -> ProblemDestination
+
+    init(
+        correctionSession: DefensivePitchCorrectionSession,
+        proposedSummary: String? = nil,
+        proposedIdentifier: String? = nil,
+        @ViewBuilder problemDestination: @escaping (DefensivePitchCorrectionProblem) -> ProblemDestination
+    ) {
+        self.correctionSession = correctionSession
+        self.proposedSummary = proposedSummary
+        self.proposedIdentifier = proposedIdentifier
+        self.problemDestination = problemDestination
+    }
+
+    var body: some View {
+        Section("Candidate replay") {
+            if let proposedSummary {
+                Text(proposedSummary)
+                    .accessibilityIdentifier(proposedIdentifier ?? "correction.proposed")
+            }
+
+            if let invalid = correctionSession.firstInvalidRecord {
+                NavigationLink {
+                    problemDestination(invalid)
+                } label: {
+                    VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                        Label(
+                            "Sequence \(invalid.sequenceNumber): \(invalid.context)",
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        Text(invalid.explanation)
+                            .font(.caption)
+                    }
+                    .foregroundStyle(AppTheme.destructive)
+                }
+                .accessibilityIdentifier("correction.problem.\(invalid.sequenceNumber)")
+            } else {
+                Label(
+                    "Candidate timeline replays cleanly",
+                    systemImage: "checkmark.circle"
+                )
+            }
+        }
+
+        Section("Staged changes") {
+            ForEach(correctionSession.stagedChanges) { change in
+                Text(change.summary)
+                    .font(.body.monospacedDigit())
+                    .accessibilityIdentifier("correction.change.\(change.sequenceNumber)")
+            }
+        }
+
+        Section("Preview") {
+            ForEach(correctionSession.snapshot.history.sections) { section in
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                    Text(section.title)
+                        .font(.caption.bold())
+                    ForEach(section.entries) { entry in
+                        Text("\(entry.actor): \(entry.summary)")
+                            .font(.body)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct DefensivePitchCorrectionProblemView: View {
+    private static let editableResults: [PitchResult] = [
+        .ball, .calledStrike, .swingingStrike, .foul
+    ]
+
+    let problem: DefensivePitchCorrectionProblem
+    let historyEntry: PlayHistoryEntry?
+    let stageChange: (DefensivePitchRepairAction) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Form {
+            Section("Replay problem") {
+                Text("Sequence \(problem.sequenceNumber)")
+                    .font(.headline.monospacedDigit())
+                Text(problem.context)
+                    .font(.body.monospacedDigit())
+                Text(problem.explanation)
+                    .foregroundStyle(AppTheme.destructive)
+            }
+
+            if let historyEntry {
+                Section("Affected history entry") {
+                    Text(historyEntry.actor)
+                        .font(AppTheme.Typography.playerName)
+                    Text(historyEntry.summary)
+                        .font(.body.bold())
+                    Text(historyEntry.detail)
+                        .font(.caption.monospacedDigit())
+                }
+            }
+
+            Section("Stage another change") {
+                if problem.canEditPitch {
+                    Menu {
+                        ForEach(Self.editableResults) { result in
+                            Button(result.label) {
+                                stageChange(.edit(result))
+                                dismiss()
+                            }
+                            .accessibilityIdentifier("correction.repair.edit.\(result.rawValue)")
+                        }
+                    } label: {
+                        Label("Edit Affected Pitch", systemImage: "pencil")
+                            .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    }
+                }
+
+                if problem.canDeletePitch {
+                    Button(role: .destructive) {
+                        stageChange(.delete)
+                        dismiss()
+                    } label: {
+                        Label("Delete Affected Pitch", systemImage: "trash")
+                            .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    }
+                    .accessibilityIdentifier("correction.repair.delete")
+                } else {
+                    Text("This event does not support another change in this correction session.")
+                        .foregroundStyle(AppTheme.graphite.opacity(0.68))
+                }
+            }
+        }
+        .navigationTitle("Affected Event")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

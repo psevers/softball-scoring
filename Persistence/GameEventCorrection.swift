@@ -129,6 +129,57 @@ struct DefensivePitchCorrectionInvalidRecord: Equatable {
     let summary: String
 }
 
+enum DefensivePitchStagedAction: Equatable {
+    case edit(PitchResult)
+    case delete
+
+    var label: String {
+        switch self {
+        case .edit(let result): "Change to \(result.label)"
+        case .delete: "Delete"
+        }
+    }
+}
+
+struct DefensivePitchStagedChange: Identifiable, Equatable {
+    var id: UUID { recordID }
+
+    let recordID: UUID
+    let sequenceNumber: Int
+    let inning: Int
+    let half: InningHalf
+    let opponentBatterSlot: Int
+    let pitcherID: UUID
+    let originalResult: PitchResult
+    let action: DefensivePitchStagedAction
+
+    var summary: String {
+        "Sequence \(sequenceNumber) · \(originalResult.label) · \(action.label)"
+    }
+}
+
+struct DefensivePitchCorrectionProblem: Equatable {
+    let id: UUID
+    let sequenceNumber: Int
+    let context: String
+    let explanation: String
+    let canEditPitch: Bool
+    let canDeletePitch: Bool
+}
+
+struct DefensivePitchCorrectionSession {
+    let gameID: UUID
+    let stagedChanges: [DefensivePitchStagedChange]
+    let snapshot: LiveGameSnapshot
+    let firstInvalidRecord: DefensivePitchCorrectionProblem?
+
+    fileprivate let expectedTimeline: [GameEventRecordRevision]
+
+    var canSave: Bool {
+        !stagedChanges.isEmpty && firstInvalidRecord == nil
+    }
+}
+
 struct DefensivePitchEditPreview {
     let session: DefensivePitchEditSession
     let proposedResult: PitchResult
@@ -311,6 +362,116 @@ enum GameEventCorrection {
             precedingBallInPlayPitchSequenceNumber: precedingPitchSequenceNumber,
             expectedTimeline: records.map(GameEventRecordRevision.init)
         )
+    }
+
+    static func beginDefensivePitchCorrection(
+        game: Game,
+        modelContext: ModelContext
+    ) throws -> DefensivePitchCorrectionSession {
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        let snapshot = try validatedSnapshot(game: game, records: records)
+        return DefensivePitchCorrectionSession(
+            gameID: game.id,
+            stagedChanges: [],
+            snapshot: snapshot,
+            firstInvalidRecord: nil,
+            expectedTimeline: records.map(GameEventRecordRevision.init)
+        )
+    }
+
+    static func stagePitchDeletion(
+        recordID: UUID,
+        in session: DefensivePitchCorrectionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
+    ) throws -> DefensivePitchCorrectionSession {
+        try stagePitchChange(
+            recordID: recordID,
+            action: .delete,
+            in: session,
+            game: game,
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines
+        )
+    }
+
+    static func stagePitchEdit(
+        recordID: UUID,
+        result: PitchResult,
+        in session: DefensivePitchCorrectionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
+    ) throws -> DefensivePitchCorrectionSession {
+        guard isEditablePitch(result) else {
+            throw GameEventCorrectionError.pitchNotEditable
+        }
+        return try stagePitchChange(
+            recordID: recordID,
+            action: .edit(result),
+            in: session,
+            game: game,
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines
+        )
+    }
+
+    static func saveDefensivePitchCorrection(
+        _ session: DefensivePitchCorrectionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project,
+        save: Save = { try $0.save() }
+    ) throws -> LiveGameSnapshot {
+        guard session.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        guard session.canSave else {
+            throw GameEventCorrectionError.invalidCandidate
+        }
+
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        guard records.map(GameEventRecordRevision.init) == session.expectedTimeline else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        let candidateRecords = try applying(
+            session.stagedChanges,
+            to: records
+        )
+        let correctedSnapshot = try validatedSnapshot(
+            game: game,
+            records: candidateRecords,
+            projectBattingLines: projectBattingLines
+        )
+
+        for change in session.stagedChanges {
+            guard let record = records.first(where: { $0.id == change.recordID }) else {
+                throw GameEventCorrectionError.staleTimeline
+            }
+            switch change.action {
+            case .edit(let result):
+                let encoded = try GameEventCodec.encode(.pitch(PitchEvent(
+                    result: result,
+                    pitcherID: change.pitcherID,
+                    opponentBatterSlot: change.opponentBatterSlot
+                )))
+                record.kindRawValue = encoded.kind.rawValue
+                record.payload = encoded.payload
+            case .delete:
+                correctionContext.delete(record)
+            }
+        }
+
+        do {
+            try save(correctionContext)
+        } catch {
+            correctionContext.rollback()
+            throw error
+        }
+        return correctedSnapshot
     }
 
     static func undoLatestAction(
@@ -579,6 +740,144 @@ enum GameEventCorrection {
             throw error
         }
         return correctedSnapshot
+    }
+
+    private static func stagePitchChange(
+        recordID: UUID,
+        action: DefensivePitchStagedAction,
+        in session: DefensivePitchCorrectionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines
+    ) throws -> DefensivePitchCorrectionSession {
+        guard session.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        guard records.map(GameEventRecordRevision.init) == session.expectedTimeline else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        guard let record = records.first(where: { $0.id == recordID }),
+              case .pitch(let pitch) = try record.decoded().body else {
+            switch action {
+            case .edit: throw GameEventCorrectionError.pitchNotEditable
+            case .delete: throw GameEventCorrectionError.pitchNotDeletable
+            }
+        }
+
+        let currentRecords = try applying(session.stagedChanges, to: records)
+        let currentSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
+            game: game,
+            records: currentRecords,
+            projectBattingLines: projectBattingLines
+        )
+        let referenceEntry = currentSnapshot.replay.entries.first(where: { $0.recordID == recordID })
+            ?? session.snapshot.replay.entries.first(where: { $0.recordID == recordID })
+        guard let referenceEntry else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        if case .edit = action {
+            guard isEditablePitch(pitch.result),
+                  !completesPlateAppearance(pitch.result, stateBefore: referenceEntry.stateBefore) else {
+                throw GameEventCorrectionError.pitchNotEditable
+            }
+        }
+
+        let change = DefensivePitchStagedChange(
+            recordID: record.id,
+            sequenceNumber: record.sequenceNumber,
+            inning: referenceEntry.stateBefore.inning,
+            half: referenceEntry.stateBefore.half,
+            opponentBatterSlot: pitch.opponentBatterSlot,
+            pitcherID: pitch.pitcherID,
+            originalResult: pitch.result,
+            action: action
+        )
+        var changes = session.stagedChanges
+        if let existingIndex = changes.firstIndex(where: { $0.recordID == recordID }) {
+            changes[existingIndex] = change
+        } else {
+            changes.append(change)
+        }
+
+        let candidateRecords = try applying(changes, to: records)
+        let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
+            game: game,
+            records: candidateRecords,
+            projectBattingLines: projectBattingLines
+        )
+        return DefensivePitchCorrectionSession(
+            gameID: game.id,
+            stagedChanges: changes,
+            snapshot: snapshot,
+            firstInvalidRecord: firstCorrectionProblem(in: snapshot.replay),
+            expectedTimeline: session.expectedTimeline
+        )
+    }
+
+    private static func applying(
+        _ changes: [DefensivePitchStagedChange],
+        to records: [GameEventRecord]
+    ) throws -> [GameEventRecord] {
+        let changesByRecordID = Dictionary(uniqueKeysWithValues: changes.map { ($0.recordID, $0) })
+        return try records.compactMap { record in
+            guard let change = changesByRecordID[record.id] else { return record }
+            switch change.action {
+            case .delete:
+                return nil
+            case .edit(let result):
+                return try GameEventRecord(
+                    id: record.id,
+                    gameID: record.gameID,
+                    sequenceNumber: record.sequenceNumber,
+                    timestamp: record.timestamp,
+                    body: .pitch(PitchEvent(
+                        result: result,
+                        pitcherID: change.pitcherID,
+                        opponentBatterSlot: change.opponentBatterSlot
+                    ))
+                )
+            }
+        }
+    }
+
+    private static func firstCorrectionProblem(
+        in replay: GameEventReplay.Result
+    ) -> DefensivePitchCorrectionProblem? {
+        guard let entry = replay.entries.first(where: { $0.rejection != nil }) else {
+            return nil
+        }
+        let context: String
+        let explanation: String
+        let canEditPitch: Bool
+        let canDeletePitch: Bool
+        switch entry.body {
+        case .pitch(let pitch):
+            context = "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · "
+                + "Opponent batter \(pitch.opponentBatterSlot) · \(pitch.result.label)"
+            explanation = "Full replay reached opponent batter "
+                + "\(entry.stateBefore.currentOpponentBatterSlot) with a "
+                + "\(entry.stateBefore.balls)–\(entry.stateBefore.strikes) count "
+                + "before rejecting this pitch."
+            canEditPitch = isEditablePitch(pitch.result)
+                && !completesPlateAppearance(pitch.result, stateBefore: entry.stateBefore)
+            canDeletePitch = true
+        default:
+            context = "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · Saved event"
+            explanation = "Full replay rejected this record at its original chronological position."
+            canEditPitch = false
+            canDeletePitch = false
+        }
+        return DefensivePitchCorrectionProblem(
+            id: entry.recordID,
+            sequenceNumber: entry.sequenceNumber,
+            context: context,
+            explanation: explanation,
+            canEditPitch: canEditPitch,
+            canDeletePitch: canDeletePitch
+        )
     }
 
     private static func freshContext(from modelContext: ModelContext) -> ModelContext {

@@ -2,7 +2,7 @@
 
 ## Window
 
-Window 1 continuation — **Slice 5.5 scorebook visual alignment remains complete and approved. Slice 6 Play History, latest eligible-action Undo, earlier defensive pitch edit, and earlier defensive pitch deletion are implemented through ticket #33.**
+Window 1 continuation — **Slice 5.5 scorebook visual alignment remains complete and approved. Slice 6 Play History, latest eligible-action Undo, earlier defensive pitch correction, and atomic multi-change downstream repair are implemented through ticket #34.**
 
 ## Canonical repo
 
@@ -174,7 +174,7 @@ Keep ticket #10 local until explicitly authorized to push. Before merge, publish
 
 ## Current vertical slice
 
-**Slice 6 — Delete one earlier defensive pitch, ticket #33.**
+**Slice 6 — Repair downstream history with multiple staged changes, ticket #34.**
 
 The live game and Play History now share one fresh game-scoped snapshot containing replay,
 accepted-event batting projection, and a history trace. History groups event-time half-innings and
@@ -202,6 +202,8 @@ removes only that runner's SB/CS attribution and any steal-of-home run, returns 
 after a third-out CS, and preserves the active tracked batter, count, and plate-appearance progression.
 History opens eligible earlier defensive Ball, Called Strike, Swinging Strike, and Foul components in a native editor with exact event-time context and current/proposed count summaries. Each selection stages a complete replay/projection without durable mutation, identifies the first invalid later record, and keeps Save disabled until the candidate is both changed and valid. Save freshly verifies the exact timeline, updates only the selected encoded pitch payload/kind while preserving record identity/game/sequence/timestamp, rolls back on failure, and refreshes History and live scoring.
 Every defensive pitch component now also exposes an explicit Delete action with exact record confirmation. Confirming stages removal in memory, replays and projects the entire candidate timeline, identifies the first invalid downstream record, and keeps Save unavailable until the candidate is valid. A valid Save atomically removes only that record; survivors retain IDs, sequence numbers, and timestamps, the deleted sequence remains a gap, and the next scorer write uses the maximum authoritative surviving sequence plus one. Wrong-game, stale, rejected-candidate, projection, and save failures preserve the original timeline. Fresh-context, cold-store, and Accessibility XXXL workflow tests reproduce the corrected count, pitcher totals, History, and live state. Broader edit/delete coverage and pitch-count reconciliation remain later Slice 6 work.
+
+Earlier defensive pitch edits and deletions now open one in-memory correction session. If replay rejects a later record, the problem summary preserves its sequence and event context, explains the state replay reached, and navigates to the affected history entry. Supported downstream pitch edits or deletions join the same staged list by exact record identity; every addition reruns full replay and batting projection. Cancel discards the entire session. Save remains disabled until the candidate is clean, then one isolated SwiftData save applies the whole batch. Stale history, projection failure, and simulated save failure leave every original record intact. Fresh-context, cold-store, and Accessibility XXXL tests verify the repaired count, pitcher totals, batting projection, history, and return to live scoring.
 
 ## Do not redo
 

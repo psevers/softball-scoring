@@ -603,6 +603,63 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Pitching · 1 pitches · Opp batter 1"].exists)
     }
 
+    func testInvalidatingPitchDeletionRepairsDownstreamEventAndSavesBatchOnce() {
+        let app = launchApp(atAccessibilityExtraExtraExtraLarge: true)
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Multi Correction Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let count = app.staticTexts["game.count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 3))
+        XCTAssertEqual(count.label, "0 – 1")
+        XCTAssertTrue(app.staticTexts["Pitching · 5 pitches · Opp batter 2"].exists)
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        app.buttons["history.entry.1"].tap()
+        app.buttons["history.deletePitch.1"].tap()
+        XCTAssertTrue(app.buttons["Preview Deletion"].waitForExistence(timeout: 3))
+        app.buttons["Preview Deletion"].tap()
+
+        XCTAssertTrue(app.navigationBars["Delete Pitch"].waitForExistence(timeout: 3))
+        let form = app.collectionViews.firstMatch
+        let problem = app.buttons["correction.problem.5"]
+        XCTAssertTrue(swipeWithinUntilHittable(problem, in: form))
+        XCTAssertFalse(app.buttons["pitchDelete.save"].isEnabled)
+        XCTAssertTrue(problem.label.contains("Opponent batter 2"))
+        problem.tap()
+
+        XCTAssertTrue(app.navigationBars["Affected Event"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Top 1 · Opponent batter 2 · Called Strike"].exists)
+        XCTAssertTrue(app.staticTexts[
+            "Full replay reached opponent batter 1 with a 3–0 count before rejecting this pitch."
+        ].exists)
+        let repairDeletion = app.buttons["correction.repair.delete"]
+        let affectedEventForm = app.collectionViews.element(boundBy: app.collectionViews.count - 1)
+        XCTAssertTrue(swipeWithinUntilHittable(repairDeletion, in: affectedEventForm))
+        repairDeletion.tap()
+
+        XCTAssertTrue(app.navigationBars["Delete Pitch"].waitForExistence(timeout: 3))
+        XCTAssertTrue(swipeWithinUntilHittable(
+            app.staticTexts["Candidate timeline replays cleanly"],
+            in: form
+        ))
+        XCTAssertTrue(app.staticTexts["correction.change.1"].exists)
+        XCTAssertTrue(app.staticTexts["correction.change.5"].exists)
+        let save = app.buttons["pitchDelete.save"]
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertTrue(count.waitForExistence(timeout: 3))
+        XCTAssertEqual(count.label, "3 – 0")
+        XCTAssertTrue(app.staticTexts["Pitching · 3 pitches · Opp batter 1"].exists)
+        XCTAssertTrue(scrollUntilHittable(app.buttons["Ball"], in: app))
+    }
+
     func testUndoThirdOutStrikeoutRestoresDefensiveHalfInning() {
         let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()

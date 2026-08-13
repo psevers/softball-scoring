@@ -109,6 +109,36 @@ enum UITestData {
             ))
         ))
 
+        let multiCorrectionGame = Game(
+            seasonID: season.id,
+            opponentName: "UI Multi Correction Opponent",
+            gameDate: Date(timeIntervalSince1970: 1_786_411_500),
+            homeAway: .home,
+            status: .inProgress,
+            startingPitcherID: activePlayers[0].id,
+            startedAt: Date(timeIntervalSince1970: 1_786_411_500)
+        )
+        context.insert(multiCorrectionGame)
+        for (index, player) in activePlayers.enumerated() {
+            context.insert(LineupEntry(
+                playerID: player.id,
+                battingOrder: index + 1,
+                startingPosition: positions[index],
+                gameID: multiCorrectionGame.id
+            ))
+        }
+        for sequence in 1...5 {
+            context.insert(try GameEventRecord(
+                gameID: multiCorrectionGame.id,
+                sequenceNumber: sequence,
+                body: .pitch(.init(
+                    result: sequence <= 4 ? .ball : .calledStrike,
+                    pitcherID: activePlayers[0].id,
+                    opponentBatterSlot: sequence <= 4 ? 1 : 2
+                ))
+            ))
+        }
+
         let historyGame = Game(
             seasonID: season.id,
             opponentName: "UI History Opponent",

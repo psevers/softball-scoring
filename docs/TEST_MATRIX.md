@@ -106,6 +106,17 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Fresh-context and cold-store reload reproduce corrected count, pitcher totals, later game state, and History.
 - Accessibility XXXL UI coverage verifies exact confirmation, Cancel, replay preview, Save, refreshed live state, and reopen persistence.
 
+## Multiple staged corrections
+
+- An invalidating first edit or deletion exposes the first rejected record with stable sequence, decoded event context, and the count/batter state reached by full replay.
+- The problem summary navigates to the affected Play History entry and offers only supported pitch repair actions.
+- Every additional edit or deletion rebuilds the complete candidate without skipping, reordering, rewriting, or cascade-deleting unrelated records.
+- Staged changes remain reviewable by original record identity and sequence; Cancel leaves the durable timeline untouched.
+- Save is unavailable for rejected replay or failed batting projection and becomes available only for a changed, clean candidate.
+- One isolated save applies all staged payload replacements and deletions; simulated failure and stale history roll back or reject the entire batch.
+- Fresh-context and cold-store reload reproduce the corrected game state, pitcher totals, batting projection, and Play History.
+- Accessibility XXXL UI coverage invalidates a downstream defensive pitch, navigates to it, stages the repair, saves once, and returns to live scoring.
+
 ## Base occupancy matrix for Ball In Play
 
 Exercise outcome confirmation from all eight starting base states:
