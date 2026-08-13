@@ -145,21 +145,7 @@ enum BallInPlayOutcome: String, CaseIterable, Codable, Identifiable, Sendable {
     }
 
     var label: String {
-        switch self {
-        case .single: "Single"
-        case .double: "Double"
-        case .triple: "Triple"
-        case .homeRun: "Home Run"
-        case .reachedOnError: "Reached on Error"
-        case .fieldersChoice: "Fielder's Choice"
-        case .groundOut: "Ground Out"
-        case .flyOut: "Fly Out"
-        case .lineOut: "Line Out"
-        case .popOut: "Pop Out"
-        case .sacrificeBunt: "Sacrifice Bunt"
-        case .sacrificeFly: "Sacrifice Fly"
-        case .doublePlay: "Double Play"
-        }
+        OffensivePlateAppearanceResult(ballInPlayOutcome: self).label
     }
 
     var suggestedBatterDestination: RunnerDestination {
@@ -247,6 +233,27 @@ enum OffensivePlateAppearanceResult: String, CaseIterable, Codable, Equatable, S
     case sacrificeBunt
     case sacrificeFly
     case doublePlay
+
+    var label: String {
+        switch self {
+        case .single: "Single"
+        case .double: "Double"
+        case .triple: "Triple"
+        case .homeRun: "Home Run"
+        case .walk: "Walk"
+        case .hitByPitch: "HBP"
+        case .strikeout: "Strikeout"
+        case .reachedOnError: "Reached on Error"
+        case .fieldersChoice: "Fielder's Choice"
+        case .groundOut: "Ground Out"
+        case .flyOut: "Fly Out"
+        case .lineOut: "Line Out"
+        case .popOut: "Pop Out"
+        case .sacrificeBunt: "Sacrifice Bunt"
+        case .sacrificeFly: "Sacrifice Fly"
+        case .doublePlay: "Double Play"
+        }
+    }
 
     init(ballInPlayOutcome: BallInPlayOutcome) {
         switch ballInPlayOutcome {

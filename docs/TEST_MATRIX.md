@@ -80,7 +80,10 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Tracked-team cancellation, stale identity, mismatched-batter replay, and save failure preserve the original timeline and batting projection.
 - Tracked-team surviving IDs, timestamps, and sequence gaps remain stable; later offensive scoring allocates from the authoritative surviving maximum.
 - A fresh model context and cold-store reload reproduce the same tracked batter and offensive count.
-- Accessibility XL UI coverage verifies a ball-four award path, a third-out strikeout path, a completed Ball In Play result replacement, and tracked-team count-pitch undo from Play History, including exact confirmation, cancellation, successful deletion, and refreshed live scoring.
+- Completed tracked-team walk, HBP, strikeout, hit, reached-base, home-run, sacrifice, ordinary-out, and double-play records restore the exact pre-play replay state and batting projection.
+- Completed tracked-team confirmations use event-time player identity and state result, runner movements, runs, RBI, and sequence; current lineup metadata cannot rewrite them.
+- Completed tracked-team cancellation, stale history, invalid replay, and save failure preserve the durable record and batting line. Fresh context and cold-store reload reproduce the restored snapshot.
+- Accessibility XL UI coverage verifies a ball-four award path, a defensive third-out strikeout path, a completed Ball In Play result replacement, tracked-team count-pitch undo, a scoring tracked-team plate appearance, and a tracked-team third-out/inning transition, including exact confirmation, cancellation, successful deletion, and refreshed live scoring.
 
 ## Base occupancy matrix for Ball In Play
 

@@ -16,9 +16,13 @@ struct BattingLine: Equatable, Sendable {
     var caughtStealing = 0
 }
 
+enum BattingStatProjectionError: Error, Equatable {
+    case missingRunnerIdentity(sequenceNumber: Int, source: RunnerSource)
+}
+
 enum BattingStatProjector {
     /// Projects accepted event history. Corrupt or rejected records must be removed by replay first.
-    static func project(events: [DecodedGameEvent]) -> [UUID: BattingLine] {
+    static func project(events: [DecodedGameEvent]) throws -> [UUID: BattingLine] {
         var lines: [UUID: BattingLine] = [:]
         var firstBaseRunnerID: UUID?
         var secondBaseRunnerID: UUID?
@@ -96,7 +100,12 @@ enum BattingStatProjector {
             ].compactMapValues { $0 }
 
             for source in plateAppearance.countedRunSources {
-                guard let runnerID = runnerIDs[source] else { continue }
+                guard let runnerID = runnerIDs[source] else {
+                    throw BattingStatProjectionError.missingRunnerIdentity(
+                        sequenceNumber: event.sequenceNumber,
+                        source: source
+                    )
+                }
                 var runnerLine = lines[runnerID, default: BattingLine()]
                 runnerLine.runs += 1
                 lines[runnerID] = runnerLine
@@ -106,7 +115,12 @@ enum BattingStatProjector {
             secondBaseRunnerID = nil
             thirdBaseRunnerID = nil
             for movement in plateAppearance.movements {
-                guard let runnerID = runnerIDs[movement.source] else { continue }
+                guard let runnerID = runnerIDs[movement.source] else {
+                    throw BattingStatProjectionError.missingRunnerIdentity(
+                        sequenceNumber: event.sequenceNumber,
+                        source: movement.source
+                    )
+                }
                 switch movement.destination {
                 case .first: firstBaseRunnerID = runnerID
                 case .second: secondBaseRunnerID = runnerID
