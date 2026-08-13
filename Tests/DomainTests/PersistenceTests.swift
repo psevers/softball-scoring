@@ -3743,6 +3743,16 @@ extension PersistenceTests {
         context.insert(original)
         try context.save()
 
+        #expect(throws: GameEventCorrectionError.pitchNotDeletable) {
+            _ = try GameEventCorrection.prepareDefensivePitchDeletion(
+                recordID: UUID(),
+                game: game,
+                modelContext: context
+            )
+        }
+        #expect(GameEventCorrectionError.pitchNotDeletable.errorDescription ==
+            "This saved event is not a defensive pitch that can be deleted.")
+
         let session = try GameEventCorrection.prepareDefensivePitchDeletion(
             recordID: original.id,
             game: game,

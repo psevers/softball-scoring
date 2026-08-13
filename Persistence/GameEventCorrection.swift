@@ -182,6 +182,7 @@ enum GameEventCorrectionError: LocalizedError {
     case latestActionChanged
     case staleTimeline
     case pitchNotEditable
+    case pitchNotDeletable
     case invalidCandidate
 
     var errorDescription: String? {
@@ -198,6 +199,8 @@ enum GameEventCorrectionError: LocalizedError {
             "The game history changed before the correction was confirmed. Refresh and try again."
         case .pitchNotEditable:
             "This saved event is not an editable non-terminal defensive pitch."
+        case .pitchNotDeletable:
+            "This saved event is not a defensive pitch that can be deleted."
         case .invalidCandidate:
             "The proposed pitch change leaves invalid game history and cannot be saved."
         }
@@ -487,7 +490,7 @@ enum GameEventCorrection {
         guard let record = records.first(where: { $0.id == recordID }),
               let entry = snapshot.replay.entries.first(where: { $0.recordID == recordID }),
               case .pitch(let pitch) = entry.body else {
-            throw GameEventCorrectionError.pitchNotEditable
+            throw GameEventCorrectionError.pitchNotDeletable
         }
 
         return DefensivePitchDeletionSession(
