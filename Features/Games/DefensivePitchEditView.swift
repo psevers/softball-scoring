@@ -44,24 +44,15 @@ struct DefensiveBallInPlayEditView: View {
                     }
 
                     Section("Correct result") {
-                        ForEach(BallInPlayValidator.nonScoringCorrectionOutcomes) { outcome in
-                            Button {
-                                selectedOutcome = outcome
-                                proposedPlay = nil
-                                correction.session = nil
-                            } label: {
-                                HStack {
-                                    Text(outcome.label)
-                                    Spacer()
-                                    if outcome == selectedOutcome {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                                .frame(minHeight: AppTheme.TouchTarget.minimum)
+                        Picker("Result", selection: $selectedOutcome) {
+                            ForEach(BallInPlayValidator.nonScoringCorrectionOutcomes) { outcome in
+                                Text(outcome.label).tag(outcome)
                             }
-                            .accessibilityIdentifier("playEdit.outcome.\(outcome.rawValue)")
-                            .accessibilityValue(outcome == selectedOutcome ? "Selected" : "Not selected")
                         }
+                        .pickerStyle(.menu)
+                        .frame(minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("playEdit.outcomePicker")
+                        .accessibilityValue(selectedOutcome.label)
 
                         Button("Confirm Runner Destinations") {
                             isConfirmingRunners = true
@@ -110,6 +101,10 @@ struct DefensiveBallInPlayEditView: View {
             }
             .navigationTitle("Edit Play")
             .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: selectedOutcome) { _, _ in
+                proposedPlay = nil
+                correction.session = nil
+            }
             .sheet(isPresented: $isConfirmingRunners) {
                 RunnerConfirmationSheet(
                     outcome: selectedOutcome,

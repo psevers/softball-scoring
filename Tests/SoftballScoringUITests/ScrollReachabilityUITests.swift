@@ -246,12 +246,23 @@ final class ScrollReachabilityUITests: XCTestCase {
             XCTAssertTrue(editForm.waitForExistence(timeout: 3))
             XCTAssertFalse(app.buttons["playEdit.save"].isEnabled)
 
-            let outcomeButton = app.buttons["playEdit.outcome.\(outcome)"]
-            XCTAssertTrue(swipeWithinUntilHittable(outcomeButton, in: editForm))
-            outcomeButton.tap()
-            XCTAssertTrue(waitForValue("Selected", on: outcomeButton))
+            let outcomePicker = app.buttons["playEdit.outcomePicker"]
+            let saveButton = app.buttons["playEdit.save"]
+            XCTAssertTrue(swipeWithinUntilHittable(
+                outcomePicker,
+                in: editForm,
+                above: saveButton
+            ))
+            outcomePicker.tap()
+            XCTAssertTrue(app.buttons[outcome].waitForExistence(timeout: 3))
+            app.buttons[outcome].tap()
+            XCTAssertTrue(waitForValue(outcome, on: outcomePicker))
             let confirmRunners = app.buttons["playEdit.confirmRunners"]
-            XCTAssertTrue(swipeWithinUntilHittable(confirmRunners, in: editForm))
+            XCTAssertTrue(swipeWithinUntilHittable(
+                confirmRunners,
+                in: editForm,
+                above: saveButton
+            ))
             confirmRunners.tap()
 
             XCTAssertTrue(app.navigationBars["Confirm Correction"].waitForExistence(timeout: 3))
@@ -264,7 +275,11 @@ final class ScrollReachabilityUITests: XCTestCase {
             app.buttons["Preview"].tap()
 
             let proposed = app.staticTexts["playEdit.proposed"]
-            XCTAssertTrue(swipeWithinUntilHittable(proposed, in: editForm))
+            XCTAssertTrue(swipeWithinUntilHittable(
+                proposed,
+                in: editForm,
+                above: saveButton
+            ))
             XCTAssertTrue(
                 proposed.label.contains(proposedSummary),
                 "Expected \(outcome) summary \(proposedSummary), got \(proposed.label)"
@@ -281,17 +296,21 @@ final class ScrollReachabilityUITests: XCTestCase {
             XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
             XCTAssertTrue(app.buttons["history.entry.1"].label.contains(historySummary))
             app.navigationBars["Play History"].buttons.firstMatch.tap()
+            XCTAssertTrue(
+                app.navigationBars["UI Ball In Play Undo Opponent"]
+                    .waitForExistence(timeout: 3)
+            )
         }
 
         correctPlay(
-            outcome: "reachedOnError",
+            outcome: "Reached on Error",
             destination: "1B",
             proposedSummary: "Proposed: Reached on Error · Batter to 1B",
             replaySummary: "Outs 0 · Bases 1B 1 · Opponent batter 2",
             historySummary: "E · Batter to 1B"
         )
         correctPlay(
-            outcome: "triple",
+            outcome: "Triple",
             destination: "3B",
             proposedSummary: "Proposed: Triple · Batter to 3B",
             replaySummary: "Outs 0 · Bases 3B 1 · Opponent batter 2",
@@ -307,7 +326,7 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertEqual(count.value as? String, "0 outs, on 3B")
 
         correctPlay(
-            outcome: "groundOut",
+            outcome: "Ground Out",
             destination: "Out",
             proposedSummary: "Proposed: Ground Out · Batter to Out",
             replaySummary: "Outs 1 · Bases empty · Opponent batter 2",
@@ -1328,10 +1347,11 @@ final class ScrollReachabilityUITests: XCTestCase {
 
     private func swipeWithinUntilHittable(
         _ element: XCUIElement,
-        in scrollContainer: XCUIElement
+        in scrollContainer: XCUIElement,
+        above obstruction: XCUIElement? = nil
     ) -> Bool {
         let deadline = Date().addingTimeInterval(20)
-        while !isSafelyHittable(element, in: scrollContainer, above: nil),
+        while !isSafelyHittable(element, in: scrollContainer, above: obstruction),
               Date() < deadline {
             if element.exists && element.frame.minY < scrollContainer.frame.minY {
                 scrollContainer.swipeDown()
@@ -1339,7 +1359,7 @@ final class ScrollReachabilityUITests: XCTestCase {
                 scrollContainer.swipeUp()
             }
         }
-        return isSafelyHittable(element, in: scrollContainer, above: nil)
+        return isSafelyHittable(element, in: scrollContainer, above: obstruction)
     }
 
     private func scrollFromTopUntilHittable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
