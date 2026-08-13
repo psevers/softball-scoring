@@ -202,5 +202,8 @@ Across representative:
 - SB advances the identified runner; CS removes that runner and adds an out without advancing the batter.
 - Steal of home credits one run and SB without RBI; third-out CS advances the half and clears remaining runners.
 - SB/CS rejects an occupied destination, wrong runner identity, and the wrong half-inning.
+- Latest SB/CS Undo confirms the event-time runner, source, destination/out, result, and sequence; replay restores ordinary SB, steal-of-home, and third-out CS state without changing the active batter or count.
+- Wrong-runner history, stale confirmation, candidate projection failure, and save failure leave the SB/CS timeline and batting attribution unchanged; fresh contexts and a cold-store reload reproduce the restored runner and batting line.
 - Batting projection covers every PA result and credits PA/AB/H/2B/3B/HR/BB/HBP/SO/R/RBI/SB/CS without storing mutable totals.
 - UI workflow records quick results and a confirmed single, then reopens the game at the correct next batter.
+- Focused UI recovery records SB, confirms the exact event-time runner and movement, undoes it from Play History, and reopens the live game with the runner restored to the source base.

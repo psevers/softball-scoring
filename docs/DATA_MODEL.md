@@ -50,7 +50,7 @@ Authoritative persisted scoring envelope:
 - `payload: Data`
 
 Sequence numbers are positive and unique by invariant within a game. Semantic validation occurs on replay.
-Undo deletes the authoritative latest eligible defensive pitch, completed Ball In Play result, tracked-team count pitch, or completed tracked-team plate-appearance record without resequencing or rewriting survivors. Sequence gaps are valid, and the next append uses the maximum surviving sequence plus one.
+Undo deletes the authoritative latest eligible defensive pitch, completed Ball In Play result, tracked-team count pitch, completed tracked-team plate-appearance, or tracked-team SB/CS record without resequencing or rewriting survivors. Sequence gaps are valid, and the next append uses the maximum surviving sequence plus one.
 
 ### PitchEvent payload
 
@@ -79,6 +79,10 @@ Slice 6 Undo accepts non-terminal tracked-team Ball, Called Strike, Swinging Str
 ### OffensivePlateAppearanceEvent Undo
 
 When the latest record is a completed tracked-team plate appearance, Undo removes that one authoritative record. Full replay restores its event-time batter and batting-order progression, prior count, bases, score, outs, and half-inning. Reprojecting the surviving events removes exactly that plate appearance's player-attributed PA, AB, hit classification, run, RBI, BB, HBP, or SO values.
+
+### OffensiveBaseRunningEvent Undo
+
+When the latest record is SB or CS, Undo removes that one authoritative record. The candidate resolves the runner's event-time identity from the accepted history that placed the player on base and confirms the source base, destination or out, result, and sequence. Full replay restores the runner to the prior base, removes an SB/CS and any steal-of-home run attribution, restores the prior half-inning after a third-out CS, and leaves the active batter, count, and plate-appearance progression unchanged.
 
 ## Derived—not persisted as competing truth
 

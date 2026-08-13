@@ -5,6 +5,7 @@ enum UndoLatestAction: Equatable {
     case pitch(PitchResult)
     case ballInPlayResult(BallInPlayOutcome)
     case offensivePitch(OffensivePitchResult)
+    case offensiveBaseRunning(OffensiveBaseRunningEvent)
     case offensivePlateAppearance(OffensivePlateAppearanceEvent)
 
     var label: String {
@@ -12,6 +13,8 @@ enum UndoLatestAction: Equatable {
         case .pitch(let result): result.label
         case .ballInPlayResult(let outcome): "\(outcome.shortLabel) Result"
         case .offensivePitch(let result): result.label
+        case .offensiveBaseRunning(let event):
+            "\(event.result.shortLabel) · \(event.source.baseLabel) to \(event.destination.label)"
         case .offensivePlateAppearance(let plateAppearance): plateAppearance.result.label
         }
     }
@@ -20,6 +23,7 @@ enum UndoLatestAction: Equatable {
         switch self {
         case .pitch, .offensivePitch: "Undo Latest Pitch"
         case .ballInPlayResult: "Undo Latest Result"
+        case .offensiveBaseRunning(let event): "Undo Latest \(event.result.shortLabel)"
         case .offensivePlateAppearance: "Undo Latest Play"
         }
     }
@@ -52,6 +56,7 @@ struct UndoLatestActionCandidate: Identifiable {
         switch action {
         case .pitch, .offensivePitch: "Undo latest pitch?"
         case .ballInPlayResult: "Undo latest result?"
+        case .offensiveBaseRunning(let event): "Undo latest \(event.result.confirmationName)?"
         case .offensivePlateAppearance: "Undo latest plate appearance?"
         }
     }
@@ -86,6 +91,10 @@ struct UndoLatestActionCandidate: Identifiable {
         case .offensivePitch:
             return "Remove \(confirmationMessage) The event-time tracked batter and batting-order size "
                 + "will remain unchanged, and the offensive count will be rebuilt from the remaining event history."
+        case .offensiveBaseRunning(let event):
+            return "Remove \(confirmationMessage) The identified runner will return to \(event.source.baseLabel). "
+                + "The active tracked batter, count, and plate-appearance progression will remain unchanged. "
+                + "The game state and batting projection will be rebuilt from the remaining event history."
         case .offensivePlateAppearance(let plateAppearance):
             let movements = plateAppearance.movements
                 .map { "\($0.source.label) to \($0.destination.label)" }
@@ -184,6 +193,18 @@ enum GameEventCorrection {
         case .offensivePitch(let pitch):
             action = .offensivePitch(pitch.result)
             actor = .trackedBatter(pitch.batter, battingOrderSize: pitch.battingOrderSize)
+            completedPlateAppearance = false
+            precedingPitchSequenceNumber = nil
+        case .offensiveBaseRunning(let event):
+            guard let runner = trackedRunnerContext(
+                playerID: event.runnerID,
+                source: event.source,
+                entries: snapshot.replay.entries.dropLast()
+            ) else {
+                throw GameEventCorrectionError.invalidTimeline
+            }
+            action = .offensiveBaseRunning(event)
+            actor = .trackedBatter(runner.identity, battingOrderSize: runner.battingOrderSize)
             completedPlateAppearance = false
             precedingPitchSequenceNumber = nil
         case .offensivePlateAppearance(let plateAppearance):
@@ -305,6 +326,63 @@ enum GameEventCorrection {
         case .calledStrike, .swingingStrike: stateBefore.strikes == 2
         case .hitByPitch: true
         case .foul, .ballInPlay: false
+        }
+    }
+
+    private static func trackedRunnerContext(
+        playerID: UUID,
+        source: RunnerSource,
+        entries: ArraySlice<GameEventReplay.Entry>
+    ) -> (identity: TrackedBatterIdentity, battingOrderSize: Int)? {
+        var occupiedSource = source
+        for entry in entries.reversed() {
+            guard runnerPlayerID(in: entry.stateAfter, at: occupiedSource) == playerID else {
+                return nil
+            }
+
+            switch entry.body {
+            case .offensiveBaseRunning(let event):
+                guard event.destination.occupiedSource == occupiedSource else { continue }
+                guard event.runnerID == playerID else { return nil }
+                occupiedSource = event.source
+
+            case .offensivePlateAppearance(let plateAppearance):
+                guard let movement = plateAppearance.movements.first(where: {
+                    $0.destination.occupiedSource == occupiedSource
+                }) else { continue }
+                if movement.source == .batter {
+                    guard plateAppearance.batter.playerID == playerID else { return nil }
+                    return (plateAppearance.batter, plateAppearance.battingOrderSize)
+                }
+                guard runnerPlayerID(in: entry.stateBefore, at: movement.source) == playerID else {
+                    return nil
+                }
+                occupiedSource = movement.source
+
+            default:
+                continue
+            }
+        }
+        return nil
+    }
+
+    private static func runnerPlayerID(in state: GameState, at source: RunnerSource) -> UUID? {
+        switch source {
+        case .batter: nil
+        case .first: state.firstBaseRunnerPlayerID
+        case .second: state.secondBaseRunnerPlayerID
+        case .third: state.thirdBaseRunnerPlayerID
+        }
+    }
+}
+
+private extension RunnerDestination {
+    var occupiedSource: RunnerSource? {
+        switch self {
+        case .first: .first
+        case .second: .second
+        case .third: .third
+        case .home, .out: nil
         }
     }
 }

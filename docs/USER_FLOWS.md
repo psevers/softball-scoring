@@ -54,3 +54,15 @@ group by half-inning and logical plate appearance
   ↓
 expand component pitches/records → Back → unchanged Live Game
 ```
+
+## Undo latest SB/CS — Slice 6
+
+```text
+Live Game or Play History → Undo Latest SB/CS
+  ↓
+confirm event-time runner + source + destination/out + result + sequence
+  ↓
+exact-timeline validation → replay/projection preview → atomic record removal
+  ↓
+restore runner/base/out/half-inning state → keep active batter and count unchanged
+```

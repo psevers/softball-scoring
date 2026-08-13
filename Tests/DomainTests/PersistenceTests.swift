@@ -1952,6 +1952,528 @@ extension PersistenceTests {
         #expect(restored.battingLines[batters[2].playerID] == nil)
     }
 
+    @Test func undoLatestStolenBaseRestoresRunnerCountBatterAndBattingProjection() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let runner = makeTrackedBatter()
+        let activeBatter = makeTrackedBatter(
+            displayName: "Jordan Lee",
+            jerseyNumber: "12",
+            position: .centerField,
+            lineupSlot: 2
+        )
+        let records = try [
+            GameEventBody.offensivePlateAppearance(.init(
+                batter: runner,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensivePitch(.init(
+                batter: activeBatter,
+                battingOrderSize: 10,
+                result: .ball
+            )),
+            .offensiveBaseRunning(.init(
+                runnerID: runner.playerID,
+                source: .first,
+                destination: .second,
+                result: .stolenBase
+            ))
+        ].enumerated().map { index, body in
+            try GameEventRecord(gameID: game.id, sequenceNumber: index + 1, body: body)
+        }
+        records.forEach(context.insert)
+        try context.save()
+
+        let candidate = try GameEventCorrection.prepareUndoLatestAction(
+            game: game,
+            modelContext: context
+        )
+        let restored = try GameEventCorrection.undoLatestAction(
+            candidate,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(candidate.action == .offensiveBaseRunning(.init(
+            runnerID: runner.playerID,
+            source: .first,
+            destination: .second,
+            result: .stolenBase
+        )))
+        #expect(candidate.actor == .trackedBatter(runner, battingOrderSize: 10))
+        #expect(candidate.confirmationDetail.contains("Avery Stone"))
+        #expect(candidate.confirmationDetail.contains("sequence 3: SB · 1B to 2B"))
+        #expect(restored.records.map(\.id) == Array(records.dropLast()).map(\.id))
+        #expect(restored.replay.state.firstBaseRunnerPlayerID == runner.playerID)
+        #expect(restored.replay.state.secondBaseRunnerPlayerID == nil)
+        #expect(restored.replay.state.currentTrackedBatterSlot == 2)
+        #expect(restored.replay.state.balls == 1)
+        #expect(restored.replay.state.strikes == 0)
+        #expect(restored.replay.state.offensiveCountContext == OffensiveCountContext(
+            batter: activeBatter,
+            battingOrderSize: 10
+        ))
+        #expect(restored.battingLines[runner.playerID]?.plateAppearances == 1)
+        #expect(restored.battingLines[runner.playerID]?.hits == 1)
+        #expect(restored.battingLines[runner.playerID]?.stolenBases == 0)
+        #expect(restored.battingLines[runner.playerID]?.caughtStealing == 0)
+    }
+
+    @Test func acceptedDuplicatePlayerIDHistoryUsesSourceBaseProvenanceForUndoConfirmation() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let originatingRunner = makeTrackedBatter()
+        let laterSnapshot = makeTrackedBatter(
+            playerID: originatingRunner.playerID,
+            displayName: "Later Snapshot",
+            jerseyNumber: "12",
+            position: .centerField,
+            lineupSlot: 2
+        )
+        let records = try [
+            GameEventBody.offensivePlateAppearance(.init(
+                batter: originatingRunner,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensivePlateAppearance(.init(
+                batter: laterSnapshot,
+                battingOrderSize: 10,
+                result: .double,
+                movements: [
+                    .init(source: .batter, destination: .second),
+                    .init(source: .first, destination: .third)
+                ],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensiveBaseRunning(.init(
+                runnerID: originatingRunner.playerID,
+                source: .third,
+                destination: .home,
+                result: .stolenBase
+            ))
+        ].enumerated().map { index, body in
+            try GameEventRecord(gameID: game.id, sequenceNumber: index + 1, body: body)
+        }
+        records.forEach(context.insert)
+        try context.save()
+
+        let candidate = try GameEventCorrection.prepareUndoLatestAction(
+            game: game,
+            modelContext: context
+        )
+
+        #expect(candidate.actor == .trackedBatter(originatingRunner, battingOrderSize: 10))
+        #expect(candidate.confirmationDetail.contains("Avery Stone"))
+        #expect(!candidate.confirmationDetail.contains("Later Snapshot"))
+    }
+
+    @Test func acceptedSameIDReplacementUsesNewSourceBaseProvenanceForUndoConfirmation() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let earlierRunner = makeTrackedBatter()
+        let replacementRunner = makeTrackedBatter(
+            playerID: earlierRunner.playerID,
+            displayName: "Replacement Snapshot",
+            jerseyNumber: "12",
+            position: .centerField,
+            lineupSlot: 2
+        )
+        let records = try [
+            GameEventBody.offensivePlateAppearance(.init(
+                batter: earlierRunner,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensivePlateAppearance(.init(
+                batter: replacementRunner,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [
+                    .init(source: .batter, destination: .first),
+                    .init(source: .first, destination: .third)
+                ],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensiveBaseRunning(.init(
+                runnerID: replacementRunner.playerID,
+                source: .first,
+                destination: .second,
+                result: .stolenBase
+            ))
+        ].enumerated().map { index, body in
+            try GameEventRecord(gameID: game.id, sequenceNumber: index + 1, body: body)
+        }
+        records.forEach(context.insert)
+        try context.save()
+
+        let candidate = try GameEventCorrection.prepareUndoLatestAction(
+            game: game,
+            modelContext: context
+        )
+
+        #expect(candidate.actor == .trackedBatter(replacementRunner, battingOrderSize: 10))
+        #expect(candidate.confirmationDetail.contains("Replacement Snapshot"))
+        #expect(!candidate.confirmationDetail.contains("Avery Stone"))
+    }
+
+    @Test func consecutiveStealsTraceUndoConfirmationBackToOriginatingPlateAppearance() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let runner = makeTrackedBatter()
+        let records = try [
+            GameEventBody.offensivePlateAppearance(.init(
+                batter: runner,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensiveBaseRunning(.init(
+                runnerID: runner.playerID,
+                source: .first,
+                destination: .second,
+                result: .stolenBase
+            )),
+            .offensiveBaseRunning(.init(
+                runnerID: runner.playerID,
+                source: .second,
+                destination: .third,
+                result: .stolenBase
+            ))
+        ].enumerated().map { index, body in
+            try GameEventRecord(gameID: game.id, sequenceNumber: index + 1, body: body)
+        }
+        records.forEach(context.insert)
+        try context.save()
+
+        let candidate = try GameEventCorrection.prepareUndoLatestAction(
+            game: game,
+            modelContext: context
+        )
+
+        #expect(candidate.actor == .trackedBatter(runner, battingOrderSize: 10))
+        #expect(candidate.confirmationDetail.contains("sequence 3: SB · 2B to 3B"))
+    }
+
+    @Test func undoStealOfHomeRemovesRunAndSBWhileRestoringRunnerToThird() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let runner = makeTrackedBatter()
+        let activeBatter = makeTrackedBatter(
+            displayName: "Jordan Lee",
+            jerseyNumber: "12",
+            position: .centerField,
+            lineupSlot: 2
+        )
+        let records = try [
+            GameEventBody.offensivePlateAppearance(.init(
+                batter: runner,
+                battingOrderSize: 10,
+                result: .triple,
+                movements: [.init(source: .batter, destination: .third)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensivePitch(.init(
+                batter: activeBatter,
+                battingOrderSize: 10,
+                result: .calledStrike
+            )),
+            .offensiveBaseRunning(.init(
+                runnerID: runner.playerID,
+                source: .third,
+                destination: .home,
+                result: .stolenBase
+            ))
+        ].enumerated().map { index, body in
+            try GameEventRecord(gameID: game.id, sequenceNumber: index + 1, body: body)
+        }
+        records.forEach(context.insert)
+        try context.save()
+        let before = try LiveGameSnapshotLoader.load(game: game, modelContext: context)
+        #expect(before.replay.state.awayScore == 1)
+        #expect(before.battingLines[runner.playerID]?.runs == 1)
+        #expect(before.battingLines[runner.playerID]?.stolenBases == 1)
+
+        let restored = try GameEventCorrection.undoLatestAction(
+            GameEventCorrection.prepareUndoLatestAction(game: game, modelContext: context),
+            game: game,
+            modelContext: context
+        )
+
+        #expect(restored.replay.state.awayScore == 0)
+        #expect(restored.replay.state.thirdBaseRunnerPlayerID == runner.playerID)
+        #expect(restored.replay.state.currentTrackedBatterSlot == 2)
+        #expect(restored.replay.state.strikes == 1)
+        #expect(restored.battingLines[runner.playerID]?.runs == 0)
+        #expect(restored.battingLines[runner.playerID]?.triples == 1)
+        #expect(restored.battingLines[runner.playerID]?.stolenBases == 0)
+    }
+
+    @Test func undoThirdOutCaughtStealingRestoresPriorHalfRunnerOutsAndActiveBatter() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let batters = (1...4).map { slot in
+            makeTrackedBatter(
+                displayName: "Player \(slot)",
+                jerseyNumber: "\(slot)",
+                position: .shortstop,
+                lineupSlot: slot
+            )
+        }
+        let records = try [
+            GameEventBody.offensivePlateAppearance(.init(
+                batter: batters[0],
+                battingOrderSize: 10,
+                result: .strikeout,
+                movements: [.init(source: .batter, destination: .out)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensivePlateAppearance(.init(
+                batter: batters[1],
+                battingOrderSize: 10,
+                result: .strikeout,
+                movements: [.init(source: .batter, destination: .out)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensivePlateAppearance(.init(
+                batter: batters[2],
+                battingOrderSize: 10,
+                result: .single,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensivePitch(.init(
+                batter: batters[3],
+                battingOrderSize: 10,
+                result: .calledStrike
+            )),
+            .offensiveBaseRunning(.init(
+                runnerID: batters[2].playerID,
+                source: .first,
+                destination: .out,
+                result: .caughtStealing
+            ))
+        ].enumerated().map { index, body in
+            try GameEventRecord(gameID: game.id, sequenceNumber: index + 1, body: body)
+        }
+        records.forEach(context.insert)
+        try context.save()
+        let before = try LiveGameSnapshotLoader.load(game: game, modelContext: context)
+        #expect(before.replay.state.half == .bottom)
+        #expect(before.battingLines[batters[2].playerID]?.caughtStealing == 1)
+
+        let candidate = try GameEventCorrection.prepareUndoLatestAction(
+            game: game,
+            modelContext: context
+        )
+        let restored = try GameEventCorrection.undoLatestAction(
+            candidate,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(candidate.actor == .trackedBatter(batters[2], battingOrderSize: 10))
+        #expect(candidate.confirmationTitle == "Undo latest caught stealing?")
+        #expect(candidate.confirmationDetail.contains("sequence 5: CS · 1B to Out"))
+        #expect(restored.replay.state.inning == 1)
+        #expect(restored.replay.state.half == .top)
+        #expect(restored.replay.state.outs == 2)
+        #expect(restored.replay.state.firstBaseRunnerPlayerID == batters[2].playerID)
+        #expect(restored.replay.state.currentTrackedBatterSlot == 4)
+        #expect(restored.replay.state.strikes == 1)
+        #expect(restored.replay.state.offensiveCountContext == OffensiveCountContext(
+            batter: batters[3],
+            battingOrderSize: 10
+        ))
+        #expect(restored.battingLines[batters[2].playerID]?.hits == 1)
+        #expect(restored.battingLines[batters[2].playerID]?.caughtStealing == 0)
+    }
+
+    @Test func wrongRunnerBaseRunningHistoryCannotBecomeAnUndoCandidate() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let runner = makeTrackedBatter()
+        let records = try [
+            GameEventBody.offensivePlateAppearance(.init(
+                batter: runner,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensiveBaseRunning(.init(
+                runnerID: UUID(),
+                source: .first,
+                destination: .second,
+                result: .stolenBase
+            ))
+        ].enumerated().map { index, body in
+            try GameEventRecord(gameID: game.id, sequenceNumber: index + 1, body: body)
+        }
+        records.forEach(context.insert)
+        try context.save()
+
+        #expect(throws: GameEventCorrectionError.invalidTimeline) {
+            _ = try GameEventCorrection.prepareUndoLatestAction(
+                game: game,
+                modelContext: context
+            )
+        }
+        let stored = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>())
+            .sorted { $0.sequenceNumber < $1.sequenceNumber }
+        #expect(stored.map(\.id) == records.map(\.id))
+        #expect(stored.map(\.sequenceNumber) == [1, 2])
+    }
+
+    @Test func staleStolenBaseUndoPreservesNewerHistory() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let seeded = try seedStolenBaseUndoTimeline(game: game, modelContext: context)
+        let candidate = try GameEventCorrection.prepareUndoLatestAction(
+            game: game,
+            modelContext: context
+        )
+
+        seeded.records[0].timestamp = seeded.records[0].timestamp.addingTimeInterval(1)
+        try context.save()
+
+        #expect(throws: GameEventCorrectionError.staleTimeline) {
+            _ = try GameEventCorrection.undoLatestAction(
+                candidate,
+                game: game,
+                modelContext: context
+            )
+        }
+        let stored = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        #expect(stored.records.map(\.id) == seeded.records.map(\.id))
+        #expect(stored.replay.state.secondBaseRunnerPlayerID == seeded.runner.playerID)
+        #expect(stored.battingLines[seeded.runner.playerID]?.stolenBases == 1)
+    }
+
+    @Test func failedStolenBaseProjectionOrSaveLeavesTimelineAndAttributionUnchanged() throws {
+        struct ForcedProjectionError: Error {}
+        struct ForcedSaveError: Error {}
+
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let seeded = try seedStolenBaseUndoTimeline(game: game, modelContext: context)
+        let candidate = try GameEventCorrection.prepareUndoLatestAction(
+            game: game,
+            modelContext: context
+        )
+
+        #expect(throws: ForcedProjectionError.self) {
+            _ = try GameEventCorrection.undoLatestAction(
+                candidate,
+                game: game,
+                modelContext: context,
+                projectBattingLines: { _ in throw ForcedProjectionError() }
+            )
+        }
+        #expect(throws: ForcedSaveError.self) {
+            _ = try GameEventCorrection.undoLatestAction(
+                candidate,
+                game: game,
+                modelContext: context,
+                save: { _ in throw ForcedSaveError() }
+            )
+        }
+
+        let stored = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        #expect(stored.records.map(\.id) == seeded.records.map(\.id))
+        #expect(stored.replay.state.secondBaseRunnerPlayerID == seeded.runner.playerID)
+        #expect(stored.battingLines[seeded.runner.playerID]?.stolenBases == 1)
+    }
+
+    @Test func stolenBaseUndoSurvivesFreshContextAndColdStoreReload() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appending(path: "softball-scoring-base-running-undo-\(UUID().uuidString).store")
+        let gameID = UUID()
+        var expectedState: GameState?
+        var expectedLines: [UUID: BattingLine] = [:]
+        var expectedRecordIDs: [UUID] = []
+
+        do {
+            let container = try AppModelContainer.make(storeURL: storeURL)
+            let context = container.mainContext
+            let game = makeOffensiveGame(id: gameID)
+            context.insert(game)
+            let seeded = try seedStolenBaseUndoTimeline(game: game, modelContext: context)
+            let restored = try GameEventCorrection.undoLatestAction(
+                GameEventCorrection.prepareUndoLatestAction(game: game, modelContext: context),
+                game: game,
+                modelContext: context
+            )
+            expectedState = restored.replay.state
+            expectedLines = restored.battingLines
+            expectedRecordIDs = Array(seeded.records.dropLast()).map(\.id)
+
+            let freshContext = ModelContext(container)
+            let freshGame = try #require(freshContext.fetch(FetchDescriptor<Game>()).first)
+            let fresh = try LiveGameSnapshotLoader.load(game: freshGame, modelContext: freshContext)
+            #expect(fresh.replay.state == expectedState)
+            #expect(fresh.battingLines == expectedLines)
+            #expect(fresh.records.map(\.id) == expectedRecordIDs)
+            #expect(fresh.replay.state.firstBaseRunnerPlayerID == seeded.runner.playerID)
+        }
+
+        let reloadedContainer = try AppModelContainer.make(storeURL: storeURL)
+        let reloadedContext = ModelContext(reloadedContainer)
+        let reloadedGame = try #require(reloadedContext.fetch(FetchDescriptor<Game>()).first)
+        let reloaded = try LiveGameSnapshotLoader.load(
+            game: reloadedGame,
+            modelContext: reloadedContext
+        )
+        #expect(reloaded.replay.state == expectedState)
+        #expect(reloaded.battingLines == expectedLines)
+        #expect(reloaded.records.map(\.id) == expectedRecordIDs)
+    }
+
     @Test func undoLatestBallInPlayResultPreservesCountedPitchAndRestoresPendingState() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext
@@ -3114,6 +3636,50 @@ extension PersistenceTests {
         records.forEach(modelContext.insert)
         try modelContext.save()
         return records
+    }
+
+    private func seedStolenBaseUndoTimeline(
+        game: Game,
+        modelContext: ModelContext
+    ) throws -> (
+        records: [GameEventRecord],
+        runner: TrackedBatterIdentity,
+        activeBatter: TrackedBatterIdentity
+    ) {
+        let runner = makeTrackedBatter()
+        let activeBatter = makeTrackedBatter(
+            displayName: "Jordan Lee",
+            jerseyNumber: "12",
+            position: .centerField,
+            lineupSlot: 2
+        )
+        let records = try [
+            GameEventBody.offensivePlateAppearance(.init(
+                batter: runner,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensivePitch(.init(
+                batter: activeBatter,
+                battingOrderSize: 10,
+                result: .ball
+            )),
+            .offensiveBaseRunning(.init(
+                runnerID: runner.playerID,
+                source: .first,
+                destination: .second,
+                result: .stolenBase
+            ))
+        ].enumerated().map { index, body in
+            try GameEventRecord(gameID: game.id, sequenceNumber: index + 1, body: body)
+        }
+        records.forEach(modelContext.insert)
+        try modelContext.save()
+        return (records, runner, activeBatter)
     }
 
     private func makeGame() -> Game {
