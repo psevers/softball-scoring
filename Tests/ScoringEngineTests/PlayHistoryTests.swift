@@ -328,6 +328,44 @@ struct PlayHistoryTests {
         #expect(history.sections[1].entries[0].actor == "Home Batter")
     }
 
+    @Test func onlyNonTerminalDefensiveCountPitchesExposeTheirEditResult() throws {
+        let pitcherID = UUID()
+        let gameID = UUID()
+        let records = try [
+            PitchResult.ball,
+            .calledStrike,
+            .swingingStrike,
+            .foul,
+            .ballInPlay
+        ].enumerated().map { index, result in
+            try GameEventRecord(
+                gameID: gameID,
+                sequenceNumber: index + 1,
+                body: .pitch(.init(
+                    result: result,
+                    pitcherID: pitcherID,
+                    opponentBatterSlot: 1
+                ))
+            )
+        }
+        let replay = GameEventReplay.replay(
+            records: records,
+            homeAway: .home,
+            startingPitcherID: pitcherID
+        )
+
+        let components = PlayHistoryProjector.project(replay: replay)
+            .sections[0].entries[0].components
+
+        #expect(components.map(\.editableDefensivePitchResult) == [
+            .ball,
+            .calledStrike,
+            .swingingStrike,
+            .foul,
+            nil
+        ])
+    }
+
     private func acceptedEntry(
         sequence: Int,
         body: GameEventBody,

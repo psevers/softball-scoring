@@ -26,6 +26,7 @@
 		58AF7D0726A0CFAB397EB3B9 /* AppModelContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8EA32DA2AB799F27DFB8776 /* AppModelContainer.swift */; };
 		5C6DC47DFC5E6C2CB903CB57 /* SoftballScoringApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64827908EFF1612B175DFF63 /* SoftballScoringApp.swift */; };
 		5D5DF1847419ECB4CD2516D8 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94E4C17E1FA1CF2CF42B4B79 /* AppTheme.swift */; };
+		5E52E22C6826492E631FEB2B /* DefensivePitchEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C05D45B1FD6C6B754B3A35 /* DefensivePitchEditView.swift */; };
 		7BDF7CC32EE7F8202E9D5013 /* NewGameFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF1FDE635A02CC776FDA64F /* NewGameFlowView.swift */; };
 		7C4B6039ABE7D7BF4B38ABA1 /* LiveGameSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9EBD6276B7D7EDA186AB062 /* LiveGameSnapshot.swift */; };
 		7CCF52A6864B86C4A0B77FF7 /* GameEventReplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9907A741C233CC156012EA /* GameEventReplay.swift */; };
@@ -101,6 +102,7 @@
 		3C80754CEC93C90266B91264 /* Season.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Season.swift; sourceTree = "<group>"; };
 		4038A9214E82F535BE82137E /* GamesHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamesHomeView.swift; sourceTree = "<group>"; };
 		53FC8DDB978EF857FC4A160E /* TeamHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamHomeView.swift; sourceTree = "<group>"; };
+		58C05D45B1FD6C6B754B3A35 /* DefensivePitchEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefensivePitchEditView.swift; sourceTree = "<group>"; };
 		64827908EFF1612B175DFF63 /* SoftballScoringApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftballScoringApp.swift; sourceTree = "<group>"; };
 		6905ED25DF2F69D2830E73AD /* GameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameTests.swift; sourceTree = "<group>"; };
 		6FD7C6C0E8D89B400B340FA2 /* DesignSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystemTests.swift; sourceTree = "<group>"; };
@@ -288,6 +290,7 @@
 		C9E38881DBE46C13267FA088 /* Games */ = {
 			isa = PBXGroup;
 			children = (
+				58C05D45B1FD6C6B754B3A35 /* DefensivePitchEditView.swift */,
 				4038A9214E82F535BE82137E /* GamesHomeView.swift */,
 				E047CD9115234F5F7DA3ADBD /* GameSummaryView.swift */,
 				893B8FDC783DEB49E7F62D2D /* LiveGameView.swift */,
@@ -467,6 +470,7 @@
 				5D5DF1847419ECB4CD2516D8 /* AppTheme.swift in Sources */,
 				FDA4EB43037D3EB3542007ED /* BallInPlayValidator.swift in Sources */,
 				853D97C5683DF980B59600A5 /* BattingStatProjector.swift in Sources */,
+				5E52E22C6826492E631FEB2B /* DefensivePitchEditView.swift in Sources */,
 				26D2B051A5973E48CC08F02B /* EmptyStateView.swift in Sources */,
 				293A7E0DCFE7599CFEF424D0 /* Game.swift in Sources */,
 				8ADCD3F9C8381E97D8AF44BB /* GameEvent.swift in Sources */,

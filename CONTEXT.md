@@ -59,3 +59,7 @@ The latest persisted scoring action when it is an eligible defensive Ball, Calle
 ## Correction boundary
 
 The main-actor persistence boundary that freshly fetches one game's event records, validates a candidate timeline through replay and batting projection, and saves the event-history change atomically. Derived game state is never reverse-mutated.
+
+## Defensive pitch edit
+
+A staged replacement of one earlier non-terminal defensive Ball, Called Strike, Swinging Strike, or Foul. The edit retains the pitch's event-time inning, half, opponent batting slot, pitcher, record identity, sequence, and timestamp while replaying the complete candidate timeline before Save.
