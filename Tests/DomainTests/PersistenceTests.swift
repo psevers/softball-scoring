@@ -3803,7 +3803,7 @@ extension PersistenceTests {
         records.forEach(context.insert)
         try context.save()
 
-        let session = try GameEventCorrection.beginDefensivePitchCorrection(
+        let session = try GameEventCorrection.beginDefensiveEventCorrection(
             game: game,
             modelContext: context
         )
@@ -3840,7 +3840,7 @@ extension PersistenceTests {
         ))
         #expect(stagedStored.map(\.id) == records.map(\.id))
 
-        _ = try GameEventCorrection.saveDefensivePitchCorrection(
+        _ = try GameEventCorrection.saveDefensiveEventCorrection(
             repairedCandidate,
             game: game,
             modelContext: context
@@ -3890,7 +3890,7 @@ extension PersistenceTests {
         records.forEach(context.insert)
         try context.save()
 
-        let session = try GameEventCorrection.beginDefensivePitchCorrection(
+        let session = try GameEventCorrection.beginDefensiveEventCorrection(
             game: game,
             modelContext: context
         )
@@ -3934,7 +3934,7 @@ extension PersistenceTests {
         ])
 
         #expect(throws: SaveFailure.self) {
-            _ = try GameEventCorrection.saveDefensivePitchCorrection(
+            _ = try GameEventCorrection.saveDefensiveEventCorrection(
                 mixedBatch,
                 game: game,
                 modelContext: context,
@@ -3962,7 +3962,7 @@ extension PersistenceTests {
         try context.save()
 
         #expect(throws: GameEventCorrectionError.staleTimeline) {
-            _ = try GameEventCorrection.saveDefensivePitchCorrection(
+            _ = try GameEventCorrection.saveDefensiveEventCorrection(
                 mixedBatch,
                 game: game,
                 modelContext: context
@@ -4007,7 +4007,7 @@ extension PersistenceTests {
             records.forEach(context.insert)
             try context.save()
 
-            let session = try GameEventCorrection.beginDefensivePitchCorrection(
+            let session = try GameEventCorrection.beginDefensiveEventCorrection(
                 game: game,
                 modelContext: context
             )
@@ -4023,7 +4023,7 @@ extension PersistenceTests {
                 game: game,
                 modelContext: context
             )
-            _ = try GameEventCorrection.saveDefensivePitchCorrection(
+            _ = try GameEventCorrection.saveDefensiveEventCorrection(
                 repaired,
                 game: game,
                 modelContext: context
@@ -5035,7 +5035,7 @@ extension PersistenceTests {
         #expect(try stored.last?.decoded().body == .ballInPlay(originalPlay))
     }
 
-    @Test func invalidDownstreamPlayDisablesBallInPlayCorrectionSaveAndIdentifiesRecord() throws {
+    @Test func invalidDownstreamPlayCanBeRepairedAndSavedInTheSameCorrection() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext
         let game = makeGame()
@@ -5070,14 +5070,117 @@ extension PersistenceTests {
             modelContext: context
         )
 
-        #expect(!preview.canSave)
-        #expect(preview.firstInvalidRecord?.id == records[3].id)
-        #expect(preview.firstInvalidRecord?.sequenceNumber == 4)
-        #expect(preview.firstInvalidRecord?.context == "Top 1 · Saved event")
-        #expect(preview.snapshot.replay.rejectedRecordIDs == [records[3].id])
-        #expect(throws: GameEventCorrectionError.invalidCandidate) {
-            _ = try GameEventCorrection.saveDefensiveBallInPlayEdit(
-                preview,
+        let staged = try #require(preview.correctionSession)
+        #expect(!staged.canSave)
+        #expect(staged.firstInvalidRecord?.id == records[3].id)
+        #expect(staged.firstInvalidRecord?.sequenceNumber == 4)
+        #expect(staged.firstInvalidRecord?.context == "Top 1 · Opponent batter 2 · Single")
+        #expect(staged.snapshot.replay.rejectedRecordIDs == [records[3].id])
+
+        let repaired = try GameEventCorrection.stageBallInPlayEdit(
+            recordID: records[3].id,
+            play: .init(
+                outcome: .single,
+                opponentBatterSlot: 2,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ),
+            in: staged,
+            game: game,
+            modelContext: context
+        )
+        #expect(repaired.canSave)
+        #expect(repaired.firstInvalidRecord == nil)
+        #expect(repaired.snapshot.replay.rejectedRecordIDs.isEmpty)
+        #expect(repaired.stagedBallInPlayChanges.map(\.recordID) == [records[1].id, records[3].id])
+
+        _ = try GameEventCorrection.saveDefensiveEventCorrection(
+            repaired,
+            game: game,
+            modelContext: context
+        )
+
+        let stored = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>(
+            sortBy: [SortDescriptor(\GameEventRecord.sequenceNumber)]
+        ))
+        #expect(stored.map(\.id) == records.map(\.id))
+        #expect(try stored[0].decoded().body == bodies[0])
+        #expect(try stored[1].decoded().body == .ballInPlay(groundOut))
+        #expect(try stored[2].decoded().body == bodies[2])
+        #expect(try stored[3].decoded().body == .ballInPlay(.init(
+            outcome: .single,
+            opponentBatterSlot: 2,
+            movements: [.init(source: .batter, destination: .first)],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )))
+    }
+
+    @Test func excludedScoringDownstreamPlayCannotEnterNonScoringRepairFlow() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let bodies: [GameEventBody] = [
+            .pitch(.init(result: .ballInPlay, pitcherID: pitcherID, opponentBatterSlot: 1)),
+            .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            )),
+            .pitch(.init(result: .ballInPlay, pitcherID: pitcherID, opponentBatterSlot: 2)),
+            .ballInPlay(.init(
+                outcome: .double,
+                opponentBatterSlot: 2,
+                movements: [
+                    .init(source: .first, destination: .home),
+                    .init(source: .batter, destination: .second)
+                ],
+                rbi: 1,
+                thirdOutRunsCounted: nil
+            ))
+        ]
+        let records = try bodies.enumerated().map { index, body in
+            try GameEventRecord(gameID: game.id, sequenceNumber: index + 1, body: body)
+        }
+        records.forEach(context.insert)
+        try context.save()
+
+        let edit = try GameEventCorrection.prepareDefensiveBallInPlayEdit(
+            recordID: records[1].id,
+            game: game,
+            modelContext: context
+        )
+        let preview = try GameEventCorrection.stageDefensiveBallInPlayEdit(
+            .init(
+                outcome: .groundOut,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .out)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ),
+            in: edit,
+            game: game,
+            modelContext: context
+        )
+        let staged = try #require(preview.correctionSession)
+        #expect(staged.firstInvalidRecord?.id == records[3].id)
+        #expect(staged.firstInvalidRecord?.canEditBallInPlay == false)
+
+        #expect(throws: GameEventCorrectionError.ballInPlayNotEditable) {
+            _ = try GameEventCorrection.stageBallInPlayEdit(
+                recordID: records[3].id,
+                play: .init(
+                    outcome: .double,
+                    opponentBatterSlot: 2,
+                    movements: [.init(source: .batter, destination: .second)],
+                    rbi: 0,
+                    thirdOutRunsCounted: nil
+                ),
+                in: staged,
                 game: game,
                 modelContext: context
             )
@@ -5086,7 +5189,6 @@ extension PersistenceTests {
         let stored = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>(
             sortBy: [SortDescriptor(\GameEventRecord.sequenceNumber)]
         ))
-        #expect(stored.map(\.id) == records.map(\.id))
         #expect(try stored.map { try $0.decoded().body } == bodies)
     }
 

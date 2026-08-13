@@ -122,7 +122,8 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - The persistence/replay boundary replaces a saved result while retaining the paired counted In Play pitch and stable result ID, sequence, and timestamp.
 - Single, double, triple, reached-on-error, fielder's-choice, ordinary-out, and sacrifice-bunt paths replay expected bases, outs, opponent batter slot, and pitcher totals.
 - Existing movement validation rejects missing, duplicate, unexpected, backward, passing, colliding, excess-out, and outcome-inconsistent proposals; home, multi-out, and third-out corrections remain unavailable.
-- An invalid downstream play identifies its exact record and disables Save without mutating durable history.
+- An invalid downstream eligible non-scoring play identifies its exact record and can join the same staged correction; Save stays disabled until replay is clean, then both replacements persist atomically.
+- A downstream scoring, multi-out, or third-out play remains outside this editor even if a non-scoring replacement would replay cleanly; its original event-time eligibility is enforced at the correction boundary.
 - Wrong-game, stale-session, projection, and failed-save paths preserve the original records; fresh-context and cold-store reload reproduce the corrected state.
 - Accessibility XXXL UI coverage distinguishes the counted pitch from the editable result, reconfirms runner destinations, previews state, saves, and reopens the game with corrected bases and outs.
 
