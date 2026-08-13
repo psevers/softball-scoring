@@ -167,8 +167,8 @@ enum PlayHistoryProjector {
                 let actor = identity?.identity.displayName ?? "Tracked runner"
                 let context = identity.map { actorContext(for: $0.identity, orderSize: $0.orderSize) }
                     ?? "Event-time player ID \(event.runnerID.uuidString)"
-                let notation = event.result == .stolenBase ? "SB" : "CS"
-                let movement = "\(baseLabel(for: event.source)) to \(event.destination.label)"
+                let notation = event.result.shortLabel
+                let movement = "\(event.source.baseLabel) to \(event.destination.label)"
                 let summary = "\(notation) · \(movement)"
                 let component = PlayHistoryComponent(
                     recordID: trace.recordID,
@@ -487,15 +487,6 @@ enum PlayHistoryProjector {
         case .first: "Runner 1B"
         case .second: "Runner 2B"
         case .third: "Runner 3B"
-        }
-    }
-
-    private static func baseLabel(for source: RunnerSource) -> String {
-        switch source {
-        case .batter: "Batter"
-        case .first: "1B"
-        case .second: "2B"
-        case .third: "3B"
         }
     }
 

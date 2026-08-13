@@ -61,6 +61,7 @@ Only forced runners advance. Bases-loaded BB/HBP scores exactly one run.
 - Neither result advances the current batter or completes a plate appearance.
 - A steal of home credits the runner with both SB and R; no RBI is credited.
 - A third-out CS advances the half-inning and preserves the next tracked batter.
+- Undo of the latest SB/CS record restores the identified runner to the source base through full replay. It removes only that runner's SB/CS attribution and any steal-of-home run, restores the prior offensive half after a third-out CS, and leaves the active batter and count unchanged.
 
 ## Ball in play
 
@@ -114,7 +115,7 @@ Opponent slots rotate 1...9. Completing a PA advances the slot; 9 wraps to 1.
 ## Event invariants
 
 - Persisted events are authoritative history.
-- Undo latest eligible action removes only the latest persisted defensive Ball, Called Strike, Swinging Strike, Foul, HBP, completed Ball In Play result, tracked-team count pitch, or completed tracked-team plate appearance after exact-timeline validation. Replaying the surviving timeline restores defensive count and pitcher totals; for ball four, strike three, and HBP it also restores batter slot, runners, score, outs, and half-inning together. Undoing a completed Ball In Play removes its result record only, preserves the counted In Play pitch, and restores the pre-result bases, outs, score, opponent batter slot, pitcher totals, and pending-result state. Undoing a tracked-team pitch restores the offensive count and event-time batter context without changing batting projection or pitcher totals. Undoing a completed tracked-team plate appearance restores its entire pre-play game state and removes its player attribution from the batting projection. No derived value is reverse-mutated.
+- Undo latest eligible action removes only the latest persisted defensive Ball, Called Strike, Swinging Strike, Foul, HBP, completed Ball In Play result, tracked-team count pitch, completed tracked-team plate appearance, or tracked-team SB/CS after exact-timeline validation. Replaying the surviving timeline restores defensive count and pitcher totals; for ball four, strike three, and HBP it also restores batter slot, runners, score, outs, and half-inning together. Undoing a completed Ball In Play removes its result record only, preserves the counted In Play pitch, and restores the pre-result bases, outs, score, opponent batter slot, pitcher totals, and pending-result state. Undoing a tracked-team pitch restores the offensive count and event-time batter context without changing batting projection or pitcher totals. Undoing a completed tracked-team plate appearance restores its entire pre-play game state and removes its player attribution from the batting projection. Undoing SB/CS restores its event-time runner and removes only that attempt's base-running attribution while preserving active plate-appearance progression. No derived value is reverse-mutated.
 - Sequence numbers are positive and unique.
 - Same ordered valid history → same `GameState`.
 - Pitch must match current opponent batter and current pitcher contract.

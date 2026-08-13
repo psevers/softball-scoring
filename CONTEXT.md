@@ -54,7 +54,7 @@ A visible Play History entry for an unknown kind, malformed payload, invalid seq
 
 ## Undo candidate
 
-The latest persisted scoring action when it is an eligible defensive Ball, Called Strike, Swinging Strike, Foul, HBP, completed Ball In Play result, tracked-team count pitch, or completed tracked-team plate appearance. A terminal-pitch candidate records the plate appearance it completed; a Ball In Play result candidate identifies the preceding counted pitch that will remain; tracked-team candidates retain the event-time player identity and batting-order size. A completed tracked-team plate-appearance candidate also carries its result, runner movements, runs, and RBI for exact confirmation. Every candidate retains the expected game timeline so a moved or stale action cannot be removed.
+The latest persisted scoring action when it is an eligible defensive Ball, Called Strike, Swinging Strike, Foul, HBP, completed Ball In Play result, tracked-team count pitch, completed tracked-team plate appearance, or tracked-team SB/CS event. A terminal-pitch candidate records the plate appearance it completed; a Ball In Play result candidate identifies the preceding counted pitch that will remain; tracked-team candidates retain the event-time player identity and batting-order size. A completed tracked-team plate-appearance candidate also carries its result, runner movements, runs, and RBI for exact confirmation. An SB/CS candidate identifies the event-time runner, source base, destination or out, result, and sequence. Every candidate retains the expected game timeline so a moved or stale action cannot be removed.
 
 ## Correction boundary
 

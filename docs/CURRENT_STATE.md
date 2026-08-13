@@ -174,7 +174,7 @@ Keep ticket #10 local until explicitly authorized to push. Before merge, publish
 
 ## Current vertical slice
 
-**Slice 6 — Undo the latest tracked-team completed plate appearance, ticket #31.**
+**Slice 6 — Undo the latest tracked-team SB or CS, ticket #32.**
 
 The live game and Play History now share one fresh game-scoped snapshot containing replay,
 accepted-event batting projection, and a history trace. History groups event-time half-innings and
@@ -196,6 +196,10 @@ Completed tracked-team plate-appearance confirmation uses the event-time player 
 result, runner movements, runs, RBI, and sequence. Removing the record through the same correction boundary
 restores count, bases, score, outs, half-inning, and batting-order progression while reprojecting every
 player-attributed batting value from the surviving timeline.
+Latest SB/CS confirmation resolves and names the event-time runner, source base, destination or out, result,
+and sequence. Removing the record through authoritative replay restores the runner to the source base,
+removes only that runner's SB/CS attribution and any steal-of-home run, returns to the prior offensive half
+after a third-out CS, and preserves the active tracked batter, count, and plate-appearance progression.
 Earlier-event edit/delete and pitch-count correction remain later Slice 6 work.
 
 ## Do not redo

@@ -100,6 +100,20 @@ struct OffensivePitchEvent: Codable, Equatable, Sendable {
 enum OffensiveBaseRunningResult: String, Codable, Sendable {
     case stolenBase
     case caughtStealing
+
+    var shortLabel: String {
+        switch self {
+        case .stolenBase: "SB"
+        case .caughtStealing: "CS"
+        }
+    }
+
+    var confirmationName: String {
+        switch self {
+        case .stolenBase: "stolen base"
+        case .caughtStealing: "caught stealing"
+        }
+    }
 }
 
 struct OffensiveBaseRunningEvent: Codable, Equatable, Sendable {
@@ -179,6 +193,15 @@ enum RunnerSource: String, CaseIterable, Codable, Hashable, Sendable {
         case .first: "Runner on 1B"
         case .second: "Runner on 2B"
         case .third: "Runner on 3B"
+        }
+    }
+
+    var baseLabel: String {
+        switch self {
+        case .batter: "Batter"
+        case .first: "1B"
+        case .second: "2B"
+        case .third: "3B"
         }
     }
 }
