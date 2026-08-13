@@ -1,3 +1,4 @@
+import Observation
 import SwiftData
 import SwiftUI
 
@@ -13,8 +14,7 @@ struct DefensivePitchEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var selectedResult: PitchResult
-    @State private var correctionSession: DefensivePitchCorrectionSession?
-    @State private var errorMessage: String?
+    @State private var correction = DefensivePitchCorrectionCoordinator()
 
     init(
         game: Game,
@@ -63,14 +63,19 @@ struct DefensivePitchEditView: View {
                         }
                     }
 
-                    if let correctionSession {
+                    if let correctionSession = correction.session {
                         DefensivePitchCorrectionSections(
                             correctionSession: correctionSession,
                             proposedSummary: "Proposed: \(selectedResult.label) · "
                                 + countDescription(proposedState(in: correctionSession)),
                             proposedIdentifier: "pitchEdit.proposed",
                             stageChange: { problem, action in
-                                stageRepair(recordID: problem.id, action: action)
+                                correction.stageRepair(
+                                    recordID: problem.id,
+                                    action: action,
+                                    game: game,
+                                    modelContext: modelContext
+                                )
                             }
                         )
                     }
@@ -94,7 +99,7 @@ struct DefensivePitchEditView: View {
                             maxWidth: .infinity,
                             minHeight: AppTheme.TouchTarget.minimum
                         )
-                        .disabled(correctionSession?.canSave != true)
+                        .disabled(correction.session?.canSave != true)
                         .accessibilityIdentifier("pitchEdit.save")
                 }
                 .padding(.horizontal, AppTheme.Spacing.md)
@@ -104,12 +109,15 @@ struct DefensivePitchEditView: View {
             .navigationTitle("Edit Pitch")
             .navigationBarTitleDisplayMode(.inline)
             .alert("Pitch Edit Failed", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
+                get: { correction.errorMessage != nil },
+                set: { if !$0 { correction.errorMessage = nil } }
             )) {
-                Button("OK", role: .cancel) { errorMessage = nil }
+                Button("OK", role: .cancel) { correction.errorMessage = nil }
             } message: {
-                Text(errorMessage ?? "The proposed pitch could not be replayed safely.")
+                Text(
+                    correction.errorMessage
+                        ?? "The proposed pitch could not be replayed safely."
+                )
             }
         }
     }
@@ -117,7 +125,7 @@ struct DefensivePitchEditView: View {
     private func select(_ result: PitchResult) {
         selectedResult = result
         guard result != editSession.originalResult else {
-            correctionSession = nil
+            correction.session = nil
             return
         }
         do {
@@ -125,7 +133,7 @@ struct DefensivePitchEditView: View {
                 game: game,
                 modelContext: modelContext
             )
-            correctionSession = try GameEventCorrection.stagePitchEdit(
+            correction.session = try GameEventCorrection.stagePitchEdit(
                 recordID: editSession.recordID,
                 result: result,
                 in: session,
@@ -133,13 +141,15 @@ struct DefensivePitchEditView: View {
                 modelContext: modelContext
             )
         } catch {
-            correctionSession = nil
-            errorMessage = error.localizedDescription
+            correction.session = nil
+            correction.errorMessage = error.localizedDescription
         }
     }
 
     private func save() {
-        guard let correctionSession, correctionSession.canSave else { return }
+        guard let correctionSession = correction.session, correctionSession.canSave else {
+            return
+        }
         do {
             try liveSession.saveDefensivePitchCorrection(
                 correctionSession,
@@ -148,7 +158,7 @@ struct DefensivePitchEditView: View {
             )
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            correction.errorMessage = error.localizedDescription
         }
     }
 
@@ -156,21 +166,6 @@ struct DefensivePitchEditView: View {
         correctionSession.snapshot.replay.entries.first(where: {
             $0.recordID == editSession.recordID
         })?.stateAfter ?? correctionSession.snapshot.replay.state
-    }
-
-    private func stageRepair(recordID: UUID, action: DefensivePitchRepairAction) {
-        guard let correctionSession else { return }
-        do {
-            self.correctionSession = try stagingPitchRepair(
-                recordID: recordID,
-                action: action,
-                in: correctionSession,
-                game: game,
-                modelContext: modelContext
-            )
-        } catch {
-            errorMessage = error.localizedDescription
-        }
     }
 
     private func countDescription(_ state: GameState) -> String {
@@ -185,8 +180,7 @@ struct DefensivePitchDeletionView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @State private var correctionSession: DefensivePitchCorrectionSession?
-    @State private var errorMessage: String?
+    @State private var correction = DefensivePitchCorrectionCoordinator()
 
     var body: some View {
         NavigationStack {
@@ -206,14 +200,19 @@ struct DefensivePitchDeletionView: View {
                         .accessibilityIdentifier("pitchDelete.current")
                     }
 
-                    if let correctionSession {
+                    if let correctionSession = correction.session {
                         DefensivePitchCorrectionSections(
                             correctionSession: correctionSession,
                             stageChange: { problem, action in
-                                stageRepair(recordID: problem.id, action: action)
+                                correction.stageRepair(
+                                    recordID: problem.id,
+                                    action: action,
+                                    game: game,
+                                    modelContext: modelContext
+                                )
                             }
                         )
-                    } else if errorMessage == nil {
+                    } else if correction.errorMessage == nil {
                         Section("Candidate replay") {
                             ProgressView("Replaying complete history…")
                         }
@@ -238,7 +237,7 @@ struct DefensivePitchDeletionView: View {
                             maxWidth: .infinity,
                             minHeight: AppTheme.TouchTarget.minimum
                         )
-                        .disabled(correctionSession?.canSave != true)
+                        .disabled(correction.session?.canSave != true)
                         .accessibilityIdentifier("pitchDelete.save")
                 }
                 .padding(.horizontal, AppTheme.Spacing.md)
@@ -249,36 +248,41 @@ struct DefensivePitchDeletionView: View {
             .navigationBarTitleDisplayMode(.inline)
             .task { stage() }
             .alert("Pitch Deletion Failed", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
+                get: { correction.errorMessage != nil },
+                set: { if !$0 { correction.errorMessage = nil } }
             )) {
-                Button("OK", role: .cancel) { errorMessage = nil }
+                Button("OK", role: .cancel) { correction.errorMessage = nil }
             } message: {
-                Text(errorMessage ?? "The pitch deletion could not be replayed safely.")
+                Text(
+                    correction.errorMessage
+                        ?? "The pitch deletion could not be replayed safely."
+                )
             }
         }
     }
 
     private func stage() {
-        guard correctionSession == nil else { return }
+        guard correction.session == nil else { return }
         do {
             let session = try GameEventCorrection.beginDefensivePitchCorrection(
                 game: game,
                 modelContext: modelContext
             )
-            correctionSession = try GameEventCorrection.stagePitchDeletion(
+            correction.session = try GameEventCorrection.stagePitchDeletion(
                 recordID: deletionSession.recordID,
                 in: session,
                 game: game,
                 modelContext: modelContext
             )
         } catch {
-            errorMessage = error.localizedDescription
+            correction.errorMessage = error.localizedDescription
         }
     }
 
     private func save() {
-        guard let correctionSession, correctionSession.canSave else { return }
+        guard let correctionSession = correction.session, correctionSession.canSave else {
+            return
+        }
         do {
             try liveSession.saveDefensivePitchCorrection(
                 correctionSession,
@@ -287,22 +291,7 @@ struct DefensivePitchDeletionView: View {
             )
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func stageRepair(recordID: UUID, action: DefensivePitchRepairAction) {
-        guard let correctionSession else { return }
-        do {
-            self.correctionSession = try stagingPitchRepair(
-                recordID: recordID,
-                action: action,
-                in: correctionSession,
-                game: game,
-                modelContext: modelContext
-            )
-        } catch {
-            errorMessage = error.localizedDescription
+            correction.errorMessage = error.localizedDescription
         }
     }
 
@@ -317,29 +306,39 @@ private enum DefensivePitchRepairAction {
 }
 
 @MainActor
-private func stagingPitchRepair(
-    recordID: UUID,
-    action: DefensivePitchRepairAction,
-    in correctionSession: DefensivePitchCorrectionSession,
-    game: Game,
-    modelContext: ModelContext
-) throws -> DefensivePitchCorrectionSession {
-    switch action {
-    case .edit(let result):
-        try GameEventCorrection.stagePitchEdit(
-            recordID: recordID,
-            result: result,
-            in: correctionSession,
-            game: game,
-            modelContext: modelContext
-        )
-    case .delete:
-        try GameEventCorrection.stagePitchDeletion(
-            recordID: recordID,
-            in: correctionSession,
-            game: game,
-            modelContext: modelContext
-        )
+@Observable
+private final class DefensivePitchCorrectionCoordinator {
+    var session: DefensivePitchCorrectionSession?
+    var errorMessage: String?
+
+    func stageRepair(
+        recordID: UUID,
+        action: DefensivePitchRepairAction,
+        game: Game,
+        modelContext: ModelContext
+    ) {
+        guard let session else { return }
+        do {
+            switch action {
+            case .edit(let result):
+                self.session = try GameEventCorrection.stagePitchEdit(
+                    recordID: recordID,
+                    result: result,
+                    in: session,
+                    game: game,
+                    modelContext: modelContext
+                )
+            case .delete:
+                self.session = try GameEventCorrection.stagePitchDeletion(
+                    recordID: recordID,
+                    in: session,
+                    game: game,
+                    modelContext: modelContext
+                )
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
 
