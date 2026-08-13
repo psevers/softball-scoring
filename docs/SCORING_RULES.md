@@ -134,7 +134,7 @@ Opponent slots rotate 1...9. Completing a PA advances the slot; 9 wraps to 1.
 Still required before game-complete MVP:
 
 - standalone WP/PB/manual advance/basepath-out events,
-- remaining correction workflows beyond latest-action undo and defensive pitch-result editing,
+- remaining correction workflows beyond latest-action undo and defensive pitch editing/deletion,
 - pitching changes,
 - dropped-third-strike flow,
 - detailed fastpitch substitutions/DP-FLEX.

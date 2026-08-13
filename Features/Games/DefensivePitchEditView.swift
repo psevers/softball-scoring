@@ -181,3 +181,137 @@ struct DefensivePitchEditView: View {
         "Count \(state.balls)–\(state.strikes)"
     }
 }
+
+struct DefensivePitchDeletionView: View {
+    let game: Game
+    let deletionSession: DefensivePitchDeletionSession
+    let liveSession: LiveGameSession
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @State private var preview: DefensivePitchDeletionPreview?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Form {
+                    Section("Pitch") {
+                        Text(
+                            "\(deletionSession.half.displayName) \(deletionSession.inning) · "
+                                + "Opponent batter \(deletionSession.opponentBatterSlot) · "
+                                + "Sequence \(deletionSession.sequenceNumber)"
+                        )
+                        .font(.body.monospacedDigit())
+                        Text(
+                            "Delete: \(deletionSession.originalResult.label) · "
+                                + countDescription(deletionSession.originalStateAfter)
+                        )
+                        .accessibilityIdentifier("pitchDelete.current")
+                    }
+
+                    if let preview {
+                        Section("Candidate replay") {
+                            if let invalid = preview.firstInvalidRecord {
+                                Label(
+                                    "Sequence \(invalid.sequenceNumber): \(invalid.summary)",
+                                    systemImage: "exclamationmark.triangle.fill"
+                                )
+                                .foregroundStyle(AppTheme.destructive)
+                            } else {
+                                Label(
+                                    "Candidate timeline replays cleanly",
+                                    systemImage: "checkmark.circle"
+                                )
+                            }
+                        }
+
+                        Section("Preview") {
+                            ForEach(preview.snapshot.history.sections) { section in
+                                VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                                    Text(section.title)
+                                        .font(.caption.bold())
+                                    ForEach(section.entries) { entry in
+                                        Text("\(entry.actor): \(entry.summary)")
+                                            .font(.body)
+                                    }
+                                }
+                            }
+                        }
+                    } else if errorMessage == nil {
+                        Section("Candidate replay") {
+                            ProgressView("Replaying complete history…")
+                        }
+                    }
+                }
+
+                Divider()
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    Button("Cancel") { dismiss() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: AppTheme.TouchTarget.minimum
+                        )
+                        .accessibilityIdentifier("pitchDelete.cancel")
+
+                    Button("Save") { save() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: AppTheme.TouchTarget.minimum
+                        )
+                        .disabled(preview?.canSave != true)
+                        .accessibilityIdentifier("pitchDelete.save")
+                }
+                .padding(.horizontal, AppTheme.Spacing.md)
+                .padding(.vertical, AppTheme.Spacing.sm)
+                .background(.bar)
+            }
+            .navigationTitle("Delete Pitch")
+            .navigationBarTitleDisplayMode(.inline)
+            .task { stage() }
+            .alert("Pitch Deletion Failed", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "The pitch deletion could not be replayed safely.")
+            }
+        }
+    }
+
+    private func stage() {
+        guard preview == nil else { return }
+        do {
+            preview = try GameEventCorrection.stageDefensivePitchDeletion(
+                deletionSession,
+                game: game,
+                modelContext: modelContext
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func save() {
+        guard let preview, preview.canSave else { return }
+        do {
+            try liveSession.saveDefensivePitchDeletion(
+                preview,
+                game: game,
+                modelContext: modelContext
+            )
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func countDescription(_ state: GameState) -> String {
+        "Count \(state.balls)–\(state.strikes)"
+    }
+}

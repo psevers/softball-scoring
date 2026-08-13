@@ -80,3 +80,17 @@ full candidate replay/projection → first invalid later record disables Save
   ↓
 Cancel unchanged, or Save one payload/kind → refreshed History + live scoring
 ```
+
+## Delete an earlier defensive pitch — Slice 6
+
+```text
+Live Game → Play History → expand plate appearance → Delete Pitch
+  ↓
+confirm exact inning/half + opponent slot + result + sequence
+  ↓
+stage removal → replay/project the complete candidate timeline from the beginning
+  ↓
+first invalid downstream record disables Save
+  ↓
+Cancel unchanged, or Save exact deletion → preserve sequence gap → refreshed History + live scoring
+```
