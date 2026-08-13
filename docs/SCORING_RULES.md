@@ -51,6 +51,7 @@ Only forced runners advance. Bases-loaded BB/HBP scores exactly one run.
 - A two-strike foul leaves the live count at two strikes.
 - Quick Walk, HBP, Strikeout, and Home Run remain available and produce the same plate-appearance events as normal entry.
 - Opponent-pitcher statistics are not tracked in this slice.
+- Undo of the latest non-terminal tracked-team pitch removes its event record only. Full replay restores the prior count and event-time batter context without changing batting projection or any pitcher total.
 
 ## Stolen base / caught stealing
 
@@ -112,7 +113,7 @@ Opponent slots rotate 1...9. Completing a PA advances the slot; 9 wraps to 1.
 ## Event invariants
 
 - Persisted events are authoritative history.
-- Undo latest defensive action removes only the latest persisted Ball, Called Strike, Swinging Strike, Foul, HBP, or completed Ball In Play result after exact-timeline validation. Replaying the surviving timeline restores count and pitcher totals; for ball four, strike three, and HBP it also restores batter slot, runners, score, outs, and half-inning together. Undoing a completed Ball In Play removes its result record only, preserves the counted In Play pitch, and restores the pre-result bases, outs, score, opponent batter slot, pitcher totals, and pending-result state. No derived value is reverse-mutated.
+- Undo latest eligible action removes only the latest persisted defensive Ball, Called Strike, Swinging Strike, Foul, HBP, completed Ball In Play result, or non-terminal tracked-team count pitch after exact-timeline validation. Replaying the surviving timeline restores defensive count and pitcher totals; for ball four, strike three, and HBP it also restores batter slot, runners, score, outs, and half-inning together. Undoing a completed Ball In Play removes its result record only, preserves the counted In Play pitch, and restores the pre-result bases, outs, score, opponent batter slot, pitcher totals, and pending-result state. Undoing a tracked-team pitch restores the offensive count and event-time batter context without changing batting projection or pitcher totals. No derived value is reverse-mutated.
 - Sequence numbers are positive and unique.
 - Same ordered valid history → same `GameState`.
 - Pitch must match current opponent batter and current pitcher contract.

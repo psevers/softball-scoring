@@ -4,20 +4,27 @@ import SwiftData
 enum UndoLatestAction: Equatable {
     case pitch(PitchResult)
     case ballInPlayResult(BallInPlayOutcome)
+    case offensivePitch(OffensivePitchResult)
 
     var label: String {
         switch self {
         case .pitch(let result): result.label
         case .ballInPlayResult(let outcome): "\(outcome.shortLabel) Result"
+        case .offensivePitch(let result): result.label
         }
     }
 
     var buttonTitle: String {
         switch self {
-        case .pitch: "Undo Latest Pitch"
+        case .pitch, .offensivePitch: "Undo Latest Pitch"
         case .ballInPlayResult: "Undo Latest Result"
         }
     }
+}
+
+enum UndoLatestActor: Equatable {
+    case opponentBatter(slot: Int)
+    case trackedBatter(TrackedBatterIdentity, battingOrderSize: Int)
 }
 
 struct UndoLatestActionCandidate: Identifiable {
@@ -26,28 +33,42 @@ struct UndoLatestActionCandidate: Identifiable {
     let sequenceNumber: Int
     let inning: Int
     let half: InningHalf
-    let opponentBatterSlot: Int
+    let actor: UndoLatestActor
     let action: UndoLatestAction
     let completedPlateAppearance: Bool
     let precedingBallInPlayPitchSequenceNumber: Int?
 
     fileprivate let expectedTimeline: [GameEventRecordRevision]
 
+    var opponentBatterSlot: Int? {
+        guard case .opponentBatter(let slot) = actor else { return nil }
+        return slot
+    }
+
     var confirmationTitle: String {
         switch action {
-        case .pitch: "Undo latest pitch?"
+        case .pitch, .offensivePitch: "Undo latest pitch?"
         case .ballInPlayResult: "Undo latest result?"
         }
     }
 
     var confirmationMessage: String {
-        "\(half.displayName) of inning \(inning), opponent batting slot \(opponentBatterSlot), "
+        let actorDescription = switch actor {
+        case .opponentBatter(let slot):
+            "opponent batting slot \(slot)"
+        case .trackedBatter(let batter, let battingOrderSize):
+            "\(batter.displayName), batting slot \(batter.lineupSlot) of \(battingOrderSize)"
+        }
+        return "\(half.displayName) of inning \(inning), \(actorDescription), "
             + "sequence \(sequenceNumber): \(action.label)."
     }
 
     var confirmationDetail: String {
         switch action {
         case .pitch:
+            guard case .opponentBatter(let opponentBatterSlot) = actor else {
+                return "Remove \(confirmationMessage)"
+            }
             let completedPlateAppearanceDetail = completedPlateAppearance
                 ? " This pitch completed the plate appearance for opponent batting slot \(opponentBatterSlot)."
                 : ""
@@ -58,6 +79,9 @@ struct UndoLatestActionCandidate: Identifiable {
             return "Remove \(confirmationMessage) Only the completed \(outcome.label) result will be removed. "
                 + "The preceding Ball In Play pitch at sequence \(pitchSequence) will remain counted, "
                 + "and the game will return to pending outcome entry."
+        case .offensivePitch:
+            return "Remove \(confirmationMessage) The event-time tracked batter and batting-order size "
+                + "will remain unchanged, and the offensive count will be rebuilt from the remaining event history."
         }
     }
 }
@@ -122,11 +146,13 @@ enum GameEventCorrection {
         }
 
         let action: UndoLatestAction
+        let actor: UndoLatestActor
         let completedPlateAppearance: Bool
         let precedingPitchSequenceNumber: Int?
         switch latestEntry.body {
         case .pitch(let pitch) where isUndoEligiblePitch(pitch.result):
             action = .pitch(pitch.result)
+            actor = .opponentBatter(slot: pitch.opponentBatterSlot)
             completedPlateAppearance = completesPlateAppearance(
                 pitch.result,
                 stateBefore: latestEntry.stateBefore
@@ -141,8 +167,14 @@ enum GameEventCorrection {
                 throw GameEventCorrectionError.invalidTimeline
             }
             action = .ballInPlayResult(play.outcome)
+            actor = .opponentBatter(slot: play.opponentBatterSlot)
             completedPlateAppearance = true
             precedingPitchSequenceNumber = precedingEntry.sequenceNumber
+        case .offensivePitch(let pitch):
+            action = .offensivePitch(pitch.result)
+            actor = .trackedBatter(pitch.batter, battingOrderSize: pitch.battingOrderSize)
+            completedPlateAppearance = false
+            precedingPitchSequenceNumber = nil
         default:
             throw GameEventCorrectionError.noUndoAvailable
         }
@@ -155,7 +187,7 @@ enum GameEventCorrection {
             sequenceNumber: latestRecord.sequenceNumber,
             inning: latestEntry.stateBefore.inning,
             half: latestEntry.stateBefore.half,
-            opponentBatterSlot: latestEntry.stateBefore.currentOpponentBatterSlot,
+            actor: actor,
             action: action,
             completedPlateAppearance: completedPlateAppearance,
             precedingBallInPlayPitchSequenceNumber: precedingPitchSequenceNumber,

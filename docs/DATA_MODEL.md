@@ -50,7 +50,7 @@ Authoritative persisted scoring envelope:
 - `payload: Data`
 
 Sequence numbers are positive and unique by invariant within a game. Semantic validation occurs on replay.
-Undo deletes the authoritative latest eligible defensive pitch or completed Ball In Play result record without resequencing or rewriting survivors. Sequence gaps are valid, and the next append uses the maximum surviving sequence plus one.
+Undo deletes the authoritative latest eligible defensive pitch, completed Ball In Play result, or non-terminal tracked-team count pitch record without resequencing or rewriting survivors. Sequence gaps are valid, and the next append uses the maximum surviving sequence plus one.
 
 ### PitchEvent payload
 
@@ -67,6 +67,14 @@ Supported results in Slice 3:
 - HBP
 
 Slice 6 Undo accepts Ball, Called Strike, Swinging Strike, Foul, and HBP records, including ball four and strike three. Removing a terminal pitch reconstructs its entire plate-appearance consequence through replay. It also accepts a latest completed defensive Ball In Play result; removing that result preserves the separate counted pitch record and returns replay to pending-result state.
+
+### OffensivePitchEvent payload
+
+- `batter` event-time player identity and batting-order slot
+- `battingOrderSize`
+- `result`
+
+Slice 6 Undo accepts non-terminal tracked-team Ball, Called Strike, Swinging Strike, and Foul records. Removing one reconstructs the prior offensive count while preserving the surviving event-time batter context, batting-order size, and unchanged batting projection.
 
 ## Derived—not persisted as competing truth
 

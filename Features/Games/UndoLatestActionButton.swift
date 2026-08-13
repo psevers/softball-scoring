@@ -16,7 +16,7 @@ struct UndoLatestActionButton: View {
         }
         .buttonStyle(.bordered)
         .tint(AppTheme.destructive)
-        .accessibilityHint("Opens a confirmation before removing the latest eligible defensive action")
+        .accessibilityHint("Opens a confirmation before removing the latest eligible scoring action")
         .accessibilityIdentifier(identifier)
     }
 }

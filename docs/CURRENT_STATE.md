@@ -2,7 +2,7 @@
 
 ## Window
 
-Window 1 continuation — **Slice 5.5 scorebook visual alignment remains complete and approved. Slice 6 read-only Play History and latest eligible defensive-action Undo are implemented through ticket #29; publication remains separate.**
+Window 1 continuation — **Slice 5.5 scorebook visual alignment remains complete and approved. Slice 6 read-only Play History and latest eligible-action Undo are implemented through ticket #30; publication remains separate.**
 
 ## Canonical repo
 
@@ -174,19 +174,23 @@ Keep ticket #10 local until explicitly authorized to push. Before merge, publish
 
 ## Current vertical slice
 
-**Slice 6 — Undo the latest completed defensive Ball In Play result, ticket #29.**
+**Slice 6 — Undo the latest tracked-team count pitch, ticket #30.**
 
 The live game and Play History now share one fresh game-scoped snapshot containing replay,
 accepted-event batting projection, and a history trace. History groups event-time half-innings and
 plate appearances, pairs completed Ball In Play records, keeps pending plays visible, preserves
 component pitches, and exposes unreadable or rejected records as problem entries. Live Game and Play
 History now offer confirmed Undo when the latest action is an eligible defensive Ball, Called Strike,
-Swinging Strike, Foul, HBP, or completed Ball In Play result. Ball four, strike three, and HBP confirmations identify the completed plate
+Swinging Strike, Foul, HBP, completed Ball In Play result, or non-terminal tracked-team Ball, Called Strike,
+Swinging Strike, or Foul. Ball four, strike three, and HBP confirmations identify the completed plate
 appearance; authoritative replay restores count, batter slot, runners, score, outs, half-inning, batting
 projection, and pitcher totals without reverse mutation. The correction boundary freshly verifies the exact
 game timeline, previews the surviving replay/projection, atomically deletes with rollback, and refreshes the
 shared snapshot. A completed Ball In Play confirmation distinguishes its result from the preceding counted
 pitch; removing only the result restores pending outcome entry so a replacement can be recorded immediately.
+Tracked-team pitch confirmation names the event-time player, batting-order slot and size, result, and
+sequence. Replay restores the prior offensive count without touching pitcher totals or the player-attributed
+batting projection, and relaunch reproduces the same active batter context.
 Earlier-event edit/delete and pitch-count correction remain later Slice 6 work.
 
 ## Do not redo
