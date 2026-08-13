@@ -460,6 +460,70 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(app.buttons["game.undoLatestAction"].isHittable)
     }
 
+    func testEarlierDefensivePitchEditCancelsThenSavesAndPersists() {
+        let app = launchApp(atAccessibilityExtraExtraExtraLarge: true)
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Pitch Edit Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let count = app.staticTexts["game.count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 3))
+        XCTAssertEqual(count.label, "1 – 1")
+        XCTAssertTrue(app.staticTexts["Pitching · 2 pitches · Opp batter 1"].exists)
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        app.buttons["history.entry.1"].tap()
+
+        let editPitch = app.buttons["history.editPitch.1"]
+        XCTAssertTrue(editPitch.waitForExistence(timeout: 3))
+        XCTAssertEqual(editPitch.label, "Edit Ball pitch, sequence 1")
+        XCTAssertGreaterThanOrEqual(editPitch.frame.height, 44)
+        editPitch.tap()
+
+        XCTAssertTrue(app.navigationBars["Edit Pitch"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Top 1 · Opponent batter 1 · Sequence 1"].exists)
+        XCTAssertTrue(app.staticTexts["Current: Ball · Count 1–0"].exists)
+        XCTAssertFalse(app.buttons["pitchEdit.save"].isEnabled)
+        let cancel = app.buttons["pitchEdit.cancel"]
+        XCTAssertGreaterThanOrEqual(cancel.frame.height, 44)
+        cancel.tap()
+        XCTAssertTrue(app.buttons["history.editPitch.1"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["history.entry.1"].label.contains("1–1 count"))
+
+        app.buttons["history.editPitch.1"].tap()
+        let editForm = app.collectionViews.firstMatch
+        XCTAssertTrue(editForm.waitForExistence(timeout: 3))
+        let swingingStrike = app.buttons["pitchEdit.result.swingingStrike"]
+        XCTAssertTrue(swipeWithinUntilHittable(swingingStrike, in: editForm))
+        swingingStrike.tap()
+        let proposed = app.staticTexts["pitchEdit.proposed"]
+        XCTAssertTrue(swipeWithinUntilHittable(proposed, in: editForm))
+        XCTAssertEqual(proposed.label, "Proposed: Swinging Strike · Count 0–1")
+        let cleanReplay = app.staticTexts["Candidate timeline replays cleanly"]
+        XCTAssertTrue(swipeWithinUntilHittable(cleanReplay, in: editForm))
+        let save = app.buttons["pitchEdit.save"]
+        XCTAssertTrue(save.isEnabled)
+        XCTAssertGreaterThanOrEqual(save.frame.height, 44)
+        save.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["history.entry.1"].label.contains("0–2 count"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertTrue(count.waitForExistence(timeout: 3))
+        XCTAssertEqual(count.label, "0 – 2")
+        XCTAssertTrue(app.staticTexts["Pitching · 2 pitches · Opp batter 1"].exists)
+
+        app.navigationBars["UI Pitch Edit Opponent"].buttons.firstMatch.tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertTrue(count.waitForExistence(timeout: 3))
+        XCTAssertEqual(count.label, "0 – 2")
+        XCTAssertTrue(app.staticTexts["Pitching · 2 pitches · Opp batter 1"].exists)
+    }
+
     func testUndoThirdOutStrikeoutRestoresDefensiveHalfInning() {
         let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()
@@ -891,12 +955,20 @@ final class ScrollReachabilityUITests: XCTestCase {
         }
     }
 
-    private func launchApp(atAccessibilityTextSize: Bool = false) -> XCUIApplication {
+    private func launchApp(
+        atAccessibilityTextSize: Bool = false,
+        atAccessibilityExtraExtraExtraLarge: Bool = false
+    ) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        let contentSizeCategory = atAccessibilityTextSize
-            ? "UICTContentSizeCategoryAccessibilityXL"
-            : "UICTContentSizeCategoryL"
+        let contentSizeCategory: String
+        if atAccessibilityExtraExtraExtraLarge {
+            contentSizeCategory = "UICTContentSizeCategoryAccessibilityXXXL"
+        } else if atAccessibilityTextSize {
+            contentSizeCategory = "UICTContentSizeCategoryAccessibilityXL"
+        } else {
+            contentSizeCategory = "UICTContentSizeCategoryL"
+        }
         app.launchArguments = [
             "-uiTesting",
             "-UIPreferredContentSizeCategoryName",
@@ -984,6 +1056,17 @@ final class ScrollReachabilityUITests: XCTestCase {
         let deadline = Date().addingTimeInterval(20)
         while !element.isHittable && Date() < deadline {
             app.swipeUp()
+        }
+        return element.isHittable
+    }
+
+    private func swipeWithinUntilHittable(
+        _ element: XCUIElement,
+        in scrollContainer: XCUIElement
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(20)
+        while !element.isHittable && Date() < deadline {
+            scrollContainer.swipeUp()
         }
         return element.isHittable
     }

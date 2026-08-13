@@ -106,17 +106,53 @@ struct UndoLatestActionCandidate: Identifiable {
     }
 }
 
+struct DefensivePitchEditSession: Identifiable {
+    var id: UUID { recordID }
+
+    let recordID: UUID
+    let gameID: UUID
+    let sequenceNumber: Int
+    let inning: Int
+    let half: InningHalf
+    let opponentBatterSlot: Int
+    let pitcherID: UUID
+    let originalResult: PitchResult
+    let stateBefore: GameState
+    let originalStateAfter: GameState
+
+    fileprivate let expectedTimeline: [GameEventRecordRevision]
+}
+
+struct DefensivePitchEditInvalidRecord: Equatable {
+    let id: UUID
+    let sequenceNumber: Int
+    let summary: String
+}
+
+struct DefensivePitchEditPreview {
+    let session: DefensivePitchEditSession
+    let proposedResult: PitchResult
+    let snapshot: LiveGameSnapshot
+    let firstInvalidRecord: DefensivePitchEditInvalidRecord?
+
+    var canSave: Bool {
+        proposedResult != session.originalResult && firstInvalidRecord == nil
+    }
+}
+
 enum GameEventCorrectionError: LocalizedError {
     case gameMismatch
     case noUndoAvailable
     case invalidTimeline
     case latestActionChanged
     case staleTimeline
+    case pitchNotEditable
+    case invalidCandidate
 
     var errorDescription: String? {
         switch self {
         case .gameMismatch:
-            "This undo action belongs to a different game."
+            "This correction belongs to a different game."
         case .noUndoAvailable:
             "The latest scoring action cannot be undone."
         case .invalidTimeline:
@@ -124,7 +160,11 @@ enum GameEventCorrectionError: LocalizedError {
         case .latestActionChanged:
             "The latest scoring action changed before Undo was confirmed. Refresh and try again."
         case .staleTimeline:
-            "The game history changed before Undo was confirmed. Refresh and try again."
+            "The game history changed before the correction was confirmed. Refresh and try again."
+        case .pitchNotEditable:
+            "This saved event is not an editable non-terminal defensive pitch."
+        case .invalidCandidate:
+            "The proposed pitch change leaves invalid game history and cannot be saved."
         }
     }
 }
@@ -274,6 +314,133 @@ enum GameEventCorrection {
         return correctedSnapshot
     }
 
+    static func prepareDefensivePitchEdit(
+        recordID: UUID,
+        game: Game,
+        modelContext: ModelContext
+    ) throws -> DefensivePitchEditSession {
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        let snapshot = try validatedSnapshot(game: game, records: records)
+        guard let record = records.first(where: { $0.id == recordID }),
+              let entry = snapshot.replay.entries.first(where: { $0.recordID == recordID }),
+              case .pitch(let pitch) = entry.body,
+              isEditablePitch(pitch.result),
+              !completesPlateAppearance(pitch.result, stateBefore: entry.stateBefore) else {
+            throw GameEventCorrectionError.pitchNotEditable
+        }
+
+        return DefensivePitchEditSession(
+            recordID: record.id,
+            gameID: game.id,
+            sequenceNumber: record.sequenceNumber,
+            inning: entry.stateBefore.inning,
+            half: entry.stateBefore.half,
+            opponentBatterSlot: pitch.opponentBatterSlot,
+            pitcherID: pitch.pitcherID,
+            originalResult: pitch.result,
+            stateBefore: entry.stateBefore,
+            originalStateAfter: entry.stateAfter,
+            expectedTimeline: records.map(GameEventRecordRevision.init)
+        )
+    }
+
+    static func stageDefensivePitchEdit(
+        _ proposedResult: PitchResult,
+        in session: DefensivePitchEditSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
+    ) throws -> DefensivePitchEditPreview {
+        guard session.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        guard isEditablePitch(proposedResult) else {
+            throw GameEventCorrectionError.pitchNotEditable
+        }
+
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        guard records.map(GameEventRecordRevision.init) == session.expectedTimeline else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        let candidateRecords = try replacingPitch(
+            in: records,
+            session: session,
+            with: proposedResult
+        )
+        let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
+            game: game,
+            records: candidateRecords,
+            projectBattingLines: projectBattingLines
+        )
+        let invalidRecord = snapshot.replay.entries
+            .first(where: { $0.rejection != nil })
+            .map { entry in
+                DefensivePitchEditInvalidRecord(
+                    id: entry.recordID,
+                    sequenceNumber: entry.sequenceNumber,
+                    summary: invalidSummary(for: entry.rejection)
+                )
+            }
+        return DefensivePitchEditPreview(
+            session: session,
+            proposedResult: proposedResult,
+            snapshot: snapshot,
+            firstInvalidRecord: invalidRecord
+        )
+    }
+
+    static func saveDefensivePitchEdit(
+        _ preview: DefensivePitchEditPreview,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project,
+        save: Save = { try $0.save() }
+    ) throws -> LiveGameSnapshot {
+        guard preview.session.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        guard isEditablePitch(preview.proposedResult) else {
+            throw GameEventCorrectionError.pitchNotEditable
+        }
+        guard preview.canSave else {
+            throw GameEventCorrectionError.invalidCandidate
+        }
+
+        let records = try fetchRecords(gameID: game.id, modelContext: modelContext)
+        guard records.map(GameEventRecordRevision.init) == preview.session.expectedTimeline else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        let candidateRecords = try replacingPitch(
+            in: records,
+            session: preview.session,
+            with: preview.proposedResult
+        )
+        let correctedSnapshot = try validatedSnapshot(
+            game: game,
+            records: candidateRecords,
+            projectBattingLines: projectBattingLines
+        )
+        guard let record = records.first(where: { $0.id == preview.session.recordID }) else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        let encoded = try GameEventCodec.encode(.pitch(PitchEvent(
+            result: preview.proposedResult,
+            pitcherID: preview.session.pitcherID,
+            opponentBatterSlot: preview.session.opponentBatterSlot
+        )))
+        record.kindRawValue = encoded.kind.rawValue
+        record.payload = encoded.payload
+        do {
+            try save(modelContext)
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
+        return correctedSnapshot
+    }
+
     private static func freshContext(from modelContext: ModelContext) -> ModelContext {
         let context = ModelContext(modelContext.container)
         context.autosaveEnabled = false
@@ -314,6 +481,47 @@ enum GameEventCorrection {
         switch result {
         case .ball, .calledStrike, .swingingStrike, .foul, .hitByPitch: true
         case .ballInPlay: false
+        }
+    }
+
+    private static func isEditablePitch(_ result: PitchResult) -> Bool {
+        switch result {
+        case .ball, .calledStrike, .swingingStrike, .foul: true
+        case .ballInPlay, .hitByPitch: false
+        }
+    }
+
+    private static func replacingPitch(
+        in records: [GameEventRecord],
+        session: DefensivePitchEditSession,
+        with result: PitchResult
+    ) throws -> [GameEventRecord] {
+        guard records.contains(where: { $0.id == session.recordID }) else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        return try records.map { record in
+            guard record.id == session.recordID else { return record }
+            return try GameEventRecord(
+                id: record.id,
+                gameID: record.gameID,
+                sequenceNumber: record.sequenceNumber,
+                timestamp: record.timestamp,
+                body: .pitch(PitchEvent(
+                    result: result,
+                    pitcherID: session.pitcherID,
+                    opponentBatterSlot: session.opponentBatterSlot
+                ))
+            )
+        }
+    }
+
+    private static func invalidSummary(for rejection: GameEventReplay.Rejection?) -> String {
+        switch rejection {
+        case .invalidSequence: "Invalid event sequence"
+        case .unknownKind: "Unsupported saved event"
+        case .malformedPayload: "Unreadable saved event"
+        case .semanticallyRejected: "Play conflicts with the proposed pitch"
+        case nil: "Invalid saved event"
         }
     }
 

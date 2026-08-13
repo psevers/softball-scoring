@@ -2,7 +2,7 @@
 
 ## Window
 
-Window 1 continuation — **Slice 5.5 scorebook visual alignment remains complete and approved. Slice 6 read-only Play History and latest eligible-action Undo are implemented through ticket #31; publication remains separate.**
+Window 1 continuation — **Slice 5.5 scorebook visual alignment remains complete and approved. Slice 6 Play History, latest eligible-action Undo, and earlier defensive pitch edit are implemented through ticket #20; publication remains separate.**
 
 ## Canonical repo
 
@@ -174,7 +174,7 @@ Keep ticket #10 local until explicitly authorized to push. Before merge, publish
 
 ## Current vertical slice
 
-**Slice 6 — Undo the latest tracked-team SB or CS, ticket #32.**
+**Slice 6 — Stage and save one earlier defensive pitch edit, ticket #20.**
 
 The live game and Play History now share one fresh game-scoped snapshot containing replay,
 accepted-event batting projection, and a history trace. History groups event-time half-innings and
@@ -200,7 +200,7 @@ Latest SB/CS confirmation resolves and names the event-time runner, source base,
 and sequence. Removing the record through authoritative replay restores the runner to the source base,
 removes only that runner's SB/CS attribution and any steal-of-home run, returns to the prior offensive half
 after a third-out CS, and preserves the active tracked batter, count, and plate-appearance progression.
-Earlier-event edit/delete and pitch-count correction remain later Slice 6 work.
+History now opens eligible earlier defensive Ball, Called Strike, Swinging Strike, and Foul components in a native editor with exact event-time context and current/proposed count summaries. Each selection stages a complete replay/projection without durable mutation, identifies the first invalid later record, and keeps Save disabled until the candidate is both changed and valid. Save freshly verifies the exact timeline, updates only the selected encoded pitch payload/kind while preserving record identity/game/sequence/timestamp, rolls back on failure, and refreshes History and live scoring. Fresh-context, cold-store, and Accessibility XL workflow tests reproduce the corrected count and pitcher totals. Earlier-event delete, broader edit coverage, and pitch-count reconciliation remain later Slice 6 work.
 
 ## Do not redo
 

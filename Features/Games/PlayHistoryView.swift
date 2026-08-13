@@ -9,6 +9,7 @@ struct PlayHistoryView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isConfirmingUndo = false
     @State private var correctionError: String?
+    @State private var pitchEditSession: DefensivePitchEditSession?
 
     var body: some View {
         ZStack {
@@ -55,13 +56,20 @@ struct PlayHistoryView: View {
         } message: { candidate in
             Text(candidate.confirmationDetail)
         }
-        .alert("Undo Failed", isPresented: Binding(
+        .alert("Correction Failed", isPresented: Binding(
             get: { correctionError != nil },
             set: { if !$0 { correctionError = nil } }
         )) {
             Button("OK", role: .cancel) { correctionError = nil }
         } message: {
-            Text(correctionError ?? "The scoring action could not be removed.")
+            Text(correctionError ?? "The scorebook correction could not be completed.")
+        }
+        .sheet(item: $pitchEditSession) { editSession in
+            DefensivePitchEditView(
+                game: game,
+                editSession: editSession,
+                liveSession: session
+            )
         }
     }
 
@@ -107,27 +115,43 @@ struct PlayHistoryView: View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
                 ForEach(entry.components) { component in
-                    HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
-                        Text("\(component.sequenceNumber)")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(AppTheme.graphite.opacity(0.54))
-                            .frame(minWidth: 24, alignment: .trailing)
+                    VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                        HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
+                            Text("\(component.sequenceNumber)")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(AppTheme.graphite.opacity(0.54))
+                                .frame(minWidth: 24, alignment: .trailing)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(component.summary)
-                                .font(component.isPitch ? .body : AppTheme.Typography.notation)
-                                .foregroundStyle(componentColor(entry))
-                            Text(component.detail)
-                                .font(.caption)
-                                .monospacedDigit()
-                                .foregroundStyle(AppTheme.graphite.opacity(0.68))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(component.summary)
+                                    .font(component.isPitch ? .body : AppTheme.Typography.notation)
+                                    .foregroundStyle(componentColor(entry))
+                                Text(component.detail)
+                                    .font(.caption)
+                                    .monospacedDigit()
+                                    .foregroundStyle(AppTheme.graphite.opacity(0.68))
+                            }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum, alignment: .leading)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(
+                            "Event \(component.sequenceNumber). \(component.accessibilityDescription)"
+                        )
+
+                        if let result = component.editableDefensivePitchResult {
+                            Button {
+                                beginPitchEdit(recordID: component.recordID)
+                            } label: {
+                                Label("Edit Pitch", systemImage: "pencil")
+                                    .frame(minHeight: AppTheme.TouchTarget.minimum)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel(
+                                "Edit \(result.label) pitch, sequence \(component.sequenceNumber)"
+                            )
+                            .accessibilityIdentifier("history.editPitch.\(component.sequenceNumber)")
                         }
                     }
-                    .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum, alignment: .leading)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(
-                        "Event \(component.sequenceNumber). \(component.accessibilityDescription)"
-                    )
                 }
             }
             .padding(.top, AppTheme.Spacing.sm)
@@ -161,9 +185,9 @@ struct PlayHistoryView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(entry.accessibilityDescription)
             .accessibilityHint("Expands the component pitches and play records")
+            .accessibilityIdentifier("history.entry.\(entry.components.first?.sequenceNumber ?? 0)")
         }
         .tint(entry.isProblem ? AppTheme.destructive : AppTheme.graphite)
-        .accessibilityIdentifier("history.entry.\(entry.components.first?.sequenceNumber ?? 0)")
     }
 
     private func actorLabel(_ entry: PlayHistoryEntry) -> some View {
@@ -204,6 +228,19 @@ struct PlayHistoryView: View {
         do {
             try session.undoLatestAction(
                 candidate,
+                game: game,
+                modelContext: modelContext
+            )
+        } catch {
+            session.refresh(game: game, modelContext: modelContext)
+            correctionError = error.localizedDescription
+        }
+    }
+
+    private func beginPitchEdit(recordID: UUID) {
+        do {
+            pitchEditSession = try GameEventCorrection.prepareDefensivePitchEdit(
+                recordID: recordID,
                 game: game,
                 modelContext: modelContext
             )

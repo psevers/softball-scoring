@@ -72,6 +72,43 @@ enum UITestData {
             ))
         }
 
+        let pitchEditGame = Game(
+            seasonID: season.id,
+            opponentName: "UI Pitch Edit Opponent",
+            gameDate: Date(timeIntervalSince1970: 1_786_433_100),
+            homeAway: .home,
+            status: .inProgress,
+            startingPitcherID: activePlayers[0].id,
+            startedAt: Date(timeIntervalSince1970: 1_786_433_100)
+        )
+        context.insert(pitchEditGame)
+        for (index, player) in activePlayers.enumerated() {
+            context.insert(LineupEntry(
+                playerID: player.id,
+                battingOrder: index + 1,
+                startingPosition: positions[index],
+                gameID: pitchEditGame.id
+            ))
+        }
+        context.insert(try GameEventRecord(
+            gameID: pitchEditGame.id,
+            sequenceNumber: 1,
+            body: .pitch(.init(
+                result: .ball,
+                pitcherID: activePlayers[0].id,
+                opponentBatterSlot: 1
+            ))
+        ))
+        context.insert(try GameEventRecord(
+            gameID: pitchEditGame.id,
+            sequenceNumber: 2,
+            body: .pitch(.init(
+                result: .calledStrike,
+                pitcherID: activePlayers[0].id,
+                opponentBatterSlot: 1
+            ))
+        ))
+
         let historyGame = Game(
             seasonID: season.id,
             opponentName: "UI History Opponent",

@@ -36,6 +36,25 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
     let detail: String
     let accessibilityDescription: String
     let isPitch: Bool
+    let editableDefensivePitchResult: PitchResult?
+
+    init(
+        recordID: UUID,
+        sequenceNumber: Int,
+        summary: String,
+        detail: String,
+        accessibilityDescription: String,
+        isPitch: Bool,
+        editableDefensivePitchResult: PitchResult? = nil
+    ) {
+        self.recordID = recordID
+        self.sequenceNumber = sequenceNumber
+        self.summary = summary
+        self.detail = detail
+        self.accessibilityDescription = accessibilityDescription
+        self.isPitch = isPitch
+        self.editableDefensivePitchResult = editableDefensivePitchResult
+    }
 }
 
 enum PlayHistoryProjector {
@@ -355,8 +374,30 @@ enum PlayHistoryProjector {
             summary: pitch.result.label,
             detail: detail,
             accessibilityDescription: "\(pitch.result.label). \(count). Pitch count \(total).",
-            isPitch: true
+            isPitch: true,
+            editableDefensivePitchResult: editableDefensivePitchResult(
+                pitch.result,
+                stateBefore: trace.stateBefore
+            )
         )
+    }
+
+    private static func editableDefensivePitchResult(
+        _ result: PitchResult,
+        stateBefore: GameState
+    ) -> PitchResult? {
+        switch result {
+        case .ball where stateBefore.balls < 3:
+            result
+        case .calledStrike where stateBefore.strikes < 2:
+            result
+        case .swingingStrike where stateBefore.strikes < 2:
+            result
+        case .foul:
+            result
+        case .ball, .calledStrike, .swingingStrike, .ballInPlay, .hitByPitch:
+            nil
+        }
     }
 
     private static func offensivePitchComponent(

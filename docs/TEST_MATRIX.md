@@ -85,6 +85,16 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Completed tracked-team cancellation, stale history, invalid replay, and save failure preserve the durable record and batting line. Fresh context and cold-store reload reproduce the restored snapshot.
 - Accessibility XL UI coverage verifies a ball-four award path, a defensive third-out strikeout path, a completed Ball In Play result replacement, tracked-team count-pitch undo, a scoring tracked-team plate appearance, and a tracked-team third-out/inning transition, including exact confirmation, cancellation, successful deletion, and refreshed live scoring.
 
+## Earlier defensive pitch edit
+
+- History exposes edit only for non-terminal defensive Ball, Called Strike, Swinging Strike, and Foul components.
+- Staging uses the pitch's event-time inning, half, opponent batting slot, pitcher, result, and count without mutating durable records.
+- Each supported replacement runs full decode, validation, replay, history, and batting projection; the first invalid later record disables Save.
+- Wrong-game, unsupported, stale-timeline, projection-failure, invalid-candidate, and save-failure paths preserve every original record.
+- Valid Save changes only the selected encoded pitch payload/kind while retaining ID, game ID, sequence, and timestamp.
+- Fresh-context and cold-store reload reproduce corrected count, pitcher totals, record identity, and History.
+- Accessibility XL UI coverage verifies exact current/proposed event-time summaries, reachable 44-point actions, Cancel, valid Save, refreshed History/live state, and reopen persistence.
+
 ## Base occupancy matrix for Ball In Play
 
 Exercise outcome confirmation from all eight starting base states:

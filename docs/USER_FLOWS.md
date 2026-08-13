@@ -66,3 +66,17 @@ exact-timeline validation → replay/projection preview → atomic record remova
   ↓
 restore runner/base/out/half-inning state → keep active batter and count unchanged
 ```
+
+## Edit an earlier defensive count pitch — Slice 6
+
+```text
+Live Game → Play History → expand plate appearance → Edit Pitch
+  ↓
+review event-time inning/half + opponent slot + sequence + current result/count
+  ↓
+choose Ball / Called Strike / Swinging Strike / Foul
+  ↓
+full candidate replay/projection → first invalid later record disables Save
+  ↓
+Cancel unchanged, or Save one payload/kind → refreshed History + live scoring
+```

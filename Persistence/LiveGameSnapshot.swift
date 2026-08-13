@@ -119,6 +119,21 @@ final class LiveGameSession {
         loadError = nil
     }
 
+    func saveDefensivePitchEdit(
+        _ preview: DefensivePitchEditPreview,
+        game: Game,
+        modelContext: ModelContext
+    ) throws {
+        guard game.id == gameID else { throw LiveGameSnapshotError.gameMismatch }
+        snapshot = try GameEventCorrection.saveDefensivePitchEdit(
+            preview,
+            game: game,
+            modelContext: modelContext
+        )
+        undoCandidate = try availableUndoCandidate(game: game, modelContext: modelContext)
+        loadError = nil
+    }
+
     private func availableUndoCandidate(
         game: Game,
         modelContext: ModelContext
