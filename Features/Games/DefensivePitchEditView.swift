@@ -329,7 +329,6 @@ private final class DefensivePitchCorrectionCoordinator {
         }
     }
 
-    @discardableResult
     func save(
         liveSession: LiveGameSession,
         game: Game,
