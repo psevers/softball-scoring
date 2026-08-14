@@ -23,27 +23,22 @@ enum BallInPlayValidationError: Error, Equatable, Sendable {
 enum BallInPlayValidator {
     static let correctionOutcomes: [BallInPlayOutcome] = [
         .single, .double, .triple, .homeRun, .reachedOnError, .fieldersChoice,
-        .groundOut, .flyOut, .lineOut, .popOut, .sacrificeBunt, .sacrificeFly
+        .groundOut, .flyOut, .lineOut, .popOut, .sacrificeBunt, .sacrificeFly,
+        .doublePlay
     ]
 
     static func correctionOutcomes(for stateBefore: GameState) -> [BallInPlayOutcome] {
-        guard stateBefore.outs >= 2 else { return correctionOutcomes }
-        let outOutcomes: Set<BallInPlayOutcome> = [
-            .groundOut, .flyOut, .lineOut, .popOut, .sacrificeBunt, .sacrificeFly
-        ]
-        return correctionOutcomes.filter { !outOutcomes.contains($0) }
+        correctionOutcomes.filter { outcome in
+            stateBefore.outs + outcome.suggestedOuts <= 3
+                && !(stateBefore.outs == 2 && [.sacrificeBunt, .sacrificeFly].contains(outcome))
+        }
     }
 
     static func supportsCorrection(
         _ play: BallInPlayEvent,
-        stateBefore: GameState
+        stateBefore _: GameState
     ) -> Bool {
-        let outsOnPlay = play.movements.filter { $0.destination == .out }.count
-        return correctionOutcomes.contains(play.outcome)
-            && outsOnPlay <= 1
-            && play.thirdOutRunsCounted == nil
-            && play.thirdOutClassification == nil
-            && stateBefore.outs + outsOnPlay < 3
+        correctionOutcomes.contains(play.outcome)
     }
 
     static func validate(

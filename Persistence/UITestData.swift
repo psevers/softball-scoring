@@ -288,6 +288,94 @@ enum UITestData {
             ))
         }
 
+        let thirdOutCorrectionGame = Game(
+            seasonID: season.id,
+            opponentName: "UI Third Out Correction Opponent",
+            gameDate: Date(timeIntervalSince1970: 1_786_823_100),
+            homeAway: .home,
+            status: .inProgress,
+            startingPitcherID: activePlayers[0].id,
+            startedAt: Date(timeIntervalSince1970: 1_786_823_100)
+        )
+        context.insert(thirdOutCorrectionGame)
+        for (index, player) in activePlayers.enumerated() {
+            context.insert(LineupEntry(
+                playerID: player.id,
+                battingOrder: index + 1,
+                startingPosition: positions[index],
+                gameID: thirdOutCorrectionGame.id
+            ))
+        }
+        let thirdOutCorrectionBodies: [GameEventBody] = [
+            .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: activePlayers[0].id,
+                opponentBatterSlot: 1
+            )),
+            .ballInPlay(.init(
+                outcome: .triple,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .third)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            )),
+            .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: activePlayers[0].id,
+                opponentBatterSlot: 2
+            )),
+            .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 2,
+                movements: [
+                    .init(source: .batter, destination: .first),
+                    .init(source: .third, destination: .third)
+                ],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            )),
+            .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: activePlayers[0].id,
+                opponentBatterSlot: 3
+            )),
+            .ballInPlay(.init(
+                outcome: .flyOut,
+                opponentBatterSlot: 3,
+                movements: [
+                    .init(source: .batter, destination: .out),
+                    .init(source: .first, destination: .first),
+                    .init(source: .third, destination: .third)
+                ],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            )),
+            .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: activePlayers[0].id,
+                opponentBatterSlot: 4
+            )),
+            .ballInPlay(.init(
+                outcome: .doublePlay,
+                opponentBatterSlot: 4,
+                movements: [
+                    .init(source: .batter, destination: .out),
+                    .init(source: .first, destination: .out),
+                    .init(source: .third, destination: .home)
+                ],
+                rbi: 0,
+                thirdOutRunsCounted: 0,
+                thirdOutClassification: .forceOrBatterRunner
+            ))
+        ]
+        for (index, body) in thirdOutCorrectionBodies.enumerated() {
+            context.insert(try GameEventRecord(
+                gameID: thirdOutCorrectionGame.id,
+                sequenceNumber: index + 1,
+                body: body
+            ))
+        }
+
         let undoGame = Game(
             seasonID: season.id,
             opponentName: "UI Undo Opponent",

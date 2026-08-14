@@ -433,6 +433,80 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Pitching · 2 pitches · Opp batter 3"].exists)
     }
 
+    func testCorrectDefensiveThirdOutTimingPlayPersistsReplayedInning() {
+        let app = launchApp(
+            atAccessibilityExtraExtraExtraLarge: true,
+            persistentStoreName: "third-out-correction-\(UUID().uuidString)"
+        )
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Third Out Correction Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let score = app.staticTexts["game.score"]
+        let count = app.staticTexts["game.count"]
+        XCTAssertTrue(score.waitForExistence(timeout: 3))
+        XCTAssertEqual(score.label, "Bottom of inning 1. UI Third Out Correction Opponent 0, Us 0")
+        XCTAssertEqual(count.value as? String, "0 outs, bases empty")
+
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        app.buttons["history.entry.7"].tap()
+        let editPlay = app.buttons["history.editPlay.8"]
+        XCTAssertTrue(editPlay.waitForExistence(timeout: 3))
+        editPlay.tap()
+
+        XCTAssertTrue(app.navigationBars["Edit Play"].waitForExistence(timeout: 3))
+        let editForm = app.collectionViews.firstMatch
+        let saveButton = app.buttons["playEdit.save"]
+        XCTAssertFalse(saveButton.isEnabled)
+        let confirmRunners = app.buttons["playEdit.confirmRunners"]
+        XCTAssertTrue(swipeWithinUntilHittable(confirmRunners, in: editForm, above: saveButton))
+        confirmRunners.tap()
+
+        XCTAssertTrue(app.navigationBars["Confirm Correction"].waitForExistence(timeout: 3))
+        let thirdOutClassification = app.segmentedControls["runner.thirdOutClassification"]
+        XCTAssertTrue(scrollUntilHittable(thirdOutClassification, in: app))
+        thirdOutClassification.buttons["Timing Play"].tap()
+        let runsCounted = app.steppers["runner.runsCounted"]
+        XCTAssertTrue(runsCounted.exists)
+        app.buttons["runner.runsCounted-Increment"].tap()
+        let rbi = app.steppers["runner.rbi"]
+        XCTAssertTrue(rbi.exists)
+        app.buttons["runner.rbi-Increment"].tap()
+        app.buttons["Preview"].tap()
+
+        let proposed = app.staticTexts["playEdit.proposed"]
+        for _ in 0..<4 where !proposed.exists {
+            editForm.swipeUp()
+        }
+        XCTAssertTrue(proposed.exists)
+        XCTAssertTrue(proposed.label.contains("Double Play"))
+        XCTAssertTrue(proposed.label.contains("1 run · 1 RBI · Timing play third out"))
+        XCTAssertTrue(proposed.label.contains("Bottom 1"))
+        XCTAssertTrue(proposed.label.contains("Score 1–0"))
+        XCTAssertTrue(proposed.label.contains("Count 0–0 · Outs 0 · Bases empty"))
+        XCTAssertTrue(proposed.label.contains("Opponent batter 5 · Tracked batter 1"))
+        XCTAssertTrue(saveButton.isEnabled)
+        saveButton.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["history.entry.7"].label.contains("1 run · 2 outs · 1 RBI"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertEqual(score.label, "Bottom of inning 1. UI Third Out Correction Opponent 1, Us 0")
+        XCTAssertEqual(count.value as? String, "0 outs, bases empty")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Games"].tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertEqual(score.label, "Bottom of inning 1. UI Third Out Correction Opponent 1, Us 0")
+        XCTAssertEqual(count.value as? String, "0 outs, bases empty")
+    }
+
     func testUndoTrackedTeamPitchFromPlayHistoryRestoresLiveBatterAndCount() {
         let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()
@@ -877,7 +951,10 @@ final class ScrollReachabilityUITests: XCTestCase {
             in: form
         ))
         XCTAssertTrue(app.staticTexts["correction.change.1"].exists)
-        XCTAssertTrue(app.staticTexts["correction.change.5"].exists)
+        XCTAssertTrue(swipeWithinUntilHittable(
+            app.staticTexts["correction.change.5"],
+            in: form
+        ))
         let save = app.buttons["pitchDelete.save"]
         XCTAssertTrue(save.isEnabled)
         save.tap()

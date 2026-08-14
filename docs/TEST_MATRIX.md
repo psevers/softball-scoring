@@ -121,12 +121,15 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 
 - The persistence/replay boundary replaces a saved result while retaining the paired counted In Play pitch and stable result ID, sequence, and timestamp.
 - Loaded-hit, extra-base-hit, home-run, reached-on-error, sacrifice-fly, and fielder's-choice scoring paths replay expected score, bases, outs, opponent batter slot, RBI, and pitcher totals.
-- Existing movement validation rejects missing, duplicate, unexpected, backward, passing, colliding, excess-out, and outcome-inconsistent proposals. Non-third-out home touches must all count, RBI cannot exceed counted runs, and multi-out or third-out corrections remain unavailable.
+- Existing movement validation rejects missing, duplicate, unexpected, backward, passing, colliding, excess-out, and outcome-inconsistent proposals. Every out retains an explicit runner source, non-third-out home touches must all count, and RBI cannot exceed counted runs.
+- Double-play correction records two explicit outs without changing the paired counted pitch, then restores the correct opponent batter and durable replay state.
+- Third-out correction distinguishes force/batter-runner from timing scoring. Force counts zero runs; timing requires an explicit legal counted-run quantity. Contradictory, missing, or excess-out proposals cannot produce a saveable preview.
+- Candidate replay applies legal runs before advancing the half-inning, then verifies zero outs, zero count, empty bases, the next opponent slot, and the tracked batter for the following half.
 - Moving a runner from Home back to a base or Out removes the replayed run and attribution through fresh-context and cold-store reload.
 - An invalid downstream eligible scoring or non-scoring play identifies its exact record and can join the same staged correction; Save stays disabled until replay is clean, then both replacements persist atomically.
-- A downstream multi-out or third-out play remains outside this editor; its original event-time eligibility is enforced at the correction boundary.
+- A downstream multi-out or third-out play can join the same staged repair when its replacement validates against the replayed event-time state.
 - Wrong-game, stale-session, projection, and failed-save paths preserve the original records; fresh-context and cold-store reload reproduce the corrected state.
-- Accessibility XXXL UI coverage distinguishes the counted pitch from the editable result, rejects an illegal counted-run quantity, confirms RBI, previews score/bases/pitcher replay, saves, and reopens the game with the corrected scoring play.
+- Accessibility XXXL UI coverage distinguishes the counted pitch from the editable result, rejects an illegal counted-run quantity, confirms RBI, previews score/bases/pitcher replay, saves, and reopens the game with the corrected scoring play. A second focused workflow reclassifies a third-out double play from force to timing, previews the next half-inning, and verifies score/count/bases again after relaunch.
 
 ## Base occupancy matrix for Ball In Play
 

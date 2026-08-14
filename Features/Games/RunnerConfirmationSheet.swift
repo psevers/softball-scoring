@@ -5,7 +5,6 @@ struct RunnerConfirmationSheet: View {
     let state: GameState
     let homeAway: HomeAway
     let allowsScoring: Bool
-    let restrictsToSingleNonThirdOut: Bool
     let title: String
     let confirmationTitle: String
     let onCancel: () -> Void
@@ -24,7 +23,6 @@ struct RunnerConfirmationSheet: View {
         homeAway: HomeAway,
         initialPlay: BallInPlayEvent? = nil,
         allowsScoring: Bool = true,
-        restrictsToSingleNonThirdOut: Bool = false,
         title: String = "Record Play",
         confirmationTitle: String = "Record",
         onCancel: @escaping () -> Void,
@@ -34,7 +32,6 @@ struct RunnerConfirmationSheet: View {
         self.state = state
         self.homeAway = homeAway
         self.allowsScoring = allowsScoring
-        self.restrictsToSingleNonThirdOut = restrictsToSingleNonThirdOut
         self.title = title
         self.confirmationTitle = confirmationTitle
         self.onCancel = onCancel
@@ -47,6 +44,9 @@ struct RunnerConfirmationSheet: View {
         let suggestedRuns = suggestions.values.filter { $0 == .home }.count
         let initialRunsCounted = initialPlay?.thirdOutRunsCounted ?? suggestedRuns
         _runsCounted = State(initialValue: initialRunsCounted)
+        _thirdOutClassification = State(
+            initialValue: initialPlay?.thirdOutClassification ?? .forceOrBatterRunner
+        )
         _rbi = State(initialValue: min(
             initialPlay?.rbi ?? (outcome == .reachedOnError ? 0 : suggestedRuns),
             initialRunsCounted
@@ -68,7 +68,7 @@ struct RunnerConfirmationSheet: View {
     }
 
     private var needsThirdOutDecision: Bool {
-        !restrictsToSingleNonThirdOut && state.outs + outsOnPlay == 3 && runsOnPlay > 0
+        state.outs + outsOnPlay == 3 && runsOnPlay > 0
     }
 
     private var maximumThirdOutRunsCounted: Int {
@@ -155,6 +155,7 @@ struct RunnerConfirmationSheet: View {
                                                 Text("Timing Play").tag(ThirdOutClassification.timingPlay)
                                             }
                                             .pickerStyle(.segmented)
+                                            .accessibilityIdentifier("runner.thirdOutClassification")
                                             Stepper("Runs that count  \(runsCounted)", value: $runsCounted, in: 0...maximumThirdOutRunsCounted)
                                                 .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.notation)
                                                 .monospacedDigit()
@@ -284,14 +285,6 @@ struct RunnerConfirmationSheet: View {
         }
         if !allowsScoring {
             destinations.removeAll { $0 == .home }
-        }
-        if restrictsToSingleNonThirdOut {
-            let otherOuts = self.destinations.filter { key, destination in
-                key != source && destination == .out
-            }.count
-            destinations.removeAll { destination in
-                destination == .out && (otherOuts > 0 || state.outs + 1 >= 3)
-            }
         }
         return destinations
     }
