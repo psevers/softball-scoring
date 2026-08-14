@@ -5,6 +5,7 @@ struct RunnerConfirmationSheet: View {
     let state: GameState
     let homeAway: HomeAway
     let allowsScoring: Bool
+    let restrictsToSingleNonThirdOut: Bool
     let title: String
     let confirmationTitle: String
     let onCancel: () -> Void
@@ -23,6 +24,7 @@ struct RunnerConfirmationSheet: View {
         homeAway: HomeAway,
         initialPlay: BallInPlayEvent? = nil,
         allowsScoring: Bool = true,
+        restrictsToSingleNonThirdOut: Bool = false,
         title: String = "Record Play",
         confirmationTitle: String = "Record",
         onCancel: @escaping () -> Void,
@@ -32,6 +34,7 @@ struct RunnerConfirmationSheet: View {
         self.state = state
         self.homeAway = homeAway
         self.allowsScoring = allowsScoring
+        self.restrictsToSingleNonThirdOut = restrictsToSingleNonThirdOut
         self.title = title
         self.confirmationTitle = confirmationTitle
         self.onCancel = onCancel
@@ -65,7 +68,7 @@ struct RunnerConfirmationSheet: View {
     }
 
     private var needsThirdOutDecision: Bool {
-        state.outs + outsOnPlay == 3 && runsOnPlay > 0
+        !restrictsToSingleNonThirdOut && state.outs + outsOnPlay == 3 && runsOnPlay > 0
     }
 
     private var maximumThirdOutRunsCounted: Int {
@@ -271,7 +274,7 @@ struct RunnerConfirmationSheet: View {
     }
 
     private func legalDestinations(for source: RunnerSource) -> [RunnerDestination] {
-        let destinations: [RunnerDestination] = switch source {
+        var destinations: [RunnerDestination] = switch source {
         case .batter, .first:
             RunnerDestination.allCases
         case .second:
@@ -279,7 +282,18 @@ struct RunnerConfirmationSheet: View {
         case .third:
             [.third, .home, .out]
         }
-        return allowsScoring ? destinations : destinations.filter { $0 != .home }
+        if !allowsScoring {
+            destinations.removeAll { $0 == .home }
+        }
+        if restrictsToSingleNonThirdOut {
+            let otherOuts = self.destinations.filter { key, destination in
+                key != source && destination == .out
+            }.count
+            destinations.removeAll { destination in
+                destination == .out && (otherOuts > 0 || state.outs + 1 >= 3)
+            }
+        }
+        return destinations
     }
 
     private func validateAndRecord() {
@@ -296,8 +310,22 @@ struct RunnerConfirmationSheet: View {
 
     private func validationMessage(_ error: BallInPlayValidationError) -> String {
         switch error {
-        case .baseCollision:
-            "Two runners cannot finish on the same base."
+        case .notDefensiveHalf:
+            "Runner destinations can be recorded only while the opponent is batting."
+        case .noPendingBallInPlay:
+            "The counted Ball In Play pitch is no longer awaiting a result."
+        case .batterMismatch:
+            "The opponent batter changed before this play was confirmed."
+        case .missingRunner(let source):
+            "Choose a destination for \(source.label)."
+        case .unexpectedRunner(let source):
+            "\(source.label) was not on base when this play began."
+        case .duplicateRunner(let source):
+            "Choose exactly one destination for \(source.label)."
+        case .illegalDestination(let source, let destination):
+            "\(source.label) cannot finish at \(destination.label) from this starting base."
+        case .baseCollision(let destination):
+            "Two runners cannot both finish at \(destination.label)."
         case .tooManyOuts:
             "This play would record more than three outs in the inning."
         case .outcomeMismatch:
@@ -305,11 +333,17 @@ struct RunnerConfirmationSheet: View {
         case .invalidRunCount:
             "Every home touch must count because this play does not make the third out."
         case .invalidRBI:
-            "RBI must be between zero and the runs scored on the play."
-        case .missingThirdOutRunCount, .missingThirdOutClassification, .invalidThirdOutRunCount:
+            "RBI must be between zero and the legally counted runs on this play."
+        case .missingThirdOutRunCount:
+            "Choose how many apparent runs count on the third out."
+        case .missingThirdOutClassification:
+            "Classify the third out as a force/batter-runner out or a timing play."
+        case .invalidThirdOutRunCount:
             "Classify the third out and choose how many runs legally count."
-        default:
-            "One or more runner movements are not valid for the current game state."
+        case .unnecessaryThirdOutRunCount:
+            "Remove the third-out run count because this play does not create the third out."
+        case .unnecessaryThirdOutClassification:
+            "Remove the third-out classification because this play does not create the third out."
         }
     }
 

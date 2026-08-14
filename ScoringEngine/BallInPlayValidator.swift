@@ -26,6 +26,14 @@ enum BallInPlayValidator {
         .groundOut, .flyOut, .lineOut, .popOut, .sacrificeBunt, .sacrificeFly
     ]
 
+    static func correctionOutcomes(for stateBefore: GameState) -> [BallInPlayOutcome] {
+        guard stateBefore.outs >= 2 else { return correctionOutcomes }
+        let outOutcomes: Set<BallInPlayOutcome> = [
+            .groundOut, .flyOut, .lineOut, .popOut, .sacrificeBunt, .sacrificeFly
+        ]
+        return correctionOutcomes.filter { !outOutcomes.contains($0) }
+    }
+
     static func supportsCorrection(
         _ play: BallInPlayEvent,
         stateBefore: GameState

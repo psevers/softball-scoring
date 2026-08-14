@@ -390,6 +390,9 @@ struct PlayHistoryTests {
         #expect(!BallInPlayValidator.supportsCorrection(doublePlay, stateBefore: state))
 
         state.outs = 2
+        #expect(BallInPlayValidator.correctionOutcomes(for: state).contains(.homeRun))
+        #expect(!BallInPlayValidator.correctionOutcomes(for: state).contains(.groundOut))
+        #expect(!BallInPlayValidator.correctionOutcomes(for: state).contains(.sacrificeFly))
         let thirdOut = BallInPlayEvent(
             outcome: .groundOut,
             opponentBatterSlot: 1,

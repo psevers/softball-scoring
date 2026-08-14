@@ -45,7 +45,7 @@ struct DefensiveBallInPlayEditView: View {
 
                     Section("Correct result") {
                         Picker("Result", selection: $selectedOutcome) {
-                            ForEach(BallInPlayValidator.correctionOutcomes) { outcome in
+                            ForEach(BallInPlayValidator.correctionOutcomes(for: editSession.stateBefore)) { outcome in
                                 Text(outcome.label).tag(outcome)
                             }
                         }
@@ -112,6 +112,7 @@ struct DefensiveBallInPlayEditView: View {
                     homeAway: editSession.homeAway,
                     initialPlay: initialPlay,
                     allowsScoring: true,
+                    restrictsToSingleNonThirdOut: true,
                     title: "Confirm Correction",
                     confirmationTitle: "Preview",
                     onCancel: { isConfirmingRunners = false },
@@ -745,7 +746,7 @@ private struct DefensiveEventCorrectionProblemView: View {
                    affectedState != nil,
                    homeAway != nil {
                     Picker("Correct result", selection: $selectedOutcome) {
-                        ForEach(BallInPlayValidator.correctionOutcomes) { outcome in
+                        ForEach(correctionOutcomes) { outcome in
                             Text(outcome.label).tag(outcome)
                         }
                     }
@@ -771,6 +772,7 @@ private struct DefensiveEventCorrectionProblemView: View {
                     homeAway: homeAway,
                     initialPlay: affectedPlay.outcome == selectedOutcome ? affectedPlay : nil,
                     allowsScoring: true,
+                    restrictsToSingleNonThirdOut: true,
                     title: "Repair Affected Play",
                     confirmationTitle: "Stage Repair",
                     onCancel: { isConfirmingRunners = false },
@@ -782,5 +784,9 @@ private struct DefensiveEventCorrectionProblemView: View {
                 )
             }
         }
+    }
+
+    private var correctionOutcomes: [BallInPlayOutcome] {
+        affectedState.map(BallInPlayValidator.correctionOutcomes(for:)) ?? []
     }
 }

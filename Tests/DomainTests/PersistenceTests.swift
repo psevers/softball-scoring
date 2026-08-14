@@ -79,6 +79,13 @@ private struct DefensiveScoringCorrectionScenario: Sendable {
     let expectedBases: [Int?]
 }
 
+private struct ScoringDestinationRemovalScenario: Sendable {
+    let name: String
+    let replacement: BallInPlayEvent
+    let expectedOuts: Int
+    let expectedBases: [Int?]
+}
+
 private let defensiveScoringCorrectionScenarios: [DefensiveScoringCorrectionScenario] = [
     .init(
         name: "bases-loaded hit",
@@ -326,6 +333,30 @@ private let defensiveScoringCorrectionScenarios: [DefensiveScoringCorrectionScen
         expectedScore: 1,
         expectedOuts: 1,
         expectedBases: [3, nil, nil]
+    )
+]
+
+private let scoringDestinationRemovalScenarios: [ScoringDestinationRemovalScenario] = [
+    .init(
+        name: "home to base",
+        replacement: defensiveScoringCorrectionScenarios[1].originalPlay,
+        expectedOuts: 0,
+        expectedBases: [2, 1, nil]
+    ),
+    .init(
+        name: "home to out",
+        replacement: .init(
+            outcome: .fieldersChoice,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .first),
+                .init(source: .first, destination: .out)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        ),
+        expectedOuts: 1,
+        expectedBases: [2, nil, nil]
     )
 ]
 
@@ -5208,25 +5239,11 @@ extension PersistenceTests {
         let game = makeGame()
         let pitcherID = try #require(game.startingPitcherID)
         let allPlays = scenario.setupPlays + [scenario.originalPlay]
-        let records = try allPlays.enumerated().flatMap { index, play in
-            let pitchSequence = index * 2 + 1
-            return [
-                try GameEventRecord(
-                    gameID: game.id,
-                    sequenceNumber: pitchSequence,
-                    body: .pitch(.init(
-                        result: .ballInPlay,
-                        pitcherID: pitcherID,
-                        opponentBatterSlot: play.opponentBatterSlot
-                    ))
-                ),
-                try GameEventRecord(
-                    gameID: game.id,
-                    sequenceNumber: pitchSequence + 1,
-                    body: .ballInPlay(play)
-                )
-            ]
-        }
+        let records = try defensiveBallInPlayRecords(
+            for: allPlays,
+            gameID: game.id,
+            pitcherID: pitcherID
+        )
         records.forEach(context.insert)
         try context.save()
 
@@ -5270,7 +5287,10 @@ extension PersistenceTests {
         #expect(try reloaded.records.last?.decoded().body == .ballInPlay(scenario.proposedPlay))
     }
 
-    @Test func changingHomeDestinationAndRBIRemovesTheReplayedRun() throws {
+    @Test(arguments: scoringDestinationRemovalScenarios)
+    fileprivate func changingHomeDestinationAndRBIRemovesTheReplayedRun(
+        _ removal: ScoringDestinationRemovalScenario
+    ) throws {
         let scenario = try #require(defensiveScoringCorrectionScenarios.first {
             $0.name == "extra-base hit"
         })
@@ -5279,25 +5299,11 @@ extension PersistenceTests {
         let game = makeGame()
         let pitcherID = try #require(game.startingPitcherID)
         let plays = scenario.setupPlays + [scenario.proposedPlay]
-        let records = try plays.enumerated().flatMap { index, play in
-            let pitchSequence = index * 2 + 1
-            return [
-                try GameEventRecord(
-                    gameID: game.id,
-                    sequenceNumber: pitchSequence,
-                    body: .pitch(.init(
-                        result: .ballInPlay,
-                        pitcherID: pitcherID,
-                        opponentBatterSlot: play.opponentBatterSlot
-                    ))
-                ),
-                try GameEventRecord(
-                    gameID: game.id,
-                    sequenceNumber: pitchSequence + 1,
-                    body: .ballInPlay(play)
-                )
-            ]
-        }
+        let records = try defensiveBallInPlayRecords(
+            for: plays,
+            gameID: game.id,
+            pitcherID: pitcherID
+        )
         records.forEach(context.insert)
         try context.save()
         let target = try #require(records.last)
@@ -5308,14 +5314,15 @@ extension PersistenceTests {
             modelContext: context
         )
         let preview = try GameEventCorrection.stageDefensiveBallInPlayEdit(
-            scenario.originalPlay,
+            removal.replacement,
             in: edit,
             game: game,
             modelContext: context
         )
         #expect(preview.canSave)
         #expect(preview.snapshot.replay.state.awayScore == 0)
-        #expect(preview.snapshot.replay.state.baseRunnerSlots == [2, 1, nil])
+        #expect(preview.snapshot.replay.state.outs == removal.expectedOuts)
+        #expect(preview.snapshot.replay.state.baseRunnerSlots == removal.expectedBases)
         #expect(preview.snapshot.history.sections.last?.entries.last?.summary.contains("RBI") == false)
 
         _ = try GameEventCorrection.saveDefensiveBallInPlayEdit(
@@ -5329,8 +5336,82 @@ extension PersistenceTests {
         )
 
         #expect(reloaded.replay.state.awayScore == 0)
-        #expect(reloaded.replay.state.baseRunnerSlots == [2, 1, nil])
-        #expect(try reloaded.records.last?.decoded().body == .ballInPlay(scenario.originalPlay))
+        #expect(reloaded.replay.state.outs == removal.expectedOuts)
+        #expect(reloaded.replay.state.baseRunnerSlots == removal.expectedBases)
+        #expect(try reloaded.records.last?.decoded().body == .ballInPlay(removal.replacement))
+    }
+
+    @Test func survivingDownstreamPitchesReplayAfterScoringCorrection() throws {
+        let scenario = try #require(defensiveScoringCorrectionScenarios.first {
+            $0.name == "extra-base hit"
+        })
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let completedPlays = scenario.setupPlays + [scenario.originalPlay]
+        var records = try defensiveBallInPlayRecords(
+            for: completedPlays,
+            gameID: game.id,
+            pitcherID: pitcherID
+        )
+        let target = try #require(records.last)
+        records.append(try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 5,
+            body: .pitch(.init(result: .ball, pitcherID: pitcherID, opponentBatterSlot: 3))
+        ))
+        records.append(try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 6,
+            body: .pitch(.init(result: .calledStrike, pitcherID: pitcherID, opponentBatterSlot: 3))
+        ))
+        records.forEach(context.insert)
+        try context.save()
+
+        let edit = try GameEventCorrection.prepareDefensiveBallInPlayEdit(
+            recordID: target.id,
+            game: game,
+            modelContext: context
+        )
+        let preview = try GameEventCorrection.stageDefensiveBallInPlayEdit(
+            scenario.proposedPlay,
+            in: edit,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(preview.canSave)
+        #expect(preview.snapshot.replay.rejectedRecordIDs.isEmpty)
+        #expect(preview.snapshot.replay.state.awayScore == 1)
+        #expect(preview.snapshot.replay.state.baseRunnerSlots == [nil, 2, nil])
+        #expect(preview.snapshot.replay.state.balls == 1)
+        #expect(preview.snapshot.replay.state.strikes == 1)
+        #expect(preview.snapshot.replay.state.currentOpponentBatterSlot == 3)
+        #expect(preview.snapshot.replay.state.pitchCount(for: pitcherID).total == 4)
+
+        _ = try GameEventCorrection.saveDefensiveBallInPlayEdit(
+            preview,
+            game: game,
+            modelContext: context
+        )
+        let reloaded = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+
+        #expect(reloaded.records.map(\.id) == records.map(\.id))
+        #expect(reloaded.replay.state == preview.snapshot.replay.state)
+        #expect(try reloaded.records[4].decoded().body == .pitch(.init(
+            result: .ball,
+            pitcherID: pitcherID,
+            opponentBatterSlot: 3
+        )))
+        #expect(try reloaded.records[5].decoded().body == .pitch(.init(
+            result: .calledStrike,
+            pitcherID: pitcherID,
+            opponentBatterSlot: 3
+        )))
     }
 
     @Test func invalidDefensiveBallInPlayCorrectionInputsLeaveCompletedPlayUntouched() throws {
@@ -5931,6 +6012,32 @@ extension PersistenceTests {
                 thirdOutRunsCounted: nil
             ))
         ]
+    }
+
+    private func defensiveBallInPlayRecords(
+        for plays: [BallInPlayEvent],
+        gameID: UUID,
+        pitcherID: UUID
+    ) throws -> [GameEventRecord] {
+        try plays.enumerated().flatMap { index, play in
+            let pitchSequence = index * 2 + 1
+            return [
+                try GameEventRecord(
+                    gameID: gameID,
+                    sequenceNumber: pitchSequence,
+                    body: .pitch(.init(
+                        result: .ballInPlay,
+                        pitcherID: pitcherID,
+                        opponentBatterSlot: play.opponentBatterSlot
+                    ))
+                ),
+                try GameEventRecord(
+                    gameID: gameID,
+                    sequenceNumber: pitchSequence + 1,
+                    body: .ballInPlay(play)
+                )
+            ]
+        }
     }
 
     private func seedCompletedSingle(
