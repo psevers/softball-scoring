@@ -75,3 +75,7 @@ A staged removal of one earlier defensive pitch. The candidate timeline replays 
 ## Defensive Ball In Play edit
 
 A staged replacement of one completed defensive Ball In Play result, including a multi-out or third-out play. The preceding In Play pitch remains counted while the scorer confirms the corrected outcome, every event-time runner destination, every legally counted home touch, RBI, and any force/batter-runner or timing-play third-out classification. A valid save preserves the result record's identity, sequence, and timestamp and rebuilds every later score, base, out, batter, and pitcher state from the candidate timeline.
+
+## Defensive logical-play deletion
+
+A staged removal of the paired In Play pitch and completed defensive Ball In Play result as one explicit correction. The confirmation names both record sequences, individual component deletion remains separate, and full candidate replay returns to the state before the In Play pitch. A valid save removes exactly the pair while preserving every survivor's identity, sequence, timestamp, and sequence gaps.

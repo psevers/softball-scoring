@@ -25,6 +25,18 @@ struct PlayHistoryEntry: Identifiable, Equatable, Sendable {
     let accessibilityDescription: String
     let isProblem: Bool
     let components: [PlayHistoryComponent]
+
+    var deletableDefensiveLogicalPlayResultRecordID: UUID? {
+        guard let resultIndex = components.lastIndex(where: {
+            $0.editableDefensiveBallInPlayOutcome != nil
+        }),
+              components[..<resultIndex].contains(where: {
+                  $0.defensivePitchResult == .ballInPlay
+              }) else {
+            return nil
+        }
+        return components[resultIndex].recordID
+    }
 }
 
 struct PlayHistoryComponent: Identifiable, Equatable, Sendable {

@@ -13,6 +13,8 @@ struct PlayHistoryView: View {
     @State private var ballInPlayEditSession: DefensiveBallInPlayEditSession?
     @State private var pendingPitchDeletionSession: DefensivePitchDeletionSession?
     @State private var pitchDeletionSession: DefensivePitchDeletionSession?
+    @State private var pendingLogicalPlayDeletionSession: DefensiveLogicalPlayDeletionSession?
+    @State private var logicalPlayDeletionSession: DefensiveLogicalPlayDeletionSession?
 
     var body: some View {
         ZStack {
@@ -85,6 +87,24 @@ struct PlayHistoryView: View {
         } message: { deletionSession in
             Text(deletionSession.confirmationDetail)
         }
+        .alert(
+            pendingLogicalPlayDeletionSession?.confirmationTitle ?? "Delete completed play?",
+            isPresented: Binding(
+                get: { pendingLogicalPlayDeletionSession != nil },
+                set: { if !$0 { pendingLogicalPlayDeletionSession = nil } }
+            ),
+            presenting: pendingLogicalPlayDeletionSession
+        ) { deletionSession in
+            Button("Preview Deletion", role: .destructive) {
+                logicalPlayDeletionSession = deletionSession
+                pendingLogicalPlayDeletionSession = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingLogicalPlayDeletionSession = nil
+            }
+        } message: { deletionSession in
+            Text(deletionSession.confirmationDetail)
+        }
         .sheet(item: $pitchEditSession) { editSession in
             DefensivePitchEditView(
                 game: game,
@@ -101,6 +121,13 @@ struct PlayHistoryView: View {
         }
         .sheet(item: $pitchDeletionSession) { deletionSession in
             DefensivePitchDeletionView(
+                game: game,
+                deletionSession: deletionSession,
+                liveSession: session
+            )
+        }
+        .sheet(item: $logicalPlayDeletionSession) { deletionSession in
+            DefensiveLogicalPlayDeletionView(
                 game: game,
                 deletionSession: deletionSession,
                 liveSession: session
@@ -215,6 +242,26 @@ struct PlayHistoryView: View {
                             .accessibilityIdentifier("history.editPlay.\(component.sequenceNumber)")
                         }
                     }
+                }
+
+                if let resultRecordID = entry.deletableDefensiveLogicalPlayResultRecordID,
+                   let pitchSequence = entry.components.last(where: {
+                       $0.defensivePitchResult == .ballInPlay
+                   })?.sequenceNumber,
+                   let resultSequence = entry.components.first(where: {
+                       $0.recordID == resultRecordID
+                   })?.sequenceNumber {
+                    Button(role: .destructive) {
+                        beginLogicalPlayDeletion(resultRecordID: resultRecordID)
+                    } label: {
+                        Label("Delete Completed Play", systemImage: "trash.slash")
+                            .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel(
+                        "Delete Completed Play, sequences \(pitchSequence) and \(resultSequence)"
+                    )
+                    .accessibilityIdentifier("history.deleteCompletedPlay.\(resultSequence)")
                 }
             }
             .padding(.top, AppTheme.Spacing.sm)
@@ -333,6 +380,20 @@ struct PlayHistoryView: View {
                 game: game,
                 modelContext: modelContext
             )
+        } catch {
+            session.refresh(game: game, modelContext: modelContext)
+            correctionError = error.localizedDescription
+        }
+    }
+
+    private func beginLogicalPlayDeletion(resultRecordID: UUID) {
+        do {
+            pendingLogicalPlayDeletionSession = try GameEventCorrection
+                .prepareDefensiveLogicalPlayDeletion(
+                    resultRecordID: resultRecordID,
+                    game: game,
+                    modelContext: modelContext
+                )
         } catch {
             session.refresh(game: game, modelContext: modelContext)
             correctionError = error.localizedDescription
