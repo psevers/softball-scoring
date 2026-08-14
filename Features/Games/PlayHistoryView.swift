@@ -14,6 +14,8 @@ struct PlayHistoryView: View {
     @State private var ballInPlayEditSession: DefensiveBallInPlayEditSession?
     @State private var pendingPitchDeletionSession: DefensivePitchDeletionSession?
     @State private var pitchDeletionSession: DefensivePitchDeletionSession?
+    @State private var pendingOffensivePitchDeletionSession: OffensivePitchDeletionSession?
+    @State private var offensivePitchDeletionSession: OffensivePitchDeletionSession?
     @State private var pendingLogicalPlayDeletionSession: DefensiveLogicalPlayDeletionSession?
     @State private var logicalPlayDeletionSession: DefensiveLogicalPlayDeletionSession?
 
@@ -56,7 +58,7 @@ struct PlayHistoryView: View {
         }
     }
 
-    private var alertedHistoryPage: some View {
+    private var undoAlertedHistoryPage: some View {
         historyPage
         .alert(
             session.undoCandidate?.confirmationTitle ?? "Undo latest action?",
@@ -78,6 +80,10 @@ struct PlayHistoryView: View {
         } message: {
             Text(correctionError ?? "The scorebook correction could not be completed.")
         }
+    }
+
+    private var pitchAlertedHistoryPage: some View {
+        undoAlertedHistoryPage
         .alert(
             pendingPitchDeletionSession?.confirmationTitle ?? "Delete pitch?",
             isPresented: Binding(
@@ -96,6 +102,28 @@ struct PlayHistoryView: View {
         } message: { deletionSession in
             Text(deletionSession.confirmationDetail)
         }
+        .alert(
+            pendingOffensivePitchDeletionSession?.confirmationTitle ?? "Delete tracked pitch?",
+            isPresented: Binding(
+                get: { pendingOffensivePitchDeletionSession != nil },
+                set: { if !$0 { pendingOffensivePitchDeletionSession = nil } }
+            ),
+            presenting: pendingOffensivePitchDeletionSession
+        ) { deletionSession in
+            Button("Preview Deletion", role: .destructive) {
+                offensivePitchDeletionSession = deletionSession
+                pendingOffensivePitchDeletionSession = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingOffensivePitchDeletionSession = nil
+            }
+        } message: { deletionSession in
+            Text(deletionSession.confirmationDetail)
+        }
+    }
+
+    private var alertedHistoryPage: some View {
+        pitchAlertedHistoryPage
         .alert(
             pendingLogicalPlayDeletionSession?.confirmationTitle ?? "Delete completed play?",
             isPresented: Binding(
@@ -141,6 +169,13 @@ struct PlayHistoryView: View {
         }
         .sheet(item: $pitchDeletionSession) { deletionSession in
             DefensivePitchDeletionView(
+                game: game,
+                deletionSession: deletionSession,
+                liveSession: session
+            )
+        }
+        .sheet(item: $offensivePitchDeletionSession) { deletionSession in
+            OffensivePitchDeletionView(
                 game: game,
                 deletionSession: deletionSession,
                 liveSession: session
@@ -248,6 +283,21 @@ struct PlayHistoryView: View {
                             )
                             .accessibilityIdentifier(
                                 "history.editTrackedPitch.\(component.sequenceNumber)"
+                            )
+
+                            Button(role: .destructive) {
+                                beginOffensivePitchDeletion(recordID: component.recordID)
+                            } label: {
+                                Label("Delete Pitch", systemImage: "trash")
+                                    .frame(minHeight: AppTheme.TouchTarget.minimum)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel(
+                                "Delete \(entry.actor) \(result.label) pitch, sequence "
+                                    + "\(component.sequenceNumber)"
+                            )
+                            .accessibilityIdentifier(
+                                "history.deleteTrackedPitch.\(component.sequenceNumber)"
                             )
                         }
 
@@ -417,6 +467,20 @@ struct PlayHistoryView: View {
                 game: game,
                 modelContext: modelContext
             )
+        } catch {
+            session.refresh(game: game, modelContext: modelContext)
+            correctionError = error.localizedDescription
+        }
+    }
+
+    private func beginOffensivePitchDeletion(recordID: UUID) {
+        do {
+            pendingOffensivePitchDeletionSession = try GameEventCorrection
+                .prepareOffensivePitchDeletion(
+                    recordID: recordID,
+                    game: game,
+                    modelContext: modelContext
+                )
         } catch {
             session.refresh(game: game, modelContext: modelContext)
             correctionError = error.localizedDescription

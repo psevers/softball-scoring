@@ -43,7 +43,8 @@ enum LiveGameSnapshotLoader {
     static func makeSnapshot(
         game: Game,
         records: [GameEventRecord],
-        projectBattingLines: ProjectBattingLines = BattingStatProjector.project
+        projectBattingLines: ProjectBattingLines = BattingStatProjector.project,
+        validateEvent: GameEventReplay.ValidateEvent = { _, _, _ in true }
     ) throws -> LiveGameSnapshot {
         guard records.allSatisfy({ $0.gameID == game.id }) else {
             throw LiveGameSnapshotError.gameMismatch
@@ -54,7 +55,8 @@ enum LiveGameSnapshotLoader {
         let replay = GameEventReplay.replay(
             records: records,
             homeAway: homeAway,
-            startingPitcherID: game.startingPitcherID
+            startingPitcherID: game.startingPitcherID,
+            validateEvent: validateEvent
         )
         return LiveGameSnapshot(
             records: records,

@@ -532,10 +532,84 @@ struct OffensivePitchEditView: View {
     }
 }
 
+struct OffensivePitchDeletionView: View {
+    let game: Game
+    let deletionSession: OffensivePitchDeletionSession
+    let liveSession: LiveGameSession
+
+    var body: some View {
+        PitchDeletionView(
+            game: game,
+            liveSession: liveSession,
+            navigationTitle: "Delete Tracked Pitch",
+            eventContext: "\(deletionSession.half.displayName) \(deletionSession.inning) · "
+                + "\(deletionSession.batter.displayName) · Batting slot "
+                + "\(deletionSession.batter.lineupSlot) of "
+                + "\(deletionSession.battingOrderSize) · Sequence "
+                + "\(deletionSession.sequenceNumber)",
+            deletionSummary: "Delete: \(deletionSession.originalResult.label) · "
+                + countDescription(deletionSession.originalStateAfter),
+            accessibilityPrefix: "trackedPitchDelete",
+            fallbackError: "The tracked pitch deletion could not be replayed safely."
+        ) { modelContext in
+            try GameEventCorrection.stageOffensivePitchDeletion(
+                deletionSession,
+                game: game,
+                modelContext: modelContext
+            )
+        }
+    }
+
+    private func countDescription(_ state: GameState) -> String {
+        "Count \(state.balls)–\(state.strikes)"
+    }
+}
+
 struct DefensivePitchDeletionView: View {
     let game: Game
     let deletionSession: DefensivePitchDeletionSession
     let liveSession: LiveGameSession
+
+    var body: some View {
+        PitchDeletionView(
+            game: game,
+            liveSession: liveSession,
+            navigationTitle: "Delete Pitch",
+            eventContext: "\(deletionSession.half.displayName) \(deletionSession.inning) · "
+                + "Opponent batter \(deletionSession.opponentBatterSlot) · "
+                + "Sequence \(deletionSession.sequenceNumber)",
+            deletionSummary: "Delete: \(deletionSession.originalResult.label) · "
+                + countDescription(deletionSession.originalStateAfter),
+            accessibilityPrefix: "pitchDelete",
+            fallbackError: "The pitch deletion could not be replayed safely."
+        ) { modelContext in
+            let session = try GameEventCorrection.beginGameEventCorrection(
+                game: game,
+                modelContext: modelContext
+            )
+            return try GameEventCorrection.stagePitchDeletion(
+                recordID: deletionSession.recordID,
+                in: session,
+                game: game,
+                modelContext: modelContext
+            )
+        }
+    }
+
+    private func countDescription(_ state: GameState) -> String {
+        "Count \(state.balls)–\(state.strikes)"
+    }
+}
+
+private struct PitchDeletionView: View {
+    let game: Game
+    let liveSession: LiveGameSession
+    let navigationTitle: String
+    let eventContext: String
+    let deletionSummary: String
+    let accessibilityPrefix: String
+    let fallbackError: String
+    let stageDeletion: (ModelContext) throws -> GameEventCorrectionSession
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -546,17 +620,10 @@ struct DefensivePitchDeletionView: View {
             VStack(spacing: 0) {
                 Form {
                     Section("Pitch") {
-                        Text(
-                            "\(deletionSession.half.displayName) \(deletionSession.inning) · "
-                                + "Opponent batter \(deletionSession.opponentBatterSlot) · "
-                                + "Sequence \(deletionSession.sequenceNumber)"
-                        )
-                        .font(.body.monospacedDigit())
-                        Text(
-                            "Delete: \(deletionSession.originalResult.label) · "
-                                + countDescription(deletionSession.originalStateAfter)
-                        )
-                        .accessibilityIdentifier("pitchDelete.current")
+                        Text(eventContext)
+                            .font(.body.monospacedDigit())
+                        Text(deletionSummary)
+                            .accessibilityIdentifier("\(accessibilityPrefix).current")
                     }
 
                     if let correctionSession = correction.session {
@@ -584,39 +651,38 @@ struct DefensivePitchDeletionView: View {
                     Button("Cancel") { dismiss() }
                         .buttonStyle(.bordered)
                         .controlSize(.large)
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: AppTheme.TouchTarget.minimum
-                        )
-                        .accessibilityIdentifier("pitchDelete.cancel")
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("\(accessibilityPrefix).cancel")
 
                     Button("Save") { save() }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: AppTheme.TouchTarget.minimum
-                        )
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
                         .disabled(correction.session?.canSave != true)
-                        .accessibilityIdentifier("pitchDelete.save")
+                        .accessibilityIdentifier("\(accessibilityPrefix).save")
                 }
                 .padding(.horizontal, AppTheme.Spacing.md)
                 .padding(.vertical, AppTheme.Spacing.sm)
                 .background(.bar)
             }
-            .navigationTitle("Delete Pitch")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .task { stage() }
             .alert("Pitch Deletion Failed", isPresented: Binding(
                 get: { correction.errorMessage != nil },
                 set: { if !$0 { correction.errorMessage = nil } }
             )) {
-                Button("OK", role: .cancel) { correction.errorMessage = nil }
+                if correction.requiresReopen {
+                    Button("Return to Play History") {
+                        correction.errorMessage = nil
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("\(accessibilityPrefix).reopen")
+                } else {
+                    Button("OK", role: .cancel) { correction.errorMessage = nil }
+                }
             } message: {
-                Text(
-                    correction.errorMessage
-                        ?? "The pitch deletion could not be replayed safely."
-                )
+                Text(correction.errorMessage ?? fallbackError)
             }
         }
     }
@@ -624,18 +690,9 @@ struct DefensivePitchDeletionView: View {
     private func stage() {
         guard correction.session == nil else { return }
         do {
-            let session = try GameEventCorrection.beginGameEventCorrection(
-                game: game,
-                modelContext: modelContext
-            )
-            correction.session = try GameEventCorrection.stagePitchDeletion(
-                recordID: deletionSession.recordID,
-                in: session,
-                game: game,
-                modelContext: modelContext
-            )
+            correction.session = try stageDeletion(modelContext)
         } catch {
-            correction.errorMessage = error.localizedDescription
+            correction.present(error)
         }
     }
 
@@ -647,10 +704,6 @@ struct DefensivePitchDeletionView: View {
         ) {
             dismiss()
         }
-    }
-
-    private func countDescription(_ state: GameState) -> String {
-        "Count \(state.balls)–\(state.strikes)"
     }
 }
 
@@ -766,6 +819,7 @@ struct DefensiveLogicalPlayDeletionView: View {
 private enum GameEventRepairAction {
     case edit(PitchResult)
     case editOffensivePitch(OffensivePitchResult)
+    case deleteOffensivePitch
     case delete
     case editBallInPlay(BallInPlayEvent)
 }
@@ -808,6 +862,13 @@ private final class GameEventCorrectionCoordinator {
                 self.session = try GameEventCorrection.stageOffensivePitchEdit(
                     recordID: recordID,
                     result: result,
+                    in: session,
+                    game: game,
+                    modelContext: modelContext
+                )
+            case .deleteOffensivePitch:
+                self.session = try GameEventCorrection.stageOffensivePitchDeletion(
+                    recordID: recordID,
                     in: session,
                     game: game,
                     modelContext: modelContext
@@ -1070,6 +1131,17 @@ private struct GameEventCorrectionProblemView: View {
                     .accessibilityIdentifier("correction.repair.delete")
                 }
 
+                if problem.canDeleteOffensivePitch {
+                    Button(role: .destructive) {
+                        stageChange(.deleteOffensivePitch)
+                        dismiss()
+                    } label: {
+                        Label("Delete Affected Tracked Pitch", systemImage: "trash")
+                            .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    }
+                    .accessibilityIdentifier("correction.repair.deleteTracked")
+                }
+
                 if problem.canEditBallInPlay,
                    affectedPlay != nil,
                    affectedState != nil,
@@ -1087,6 +1159,7 @@ private struct GameEventCorrectionProblemView: View {
                     .accessibilityIdentifier("correction.repair.play")
                 } else if !problem.canEditPitch
                             && !problem.canEditOffensivePitch
+                            && !problem.canDeleteOffensivePitch
                             && !problem.canDeletePitch {
                     Text("This event does not support another change in this correction session.")
                         .foregroundStyle(AppTheme.graphite.opacity(0.68))

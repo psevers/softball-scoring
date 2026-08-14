@@ -140,6 +140,32 @@ struct OffensivePitchEditSession: Identifiable {
     fileprivate let expectedTimeline: [GameEventRecordRevision]
 }
 
+struct OffensivePitchDeletionSession: Identifiable {
+    var id: UUID { recordID }
+
+    let recordID: UUID
+    let gameID: UUID
+    let sequenceNumber: Int
+    let inning: Int
+    let half: InningHalf
+    let batter: TrackedBatterIdentity
+    let battingOrderSize: Int
+    let originalResult: OffensivePitchResult
+    let originalStateAfter: GameState
+
+    fileprivate let expectedTimeline: [GameEventRecordRevision]
+
+    var confirmationTitle: String {
+        "Delete \(originalResult.label) pitch?"
+    }
+
+    var confirmationDetail: String {
+        "\(half.displayName) of inning \(inning), \(batter.displayName), batting slot "
+            + "\(batter.lineupSlot) of \(battingOrderSize), sequence \(sequenceNumber): "
+            + "\(originalResult.label). The deletion remains staged until Save."
+    }
+}
+
 struct DefensivePitchCorrectionInvalidRecord: Equatable {
     let id: UUID
     let sequenceNumber: Int
@@ -175,6 +201,18 @@ struct DefensivePitchStagedChange: Identifiable, Equatable {
     }
 }
 
+enum OffensivePitchStagedAction: Equatable {
+    case edit(OffensivePitchResult)
+    case delete
+
+    var label: String {
+        switch self {
+        case .edit(let result): "Change to \(result.label)"
+        case .delete: "Delete"
+        }
+    }
+}
+
 struct OffensivePitchStagedChange: Identifiable, Equatable {
     var id: UUID { recordID }
 
@@ -185,11 +223,11 @@ struct OffensivePitchStagedChange: Identifiable, Equatable {
     let batter: TrackedBatterIdentity
     let battingOrderSize: Int
     let originalResult: OffensivePitchResult
-    let proposedResult: OffensivePitchResult
+    let action: OffensivePitchStagedAction
 
     var summary: String {
         "Sequence \(sequenceNumber) · \(batter.displayName) · \(originalResult.label) · "
-            + "Change to \(proposedResult.label)"
+            + action.label
     }
 }
 
@@ -236,6 +274,7 @@ struct GameEventCorrectionProblem: Equatable {
     let explanation: String
     let canEditPitch: Bool
     let canEditOffensivePitch: Bool
+    let canDeleteOffensivePitch: Bool
     let canDeletePitch: Bool
     let canEditBallInPlay: Bool
 }
@@ -254,7 +293,10 @@ struct GameEventCorrectionSession {
     var canSave: Bool {
         (!stagedChanges.isEmpty
             || stagedOffensivePitchChanges.contains {
-                $0.proposedResult != $0.originalResult
+                switch $0.action {
+                case .edit(let result): result != $0.originalResult
+                case .delete: true
+                }
             }
             || stagedBallInPlayChanges.contains { $0.proposedPlay != $0.originalPlay }
             || !stagedLogicalPlayDeletions.isEmpty)
@@ -417,6 +459,7 @@ enum GameEventCorrectionError: LocalizedError {
     case staleTimeline
     case pitchNotEditable
     case offensivePitchNotEditable
+    case offensivePitchNotDeletable
     case pitchNotDeletable
     case ballInPlayNotEditable
     case logicalPlayNotDeletable
@@ -438,6 +481,8 @@ enum GameEventCorrectionError: LocalizedError {
             "This saved event is not an editable non-terminal defensive pitch."
         case .offensivePitchNotEditable:
             "This saved event is not an editable tracked-team pitch."
+        case .offensivePitchNotDeletable:
+            "This saved event is not a tracked-team pitch that can be deleted."
         case .pitchNotDeletable:
             "This saved event is not a defensive pitch that can be deleted."
         case .ballInPlayNotEditable:
@@ -623,7 +668,24 @@ enum GameEventCorrection {
     ) throws -> GameEventCorrectionSession {
         try stageOffensivePitchChange(
             recordID: recordID,
-            result: result,
+            action: .edit(result),
+            in: session,
+            game: game,
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines
+        )
+    }
+
+    static func stageOffensivePitchDeletion(
+        recordID: UUID,
+        in session: GameEventCorrectionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
+    ) throws -> GameEventCorrectionSession {
+        try stageOffensivePitchChange(
+            recordID: recordID,
+            action: .delete,
             in: session,
             game: game,
             modelContext: modelContext,
@@ -684,13 +746,18 @@ enum GameEventCorrection {
             guard let record = records.first(where: { $0.id == change.recordID }) else {
                 throw GameEventCorrectionError.staleTimeline
             }
-            let encoded = try GameEventCodec.encode(.offensivePitch(OffensivePitchEvent(
-                batter: change.batter,
-                battingOrderSize: change.battingOrderSize,
-                result: change.proposedResult
-            )))
-            record.kindRawValue = encoded.kind.rawValue
-            record.payload = encoded.payload
+            switch change.action {
+            case .edit(let result):
+                let encoded = try GameEventCodec.encode(.offensivePitch(OffensivePitchEvent(
+                    batter: change.batter,
+                    battingOrderSize: change.battingOrderSize,
+                    result: result
+                )))
+                record.kindRawValue = encoded.kind.rawValue
+                record.payload = encoded.payload
+            case .delete:
+                correctionContext.delete(record)
+            }
         }
         for change in session.stagedBallInPlayChanges {
             guard let record = records.first(where: { $0.id == change.recordID }) else {
@@ -812,6 +879,56 @@ enum GameEventCorrection {
             stateBefore: entry.stateBefore,
             originalStateAfter: entry.stateAfter,
             expectedTimeline: records.map(GameEventRecordRevision.init)
+        )
+    }
+
+    static func prepareOffensivePitchDeletion(
+        recordID: UUID,
+        game: Game,
+        modelContext: ModelContext
+    ) throws -> OffensivePitchDeletionSession {
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        let snapshot = try validatedSnapshot(game: game, records: records)
+        guard let record = records.first(where: { $0.id == recordID }),
+              let entry = snapshot.replay.entries.first(where: { $0.recordID == recordID }),
+              case .offensivePitch(let pitch) = entry.body else {
+            throw GameEventCorrectionError.offensivePitchNotDeletable
+        }
+
+        return OffensivePitchDeletionSession(
+            recordID: record.id,
+            gameID: game.id,
+            sequenceNumber: record.sequenceNumber,
+            inning: entry.stateBefore.inning,
+            half: entry.stateBefore.half,
+            batter: pitch.batter,
+            battingOrderSize: pitch.battingOrderSize,
+            originalResult: pitch.result,
+            originalStateAfter: entry.stateAfter,
+            expectedTimeline: records.map(GameEventRecordRevision.init)
+        )
+    }
+
+    static func stageOffensivePitchDeletion(
+        _ deletionSession: OffensivePitchDeletionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
+    ) throws -> GameEventCorrectionSession {
+        guard deletionSession.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        let session = try beginGameEventCorrection(game: game, modelContext: modelContext)
+        guard session.expectedTimeline == deletionSession.expectedTimeline else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        return try stageOffensivePitchDeletion(
+            recordID: deletionSession.recordID,
+            in: session,
+            game: game,
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines
         )
     }
 
@@ -1451,7 +1568,7 @@ enum GameEventCorrection {
 
     private static func stageOffensivePitchChange(
         recordID: UUID,
-        result: OffensivePitchResult,
+        action: OffensivePitchStagedAction,
         in session: GameEventCorrectionSession,
         game: Game,
         modelContext: ModelContext,
@@ -1476,6 +1593,7 @@ enum GameEventCorrection {
             records: records,
             projectBattingLines: projectBattingLines
         )
+        let validateEvent = terminalCountValidator(originalReplay: originalSnapshot.replay)
         let currentRecords = try applying(
             session.stagedChanges,
             offensivePitchChanges: session.stagedOffensivePitchChanges,
@@ -1486,24 +1604,27 @@ enum GameEventCorrection {
         let currentSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
             game: game,
             records: currentRecords,
-            projectBattingLines: projectBattingLines
+            projectBattingLines: projectBattingLines,
+            validateEvent: validateEvent
         )
         guard let referenceEntry = currentSnapshot.replay.entries.first(where: {
             $0.recordID == recordID
         }) ?? session.snapshot.replay.entries.first(where: { $0.recordID == recordID }) else {
             throw GameEventCorrectionError.staleTimeline
         }
-        let proposedPitch = OffensivePitchEvent(
-            batter: persistedPitch.batter,
-            battingOrderSize: persistedPitch.battingOrderSize,
-            result: result
-        )
-        guard OffensivePitchValidator.isValid(
-            proposedPitch,
-            state: referenceEntry.stateBefore,
-            trackedTeamHomeAway: homeAway
-        ) else {
-            throw GameEventCorrectionError.offensivePitchNotEditable
+        if case .edit(let result) = action {
+            let proposedPitch = OffensivePitchEvent(
+                batter: persistedPitch.batter,
+                battingOrderSize: persistedPitch.battingOrderSize,
+                result: result
+            )
+            guard OffensivePitchValidator.isValid(
+                proposedPitch,
+                state: referenceEntry.stateBefore,
+                trackedTeamHomeAway: homeAway
+            ) else {
+                throw GameEventCorrectionError.offensivePitchNotEditable
+            }
         }
 
         let originalResult = session.stagedOffensivePitchChanges.first(where: {
@@ -1517,7 +1638,7 @@ enum GameEventCorrection {
             batter: persistedPitch.batter,
             battingOrderSize: persistedPitch.battingOrderSize,
             originalResult: originalResult,
-            proposedResult: result
+            action: action
         )
         var offensivePitchChanges = session.stagedOffensivePitchChanges
         if let index = offensivePitchChanges.firstIndex(where: { $0.recordID == recordID }) {
@@ -1536,7 +1657,8 @@ enum GameEventCorrection {
         let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
             game: game,
             records: candidateRecords,
-            projectBattingLines: projectBattingLines
+            projectBattingLines: projectBattingLines,
+            validateEvent: validateEvent
         )
         return GameEventCorrectionSession(
             gameID: game.id,
@@ -1582,17 +1704,22 @@ enum GameEventCorrection {
                 )
             }
             if let change = offensivePitchChangesByRecordID[record.id] {
-                return try GameEventRecord(
-                    id: record.id,
-                    gameID: record.gameID,
-                    sequenceNumber: record.sequenceNumber,
-                    timestamp: record.timestamp,
-                    body: .offensivePitch(OffensivePitchEvent(
-                        batter: change.batter,
-                        battingOrderSize: change.battingOrderSize,
-                        result: change.proposedResult
-                    ))
-                )
+                switch change.action {
+                case .delete:
+                    return nil
+                case .edit(let result):
+                    return try GameEventRecord(
+                        id: record.id,
+                        gameID: record.gameID,
+                        sequenceNumber: record.sequenceNumber,
+                        timestamp: record.timestamp,
+                        body: .offensivePitch(OffensivePitchEvent(
+                            batter: change.batter,
+                            battingOrderSize: change.battingOrderSize,
+                            result: result
+                        ))
+                    )
+                }
             }
             guard let change = changesByRecordID[record.id] else { return record }
             switch change.action {
@@ -1618,13 +1745,22 @@ enum GameEventCorrection {
         in replay: GameEventReplay.Result,
         originalReplay: GameEventReplay.Result
     ) -> GameEventCorrectionProblem? {
-        guard let entry = replay.entries.first(where: { $0.rejection != nil }) else {
+        let entry: GameEventReplay.Entry
+        let hasTerminalCountMismatch: Bool
+        if let rejectedEntry = replay.entries.first(where: { $0.rejection != nil }) {
+            entry = rejectedEntry
+            hasTerminalCountMismatch = violatesOriginalTerminalCount(
+                rejectedEntry,
+                originalReplay: originalReplay
+            )
+        } else {
             return nil
         }
         let context: String
         let explanation: String
         let canEditPitch: Bool
         let canEditOffensivePitch: Bool
+        let canDeleteOffensivePitch: Bool
         let canDeletePitch: Bool
         let canEditBallInPlay: Bool
         switch entry.body {
@@ -1638,6 +1774,7 @@ enum GameEventCorrection {
             canEditPitch = isEditablePitch(pitch.result)
                 && !completesPlateAppearance(pitch.result, stateBefore: entry.stateBefore)
             canEditOffensivePitch = false
+            canDeleteOffensivePitch = false
             canDeletePitch = true
             canEditBallInPlay = false
         case .ballInPlay(let play):
@@ -1648,6 +1785,7 @@ enum GameEventCorrection {
                 + "against the proposed game state."
             canEditPitch = false
             canEditOffensivePitch = false
+            canDeleteOffensivePitch = false
             canDeletePitch = false
             if let originalEntry = originalReplay.entries.first(where: {
                 $0.recordID == entry.recordID
@@ -1673,6 +1811,21 @@ enum GameEventCorrection {
                 + "before rejecting this pitch for its event-time batter."
             canEditPitch = false
             canEditOffensivePitch = true
+            canDeleteOffensivePitch = true
+            canDeletePitch = false
+            canEditBallInPlay = false
+        case .offensivePlateAppearance(let plateAppearance) where hasTerminalCountMismatch:
+            context = "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · "
+                + "\(plateAppearance.batter.displayName) · Batting slot "
+                + "\(plateAppearance.batter.lineupSlot) of "
+                + "\(plateAppearance.battingOrderSize) · \(plateAppearance.result.label)"
+            explanation = "Full replay reached tracked batting slot "
+                + "\(entry.stateBefore.currentTrackedBatterSlot) with a "
+                + "\(entry.stateBefore.balls)–\(entry.stateBefore.strikes) count "
+                + "before rejecting this \(plateAppearance.result.label) for its saved count contract."
+            canEditPitch = false
+            canEditOffensivePitch = false
+            canDeleteOffensivePitch = false
             canDeletePitch = false
             canEditBallInPlay = false
         default:
@@ -1680,6 +1833,7 @@ enum GameEventCorrection {
             explanation = "Full replay rejected this record at its original chronological position."
             canEditPitch = false
             canEditOffensivePitch = false
+            canDeleteOffensivePitch = false
             canDeletePitch = false
             canEditBallInPlay = false
         }
@@ -1690,9 +1844,58 @@ enum GameEventCorrection {
             explanation: explanation,
             canEditPitch: canEditPitch,
             canEditOffensivePitch: canEditOffensivePitch,
+            canDeleteOffensivePitch: canDeleteOffensivePitch,
             canDeletePitch: canDeletePitch,
             canEditBallInPlay: canEditBallInPlay
         )
+    }
+
+    private static func terminalCountValidator(
+        originalReplay: GameEventReplay.Result
+    ) -> GameEventReplay.ValidateEvent {
+        { record, event, state in
+            guard case .offensivePlateAppearance(let plateAppearance) = event.body,
+                  let originalEntry = originalReplay.entries.first(where: {
+                      $0.recordID == record.id
+                  }),
+                  case .offensivePlateAppearance(let originalPlateAppearance) = originalEntry.body,
+                  terminalCountMatches(
+                    originalPlateAppearance.result,
+                    state: originalEntry.stateBefore
+                  ) else {
+                return true
+            }
+            return terminalCountMatches(plateAppearance.result, state: state)
+        }
+    }
+
+    private static func violatesOriginalTerminalCount(
+        _ entry: GameEventReplay.Entry,
+        originalReplay: GameEventReplay.Result
+    ) -> Bool {
+        guard case .offensivePlateAppearance(let plateAppearance) = entry.body,
+              let originalEntry = originalReplay.entries.first(where: {
+                  $0.recordID == entry.recordID
+              }),
+              case .offensivePlateAppearance(let originalPlateAppearance) = originalEntry.body,
+              terminalCountMatches(
+                originalPlateAppearance.result,
+                state: originalEntry.stateBefore
+              ) else {
+            return false
+        }
+        return !terminalCountMatches(plateAppearance.result, state: entry.stateBefore)
+    }
+
+    private static func terminalCountMatches(
+        _ result: OffensivePlateAppearanceResult,
+        state: GameState
+    ) -> Bool {
+        switch result {
+        case .walk: state.balls == 3
+        case .strikeout: state.strikes == 2
+        default: false
+        }
     }
 
     private static func freshContext(from modelContext: ModelContext) -> ModelContext {
