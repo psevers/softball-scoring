@@ -684,6 +684,63 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["game.count"].value as? String, "0 outs, on 2B, 3B")
     }
 
+    func testTrackedTeamPlateAppearanceCorrectionIdentifiesThirdOutScope() {
+        let app = launchApp(
+            persistentStoreName: "tracked-play-third-out-scope-\(UUID().uuidString)"
+        )
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        for _ in 0..<2 {
+            let groundOut = app.buttons["GO"]
+            XCTAssertTrue(scrollUntilHittable(groundOut, in: app))
+            groundOut.tap()
+            XCTAssertTrue(app.navigationBars["Record Our Play"].waitForExistence(timeout: 3))
+            app.buttons["Record"].tap()
+        }
+        let single = app.buttons["1B"]
+        XCTAssertTrue(scrollUntilHittable(single, in: app))
+        single.tap()
+        XCTAssertTrue(app.navigationBars["Record Our Play"].waitForExistence(timeout: 3))
+        app.buttons["Record"].tap()
+
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        let entry = app.buttons["history.entry.3"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 3))
+        entry.tap()
+        let edit = app.buttons["history.editTrackedPlay.3"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 3))
+        edit.tap()
+
+        XCTAssertTrue(app.navigationBars["Edit Tracked Play"].waitForExistence(timeout: 3))
+        let form = app.collectionViews.firstMatch
+        let save = app.buttons["trackedPlayEdit.save"]
+        XCTAssertFalse(save.isEnabled)
+        let confirm = app.buttons["trackedPlayEdit.confirmRunners"]
+        XCTAssertTrue(swipeWithinUntilHittable(confirm, in: form, above: save))
+        confirm.tap()
+
+        XCTAssertTrue(app.navigationBars["Confirm Correction"].waitForExistence(timeout: 3))
+        let batterDestination = app.buttons["runner.destination.batter"]
+        XCTAssertTrue(batterDestination.waitForExistence(timeout: 3))
+        batterDestination.tap()
+        app.buttons["Out"].tap()
+        app.buttons["Preview"].tap()
+        let scopeMessage = app.staticTexts[
+            "This correction cannot make the third out; use the half-inning correction workflow."
+        ]
+        XCTAssertTrue(scrollUntilHittable(scopeMessage, in: app))
+        XCTAssertTrue(app.navigationBars["Confirm Correction"].exists)
+        app.navigationBars["Confirm Correction"].buttons["Cancel"].tap()
+        XCTAssertTrue(app.navigationBars["Edit Tracked Play"].waitForExistence(timeout: 3))
+        XCTAssertFalse(save.isEnabled)
+    }
+
     private func exerciseTrackedTeamPlateAppearanceEdit(atAccessibilityTextSize: Bool) {
         let app = launchApp(
             atAccessibilityTextSize: atAccessibilityTextSize,

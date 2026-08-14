@@ -938,6 +938,25 @@ struct GameStateTests {
             state: state,
             trackedTeamHomeAway: .away
         ) == .baseCollision(.second))
+
+        state.outs = 2
+        let halfInningEndingPlay = plateAppearance(
+            movements: [
+                .init(source: .batter, destination: .second),
+                .init(source: .first, destination: .out)
+            ],
+            rbi: 0,
+            countedRunSources: []
+        )
+        #expect(OffensivePlateAppearanceValidator.validate(
+            halfInningEndingPlay,
+            state: state,
+            trackedTeamHomeAway: .away
+        ) == nil)
+        #expect(OffensivePlateAppearanceValidator.correctionScopeError(
+            halfInningEndingPlay,
+            stateBefore: state
+        ) == .endsHalfInning)
     }
 
     @Test func offensiveValidatorRejectsSacrificeBuntWithMultipleOutsOnPlay() {

@@ -526,7 +526,7 @@ enum GameEventCorrectionError: LocalizedError {
         case .offensivePitchNotDeletable:
             "This saved event is not a tracked-team pitch that can be deleted."
         case .offensivePlateAppearanceNotEditable:
-            "This saved event is not an editable non-scoring tracked-team plate appearance."
+            "This saved event is not an editable tracked-team plate appearance that stays within its half-inning."
         case .pitchNotDeletable:
             "This saved event is not a defensive pitch that can be deleted."
         case .ballInPlayNotEditable:

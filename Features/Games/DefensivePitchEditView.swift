@@ -337,6 +337,7 @@ struct OffensivePlateAppearanceEditView: View {
                     battingOrderSize: editSession.battingOrderSize,
                     initialDraft: initialDraft,
                     allowsScoring: true,
+                    allowsHalfInningEndingPlay: false,
                     title: "Confirm Correction",
                     confirmationTitle: "Preview",
                     onCancel: { isConfirmingRunners = false },
@@ -1496,11 +1497,12 @@ private struct GameEventCorrectionProblemView: View {
                     initialDraft: OffensivePlateAppearanceDraft(
                         result: selectedPlateAppearanceResult,
                         movements: affectedPlateAppearance.movements,
-                        rbi: 0,
-                        countedRunSources: [],
+                        rbi: affectedPlateAppearance.rbi,
+                        countedRunSources: affectedPlateAppearance.countedRunSources,
                         thirdOutClassification: nil
                     ),
-                    allowsScoring: false,
+                    allowsScoring: true,
+                    allowsHalfInningEndingPlay: false,
                     title: "Repair Affected Tracked Play",
                     confirmationTitle: "Stage Repair",
                     onCancel: { isConfirmingPlateAppearanceRunners = false },

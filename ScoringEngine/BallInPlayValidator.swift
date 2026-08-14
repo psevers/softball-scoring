@@ -201,6 +201,7 @@ enum OffensivePlateAppearanceValidationError: Error, Equatable {
     case invalidRunSources
     case invalidRBI
     case invalidThirdOutClassification
+    case endsHalfInning
     case outcomeMismatch
 }
 
@@ -226,6 +227,14 @@ enum OffensivePlateAppearanceValidator {
         return correctionResults.contains(plateAppearance.result)
             && plateAppearance.thirdOutClassification == nil
             && stateBefore.outs + outsOnPlay < 3
+    }
+
+    static func correctionScopeError(
+        _ plateAppearance: OffensivePlateAppearanceEvent,
+        stateBefore: GameState
+    ) -> OffensivePlateAppearanceValidationError? {
+        let outsOnPlay = plateAppearance.movements.filter { $0.destination == .out }.count
+        return stateBefore.outs + outsOnPlay >= 3 ? .endsHalfInning : nil
     }
 
     static func isValid(

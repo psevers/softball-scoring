@@ -8068,7 +8068,7 @@ extension PersistenceTests {
         #expect(saved.battingLines[batter.playerID]?.runsBattedIn == 0)
     }
 
-    @Test func trackedTeamPlateAppearanceEditStagesDownstreamPlateAppearanceRepair() throws {
+    @Test func trackedTeamScoringPlateAppearanceEditStagesDownstreamPlateAppearanceRepair() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext
         let game = makeOffensiveGame()
@@ -8141,13 +8141,13 @@ extension PersistenceTests {
             .init(
                 batter: secondBatter,
                 battingOrderSize: 10,
-                result: .groundOut,
+                result: .single,
                 movements: [
-                    .init(source: .first, destination: .first),
-                    .init(source: .batter, destination: .out)
+                    .init(source: .first, destination: .home),
+                    .init(source: .batter, destination: .first)
                 ],
-                rbi: 0,
-                countedRunSources: [],
+                rbi: 1,
+                countedRunSources: [.first],
                 thirdOutClassification: nil
             ),
             in: editSession,
@@ -8160,7 +8160,7 @@ extension PersistenceTests {
         #expect(invalid.firstInvalidRecord?.canEditOffensivePlateAppearance == true)
         #expect(
             Set(invalid.firstInvalidRecord?.offensiveRunnerIdentities.map(\.playerID) ?? [])
-                == Set([firstBatter.playerID, thirdBatter.playerID])
+                == Set([secondBatter.playerID, thirdBatter.playerID])
         )
         #expect(throws: GameEventCorrectionError.invalidCandidate) {
             _ = try GameEventCorrection.saveGameEventCorrection(
@@ -8193,10 +8193,13 @@ extension PersistenceTests {
         #expect(repaired.canSave)
         #expect(repaired.firstInvalidRecord == nil)
         #expect(repaired.stagedOffensivePlateAppearanceChanges.count == 2)
-        #expect(repaired.snapshot.replay.state.outs == 1)
+        #expect(repaired.snapshot.replay.state.awayScore == 1)
+        #expect(repaired.snapshot.replay.state.outs == 0)
         #expect(repaired.snapshot.replay.state.firstBaseRunnerPlayerID == thirdBatter.playerID)
-        #expect(repaired.snapshot.replay.state.secondBaseRunnerPlayerID == firstBatter.playerID)
+        #expect(repaired.snapshot.replay.state.secondBaseRunnerPlayerID == secondBatter.playerID)
         #expect(repaired.snapshot.replay.state.currentTrackedBatterSlot == 4)
+        #expect(repaired.snapshot.battingLines[firstBatter.playerID]?.runs == 1)
+        #expect(repaired.snapshot.battingLines[secondBatter.playerID]?.runsBattedIn == 1)
 
         _ = try GameEventCorrection.saveGameEventCorrection(
             repaired,
@@ -8209,6 +8212,9 @@ extension PersistenceTests {
         )
         #expect(saved.replay.state == repaired.snapshot.replay.state)
         #expect(saved.battingLines == repaired.snapshot.battingLines)
+        #expect(saved.replay.state.awayScore == 1)
+        #expect(saved.battingLines[firstBatter.playerID]?.runs == 1)
+        #expect(saved.battingLines[secondBatter.playerID]?.runsBattedIn == 1)
     }
 
     @Test func trackedTeamPlateAppearanceEditRejectsIllegalCandidatesAndThirdOutRecords() throws {
