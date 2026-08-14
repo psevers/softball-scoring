@@ -114,3 +114,17 @@ preview score before the inning transition, then cleared count/bases/outs and ne
   ↓
 Cancel unchanged, or Save one atomic result replacement → refreshed History + live scoring
 ```
+
+## Delete a completed defensive logical play — Slice 6
+
+```text
+Live Game → Play History → expand completed Ball In Play → Delete Completed Play
+  ↓
+confirm exact paired In Play pitch + result summaries and sequences
+  ↓
+stage both removals → replay/project from the state before the pitch
+  ↓
+first invalid downstream record disables Save and opens staged repair
+  ↓
+Cancel unchanged, or Save one atomic pair deletion → preserve survivor envelopes and gaps
+```

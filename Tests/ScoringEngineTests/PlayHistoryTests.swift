@@ -39,8 +39,10 @@ struct PlayHistoryTests {
         #expect(history.sections[0].entries.count == 2)
         #expect(history.sections[0].entries[0].summary == "1B · Batter to 1B")
         #expect(history.sections[0].entries[0].components.map(\.sequenceNumber) == [1, 2])
+        #expect(history.sections[0].entries[0].deletableDefensiveLogicalPlayResultRecordID == completedPlay.id)
         #expect(history.sections[0].entries[1].summary == "Ball In Play · Pending")
         #expect(history.sections[0].entries[1].components.map(\.sequenceNumber) == [3])
+        #expect(history.sections[0].entries[1].deletableDefensiveLogicalPlayResultRecordID == nil)
         #expect(history.sections[0].entries[1].accessibilityDescription.lowercased().contains("pending"))
     }
 

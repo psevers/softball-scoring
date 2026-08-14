@@ -4010,6 +4010,360 @@ extension PersistenceTests {
         ))
     }
 
+    @Test func completedDefensiveLogicalPlayDeletionRemovesExactPairAndReplaysPrePitchState() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let timestamps = (0..<3).map {
+            Date(timeIntervalSince1970: 1_786_650_000 + Double($0 * 10))
+        }
+        let ball = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 1,
+            timestamp: timestamps[0],
+            body: .pitch(.init(
+                result: .ball,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        let inPlayPitch = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 2,
+            timestamp: timestamps[1],
+            body: .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        let result = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 3,
+            timestamp: timestamps[2],
+            body: .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ))
+        )
+        [ball, inPlayPitch, result].forEach(context.insert)
+        try context.save()
+
+        let deletion = try GameEventCorrection.prepareDefensiveLogicalPlayDeletion(
+            resultRecordID: result.id,
+            game: game,
+            modelContext: context
+        )
+        let preview = try GameEventCorrection.stageDefensiveLogicalPlayDeletion(
+            deletion,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(deletion.components.map(\.recordID) == [inPlayPitch.id, result.id])
+        #expect(deletion.components.map(\.sequenceNumber) == [2, 3])
+        #expect(deletion.components.map(\.summary) == ["Ball In Play pitch", "Single result"])
+        #expect(preview.canSave)
+        #expect(preview.firstInvalidRecord == nil)
+        #expect(preview.snapshot.records.map(\.id) == [ball.id])
+        #expect(preview.snapshot.replay.state.balls == 1)
+        #expect(preview.snapshot.replay.state.strikes == 0)
+        #expect(preview.snapshot.replay.state.baseRunnerSlots == [nil, nil, nil])
+        #expect(preview.snapshot.replay.state.outs == 0)
+        #expect(preview.snapshot.replay.state.awayScore == 0)
+        #expect(preview.snapshot.replay.state.currentOpponentBatterSlot == 1)
+        #expect(preview.snapshot.replay.state.pitchCount(for: pitcherID) == PitchCount(
+            total: 1,
+            balls: 1,
+            strikes: 0
+        ))
+
+        let storedBeforeSave = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>(
+            sortBy: [SortDescriptor(\GameEventRecord.sequenceNumber)]
+        ))
+        let expectedStoredIDs = [ball.id, inPlayPitch.id, result.id]
+        #expect(storedBeforeSave.map(\.id) == expectedStoredIDs)
+
+        _ = try GameEventCorrection.saveDefensiveLogicalPlayDeletion(
+            preview,
+            game: game,
+            modelContext: context
+        )
+        let reloaded = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+
+        #expect(reloaded.records.map(\.id) == [ball.id])
+        #expect(reloaded.records.map(\.sequenceNumber) == [1])
+        #expect(reloaded.records.map(\.timestamp) == [timestamps[0]])
+        #expect(reloaded.replay.state == preview.snapshot.replay.state)
+    }
+
+    @Test func logicalPlayDeletionStagesFirstInvalidDownstreamRecordForAtomicRepair() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let records = try [
+            GameEventBody.pitch(.init(
+                result: .ball,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            )),
+            .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            )),
+            .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            )),
+            .pitch(.init(
+                result: .calledStrike,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 2
+            ))
+        ].enumerated().map { index, body in
+            try GameEventRecord(gameID: game.id, sequenceNumber: index + 1, body: body)
+        }
+        records.forEach(context.insert)
+        try context.save()
+
+        let deletion = try GameEventCorrection.prepareDefensiveLogicalPlayDeletion(
+            resultRecordID: records[2].id,
+            game: game,
+            modelContext: context
+        )
+        let invalidPreview = try GameEventCorrection.stageDefensiveLogicalPlayDeletion(
+            deletion,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(!invalidPreview.canSave)
+        #expect(invalidPreview.firstInvalidRecord?.id == records[3].id)
+        #expect(invalidPreview.firstInvalidRecord?.sequenceNumber == 4)
+        #expect(invalidPreview.firstInvalidRecord?.canDeletePitch == true)
+        #expect(invalidPreview.snapshot.records.map(\.id) == [records[0].id, records[3].id])
+        #expect(throws: GameEventCorrectionError.invalidCandidate) {
+            _ = try GameEventCorrection.saveDefensiveLogicalPlayDeletion(
+                invalidPreview,
+                game: game,
+                modelContext: context
+            )
+        }
+
+        let stagedSession = invalidPreview.correctionSession
+        let repaired = try GameEventCorrection.stagePitchDeletion(
+            recordID: records[3].id,
+            in: stagedSession,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(repaired.canSave)
+        #expect(repaired.firstInvalidRecord == nil)
+        #expect(repaired.stagedLogicalPlayDeletions[0].pitchRecordID == records[1].id)
+        #expect(repaired.stagedLogicalPlayDeletions[0].resultRecordID == records[2].id)
+        #expect(repaired.stagedChanges.map(\.recordID) == [records[3].id])
+
+        _ = try GameEventCorrection.saveDefensiveEventCorrection(
+            repaired,
+            game: game,
+            modelContext: context
+        )
+        let reloaded = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        #expect(reloaded.records.map(\.id) == [records[0].id])
+        #expect(reloaded.records.map(\.sequenceNumber) == [1])
+        #expect(reloaded.replay.state.balls == 1)
+        #expect(reloaded.replay.state.currentOpponentBatterSlot == 1)
+        #expect(reloaded.replay.state.pitchCount(for: pitcherID).total == 1)
+    }
+
+    @Test func logicalPlayDeletionFailuresPreserveBothOriginalComponents() throws {
+        struct SaveFailure: Error {}
+
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let otherGame = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let records = try defensiveBallInPlayRecords(
+            for: [
+                .init(
+                    outcome: .single,
+                    opponentBatterSlot: 1,
+                    movements: [.init(source: .batter, destination: .first)],
+                    rbi: 0,
+                    thirdOutRunsCounted: nil
+                )
+            ],
+            gameID: game.id,
+            pitcherID: pitcherID
+        )
+        records.forEach(context.insert)
+        try context.save()
+
+        let deletion = try GameEventCorrection.prepareDefensiveLogicalPlayDeletion(
+            resultRecordID: records[1].id,
+            game: game,
+            modelContext: context
+        )
+        #expect(throws: GameEventCorrectionError.gameMismatch) {
+            _ = try GameEventCorrection.stageDefensiveLogicalPlayDeletion(
+                deletion,
+                game: otherGame,
+                modelContext: context
+            )
+        }
+        let preview = try GameEventCorrection.stageDefensiveLogicalPlayDeletion(
+            deletion,
+            game: game,
+            modelContext: context
+        )
+        #expect(throws: SaveFailure.self) {
+            _ = try GameEventCorrection.saveDefensiveLogicalPlayDeletion(
+                preview,
+                game: game,
+                modelContext: context,
+                save: { _ in throw SaveFailure() }
+            )
+        }
+
+        var stored = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>(
+            sortBy: [SortDescriptor(\GameEventRecord.sequenceNumber)]
+        ))
+        #expect(stored.map(\.id) == records.map(\.id))
+        #expect(try stored.map { try $0.decoded().body } == records.map { try $0.decoded().body })
+
+        let newer = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 3,
+            body: .pitch(.init(
+                result: .ball,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 2
+            ))
+        )
+        context.insert(newer)
+        try context.save()
+
+        #expect(throws: GameEventCorrectionError.staleTimeline) {
+            _ = try GameEventCorrection.saveDefensiveLogicalPlayDeletion(
+                preview,
+                game: game,
+                modelContext: context
+            )
+        }
+        stored = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>(
+            sortBy: [SortDescriptor(\GameEventRecord.sequenceNumber)]
+        ))
+        #expect(stored.map(\.id) == records.map(\.id) + [newer.id])
+    }
+
+    @Test func logicalPlayDeletionReproducesCandidateAfterColdStoreReload() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appending(path: "softball-scoring-logical-play-delete-\(UUID().uuidString).store")
+        let gameID = UUID()
+        let pitcherID = UUID()
+        let survivorID = UUID()
+        let survivorTimestamp = Date(timeIntervalSince1970: 1_786_660_000)
+        var expectedState = GameState()
+
+        do {
+            let container = try AppModelContainer.make(storeURL: storeURL)
+            let context = container.mainContext
+            let game = Game(
+                id: gameID,
+                seasonID: UUID(),
+                opponentName: "Thunder",
+                homeAway: .home,
+                status: .inProgress,
+                startingPitcherID: pitcherID
+            )
+            context.insert(game)
+            let survivor = try GameEventRecord(
+                id: survivorID,
+                gameID: gameID,
+                sequenceNumber: 1,
+                timestamp: survivorTimestamp,
+                body: .pitch(.init(
+                    result: .ball,
+                    pitcherID: pitcherID,
+                    opponentBatterSlot: 1
+                ))
+            )
+            let pair = try defensiveBallInPlayRecords(
+                for: [
+                    .init(
+                        outcome: .homeRun,
+                        opponentBatterSlot: 1,
+                        movements: [.init(source: .batter, destination: .home)],
+                        rbi: 1,
+                        thirdOutRunsCounted: nil
+                    )
+                ],
+                gameID: gameID,
+                pitcherID: pitcherID
+            )
+            pair[0].sequenceNumber = 2
+            pair[1].sequenceNumber = 3
+            context.insert(survivor)
+            pair.forEach(context.insert)
+            try context.save()
+
+            let deletion = try GameEventCorrection.prepareDefensiveLogicalPlayDeletion(
+                resultRecordID: pair[1].id,
+                game: game,
+                modelContext: context
+            )
+            let preview = try GameEventCorrection.stageDefensiveLogicalPlayDeletion(
+                deletion,
+                game: game,
+                modelContext: context
+            )
+            expectedState = preview.snapshot.replay.state
+            _ = try GameEventCorrection.saveDefensiveLogicalPlayDeletion(
+                preview,
+                game: game,
+                modelContext: context
+            )
+        }
+
+        let reloadedContainer = try AppModelContainer.make(storeURL: storeURL)
+        let reloadedContext = ModelContext(reloadedContainer)
+        let reloadedGame = try #require(reloadedContext.fetch(FetchDescriptor<Game>()).first)
+        let reloaded = try LiveGameSnapshotLoader.load(
+            game: reloadedGame,
+            modelContext: reloadedContext
+        )
+
+        #expect(reloaded.records.map(\.id) == [survivorID])
+        #expect(reloaded.records.map(\.sequenceNumber) == [1])
+        #expect(reloaded.records.map(\.timestamp) == [survivorTimestamp])
+        #expect(reloaded.replay.state == expectedState)
+        #expect(reloaded.replay.state.balls == 1)
+        #expect(reloaded.replay.state.currentOpponentBatterSlot == 1)
+        #expect(reloaded.replay.state.pitchCount(for: pitcherID) == PitchCount(
+            total: 1,
+            balls: 1,
+            strikes: 0
+        ))
+        #expect(reloaded.battingLines.isEmpty)
+    }
+
     @Test func deletingPitchThatInvalidatesLaterPlayDisablesSaveAndPreservesHistory() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext
