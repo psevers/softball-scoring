@@ -251,12 +251,18 @@ struct DefensiveLogicalPlayDeletionSession: Identifiable {
 
 struct DefensiveLogicalPlayDeletionPreview {
     let session: DefensiveLogicalPlayDeletionSession
-    let snapshot: LiveGameSnapshot
-    let firstInvalidRecord: DefensiveEventCorrectionProblem?
-    let correctionSession: DefensiveEventCorrectionSession?
+    let correctionSession: DefensiveEventCorrectionSession
+
+    var snapshot: LiveGameSnapshot {
+        correctionSession.snapshot
+    }
+
+    var firstInvalidRecord: DefensiveEventCorrectionProblem? {
+        correctionSession.firstInvalidRecord
+    }
 
     var canSave: Bool {
-        firstInvalidRecord == nil
+        correctionSession.canSave
     }
 }
 
@@ -989,8 +995,6 @@ enum GameEventCorrection {
         )
         return DefensiveLogicalPlayDeletionPreview(
             session: deletionSession,
-            snapshot: snapshot,
-            firstInvalidRecord: correctionSession.firstInvalidRecord,
             correctionSession: correctionSession
         )
     }
@@ -1005,11 +1009,11 @@ enum GameEventCorrection {
         guard preview.session.gameID == game.id else {
             throw GameEventCorrectionError.gameMismatch
         }
-        guard preview.canSave, let correctionSession = preview.correctionSession else {
+        guard preview.canSave else {
             throw GameEventCorrectionError.invalidCandidate
         }
         return try saveDefensiveEventCorrection(
-            correctionSession,
+            preview.correctionSession,
             game: game,
             modelContext: modelContext,
             projectBattingLines: projectBattingLines,

@@ -4162,7 +4162,7 @@ extension PersistenceTests {
             )
         }
 
-        let stagedSession = try #require(invalidPreview.correctionSession)
+        let stagedSession = invalidPreview.correctionSession
         let repaired = try GameEventCorrection.stagePitchDeletion(
             recordID: records[3].id,
             in: stagedSession,
