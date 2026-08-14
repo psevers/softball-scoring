@@ -383,7 +383,6 @@ struct OffensivePitchEditView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var selectedResult: OffensivePitchResult
     @State private var correction = GameEventCorrectionCoordinator()
-    @State private var hasStalePreview = false
 
     init(
         game: Game,
@@ -478,7 +477,7 @@ struct OffensivePitchEditView: View {
                 get: { correction.errorMessage != nil },
                 set: { if !$0 { correction.errorMessage = nil } }
             )) {
-                if hasStalePreview {
+                if correction.requiresReopen {
                     Button("Return to Play History") {
                         correction.errorMessage = nil
                         dismiss()
@@ -508,13 +507,7 @@ struct OffensivePitchEditView: View {
             )
         } catch {
             correction.session = nil
-            if let correctionError = error as? GameEventCorrectionError,
-               case .staleTimeline = correctionError {
-                hasStalePreview = true
-            } else {
-                hasStalePreview = false
-            }
-            correction.errorMessage = error.localizedDescription
+            correction.present(error)
         }
     }
 
@@ -782,6 +775,17 @@ private enum GameEventRepairAction {
 private final class GameEventCorrectionCoordinator {
     var session: GameEventCorrectionSession?
     var errorMessage: String?
+    var requiresReopen = false
+
+    func present(_ error: Error) {
+        if let correctionError = error as? GameEventCorrectionError,
+           case .staleTimeline = correctionError {
+            requiresReopen = true
+        } else {
+            requiresReopen = false
+        }
+        errorMessage = error.localizedDescription
+    }
 
     func stageRepair(
         recordID: UUID,
@@ -825,7 +829,7 @@ private final class GameEventCorrectionCoordinator {
                 )
             }
         } catch {
-            errorMessage = error.localizedDescription
+            present(error)
         }
     }
 
@@ -843,7 +847,7 @@ private final class GameEventCorrectionCoordinator {
             )
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            present(error)
             return false
         }
     }
