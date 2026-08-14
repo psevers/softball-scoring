@@ -12,7 +12,7 @@ struct DefensiveBallInPlayEditView: View {
     @State private var selectedOutcome: BallInPlayOutcome
     @State private var isConfirmingRunners = false
     @State private var proposedPlay: BallInPlayEvent?
-    @State private var correction = DefensiveEventCorrectionCoordinator()
+    @State private var correction = GameEventCorrectionCoordinator()
 
     init(
         game: Game,
@@ -62,7 +62,7 @@ struct DefensiveBallInPlayEditView: View {
                     }
 
                     if let proposedPlay, let correctionSession = correction.session {
-                        DefensiveEventCorrectionSections(
+                        GameEventCorrectionSections(
                             correctionSession: correctionSession,
                             homeAway: HomeAway(rawValue: game.homeAwayRawValue),
                             proposedSummary: "Proposed: \(playSummary(proposedPlay)) · "
@@ -220,7 +220,7 @@ struct DefensivePitchEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var selectedResult: PitchResult
-    @State private var correction = DefensiveEventCorrectionCoordinator()
+    @State private var correction = GameEventCorrectionCoordinator()
 
     init(
         game: Game,
@@ -270,7 +270,7 @@ struct DefensivePitchEditView: View {
                     }
 
                     if let correctionSession = correction.session {
-                        DefensiveEventCorrectionSections(
+                        GameEventCorrectionSections(
                             correctionSession: correctionSession,
                             homeAway: HomeAway(rawValue: game.homeAwayRawValue),
                             proposedSummary: "Proposed: \(selectedResult.label) · "
@@ -336,7 +336,7 @@ struct DefensivePitchEditView: View {
             return
         }
         do {
-            let session = try GameEventCorrection.beginDefensiveEventCorrection(
+            let session = try GameEventCorrection.beginGameEventCorrection(
                 game: game,
                 modelContext: modelContext
             )
@@ -363,7 +363,165 @@ struct DefensivePitchEditView: View {
         }
     }
 
-    private func proposedState(in correctionSession: DefensiveEventCorrectionSession) -> GameState {
+    private func proposedState(in correctionSession: GameEventCorrectionSession) -> GameState {
+        correctionSession.snapshot.replay.entries.first(where: {
+            $0.recordID == editSession.recordID
+        })?.stateAfter ?? correctionSession.snapshot.replay.state
+    }
+
+    private func countDescription(_ state: GameState) -> String {
+        "Count \(state.balls)–\(state.strikes)"
+    }
+}
+
+struct OffensivePitchEditView: View {
+    let game: Game
+    let editSession: OffensivePitchEditSession
+    let liveSession: LiveGameSession
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @State private var selectedResult: OffensivePitchResult
+    @State private var correction = GameEventCorrectionCoordinator()
+
+    init(
+        game: Game,
+        editSession: OffensivePitchEditSession,
+        liveSession: LiveGameSession
+    ) {
+        self.game = game
+        self.editSession = editSession
+        self.liveSession = liveSession
+        _selectedResult = State(initialValue: editSession.originalResult)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Form {
+                    Section("Pitch") {
+                        Text(
+                            "\(editSession.half.displayName) \(editSession.inning) · "
+                                + "\(editSession.batter.displayName) · Batting slot "
+                                + "\(editSession.batter.lineupSlot) of "
+                                + "\(editSession.battingOrderSize) · Sequence "
+                                + "\(editSession.sequenceNumber)"
+                        )
+                        .font(.body.monospacedDigit())
+                        Text(
+                            "Current: \(editSession.originalResult.label) · "
+                                + countDescription(editSession.originalStateAfter)
+                        )
+                        .accessibilityIdentifier("trackedPitchEdit.current")
+                    }
+
+                    Section("Correct result") {
+                        ForEach(OffensivePitchResult.allCases) { result in
+                            Button {
+                                select(result)
+                            } label: {
+                                HStack {
+                                    Text(result.label)
+                                    Spacer()
+                                    if result == selectedResult {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                                .frame(minHeight: AppTheme.TouchTarget.minimum)
+                            }
+                            .accessibilityIdentifier("trackedPitchEdit.result.\(result.rawValue)")
+                        }
+                    }
+
+                    if let correctionSession = correction.session {
+                        GameEventCorrectionSections(
+                            correctionSession: correctionSession,
+                            homeAway: HomeAway(rawValue: game.homeAwayRawValue),
+                            proposedSummary: "Proposed: \(selectedResult.label) · "
+                                + countDescription(proposedState(in: correctionSession)),
+                            proposedIdentifier: "trackedPitchEdit.proposed",
+                            stageChange: { problem, action in
+                                correction.stageRepair(
+                                    recordID: problem.id,
+                                    action: action,
+                                    game: game,
+                                    modelContext: modelContext
+                                )
+                            }
+                        )
+                    }
+                }
+
+                Divider()
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    Button("Cancel") { dismiss() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("trackedPitchEdit.cancel")
+
+                    Button("Save") { save() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .disabled(correction.session?.canSave != true)
+                        .accessibilityIdentifier("trackedPitchEdit.save")
+                }
+                .padding(.horizontal, AppTheme.Spacing.md)
+                .padding(.vertical, AppTheme.Spacing.sm)
+                .background(.bar)
+            }
+            .navigationTitle("Edit Tracked Pitch")
+            .navigationBarTitleDisplayMode(.inline)
+            .alert("Pitch Edit Failed", isPresented: Binding(
+                get: { correction.errorMessage != nil },
+                set: { if !$0 { correction.errorMessage = nil } }
+            )) {
+                if correction.requiresReopen {
+                    Button("Return to Play History") {
+                        correction.errorMessage = nil
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("trackedPitchEdit.reopen")
+                } else {
+                    Button("OK", role: .cancel) { correction.errorMessage = nil }
+                }
+            } message: {
+                Text(correction.errorMessage ?? "The proposed pitch could not be replayed safely.")
+            }
+        }
+    }
+
+    private func select(_ result: OffensivePitchResult) {
+        selectedResult = result
+        guard result != editSession.originalResult else {
+            correction.session = nil
+            return
+        }
+        do {
+            correction.session = try GameEventCorrection.stageOffensivePitchEdit(
+                result,
+                in: editSession,
+                game: game,
+                modelContext: modelContext
+            )
+        } catch {
+            correction.session = nil
+            correction.present(error)
+        }
+    }
+
+    private func save() {
+        if correction.save(
+            liveSession: liveSession,
+            game: game,
+            modelContext: modelContext
+        ) {
+            dismiss()
+        }
+    }
+
+    private func proposedState(in correctionSession: GameEventCorrectionSession) -> GameState {
         correctionSession.snapshot.replay.entries.first(where: {
             $0.recordID == editSession.recordID
         })?.stateAfter ?? correctionSession.snapshot.replay.state
@@ -381,7 +539,7 @@ struct DefensivePitchDeletionView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @State private var correction = DefensiveEventCorrectionCoordinator()
+    @State private var correction = GameEventCorrectionCoordinator()
 
     var body: some View {
         NavigationStack {
@@ -402,7 +560,7 @@ struct DefensivePitchDeletionView: View {
                     }
 
                     if let correctionSession = correction.session {
-                        DefensiveEventCorrectionSections(
+                        GameEventCorrectionSections(
                             correctionSession: correctionSession,
                             homeAway: HomeAway(rawValue: game.homeAwayRawValue),
                             stageChange: { problem, action in
@@ -466,7 +624,7 @@ struct DefensivePitchDeletionView: View {
     private func stage() {
         guard correction.session == nil else { return }
         do {
-            let session = try GameEventCorrection.beginDefensiveEventCorrection(
+            let session = try GameEventCorrection.beginGameEventCorrection(
                 game: game,
                 modelContext: modelContext
             )
@@ -503,7 +661,7 @@ struct DefensiveLogicalPlayDeletionView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @State private var correction = DefensiveEventCorrectionCoordinator()
+    @State private var correction = GameEventCorrectionCoordinator()
 
     var body: some View {
         NavigationStack {
@@ -525,7 +683,7 @@ struct DefensiveLogicalPlayDeletionView: View {
                     }
 
                     if let correctionSession = correction.session {
-                        DefensiveEventCorrectionSections(
+                        GameEventCorrectionSections(
                             correctionSession: correctionSession,
                             homeAway: HomeAway(rawValue: game.homeAwayRawValue),
                             stageChange: { problem, action in
@@ -605,21 +763,33 @@ struct DefensiveLogicalPlayDeletionView: View {
     }
 }
 
-private enum DefensiveEventRepairAction {
+private enum GameEventRepairAction {
     case edit(PitchResult)
+    case editOffensivePitch(OffensivePitchResult)
     case delete
     case editBallInPlay(BallInPlayEvent)
 }
 
 @MainActor
 @Observable
-private final class DefensiveEventCorrectionCoordinator {
-    var session: DefensiveEventCorrectionSession?
+private final class GameEventCorrectionCoordinator {
+    var session: GameEventCorrectionSession?
     var errorMessage: String?
+    var requiresReopen = false
+
+    func present(_ error: Error) {
+        if let correctionError = error as? GameEventCorrectionError,
+           case .staleTimeline = correctionError {
+            requiresReopen = true
+        } else {
+            requiresReopen = false
+        }
+        errorMessage = error.localizedDescription
+    }
 
     func stageRepair(
         recordID: UUID,
-        action: DefensiveEventRepairAction,
+        action: GameEventRepairAction,
         game: Game,
         modelContext: ModelContext
     ) {
@@ -628,6 +798,14 @@ private final class DefensiveEventCorrectionCoordinator {
             switch action {
             case .edit(let result):
                 self.session = try GameEventCorrection.stagePitchEdit(
+                    recordID: recordID,
+                    result: result,
+                    in: session,
+                    game: game,
+                    modelContext: modelContext
+                )
+            case .editOffensivePitch(let result):
+                self.session = try GameEventCorrection.stageOffensivePitchEdit(
                     recordID: recordID,
                     result: result,
                     in: session,
@@ -651,7 +829,7 @@ private final class DefensiveEventCorrectionCoordinator {
                 )
             }
         } catch {
-            errorMessage = error.localizedDescription
+            present(error)
         }
     }
 
@@ -662,20 +840,20 @@ private final class DefensiveEventCorrectionCoordinator {
     ) -> Bool {
         guard let session, session.canSave else { return false }
         do {
-            try liveSession.saveDefensiveEventCorrection(
+            try liveSession.saveGameEventCorrection(
                 session,
                 game: game,
                 modelContext: modelContext
             )
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            present(error)
             return false
         }
     }
 }
 
-private extension DefensiveEventCorrectionSession {
+private extension GameEventCorrectionSession {
     func historyEntry(for recordID: UUID) -> PlayHistoryEntry? {
         snapshot.history.sections
             .flatMap(\.entries)
@@ -683,21 +861,21 @@ private extension DefensiveEventCorrectionSession {
     }
 }
 
-private struct DefensiveEventCorrectionSections: View {
-    let correctionSession: DefensiveEventCorrectionSession
+private struct GameEventCorrectionSections: View {
+    let correctionSession: GameEventCorrectionSession
     let homeAway: HomeAway?
     let proposedSummary: String?
     let proposedIdentifier: String?
-    let stageChange: (DefensiveEventCorrectionProblem, DefensiveEventRepairAction) -> Void
+    let stageChange: (GameEventCorrectionProblem, GameEventRepairAction) -> Void
 
     init(
-        correctionSession: DefensiveEventCorrectionSession,
+        correctionSession: GameEventCorrectionSession,
         homeAway: HomeAway?,
         proposedSummary: String? = nil,
         proposedIdentifier: String? = nil,
         stageChange: @escaping (
-            DefensiveEventCorrectionProblem,
-            DefensiveEventRepairAction
+            GameEventCorrectionProblem,
+            GameEventRepairAction
         ) -> Void
     ) {
         self.correctionSession = correctionSession
@@ -724,7 +902,7 @@ private struct DefensiveEventCorrectionSections: View {
                     } else {
                         nil
                     }
-                    DefensiveEventCorrectionProblemView(
+                    GameEventCorrectionProblemView(
                         problem: invalid,
                         historyEntry: correctionSession.historyEntry(for: invalid.id),
                         affectedPlay: affectedPlay,
@@ -770,6 +948,11 @@ private struct DefensiveEventCorrectionSections: View {
                     .font(.body.monospacedDigit())
                     .accessibilityIdentifier("correction.change.\(change.sequenceNumber)")
             }
+            ForEach(correctionSession.stagedOffensivePitchChanges) { change in
+                Text(change.summary)
+                    .font(.body.monospacedDigit())
+                    .accessibilityIdentifier("correction.change.\(change.sequenceNumber)")
+            }
         }
 
         Section("Preview") {
@@ -787,29 +970,30 @@ private struct DefensiveEventCorrectionSections: View {
     }
 }
 
-private struct DefensiveEventCorrectionProblemView: View {
+private struct GameEventCorrectionProblemView: View {
     private static let editableResults: [PitchResult] = [
         .ball, .calledStrike, .swingingStrike, .foul
     ]
+    private static let editableOffensiveResults = OffensivePitchResult.allCases
 
-    let problem: DefensiveEventCorrectionProblem
+    let problem: GameEventCorrectionProblem
     let historyEntry: PlayHistoryEntry?
     let affectedPlay: BallInPlayEvent?
     let affectedState: GameState?
     let homeAway: HomeAway?
-    let stageChange: (DefensiveEventRepairAction) -> Void
+    let stageChange: (GameEventRepairAction) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedOutcome: BallInPlayOutcome
     @State private var isConfirmingRunners = false
 
     init(
-        problem: DefensiveEventCorrectionProblem,
+        problem: GameEventCorrectionProblem,
         historyEntry: PlayHistoryEntry?,
         affectedPlay: BallInPlayEvent?,
         affectedState: GameState?,
         homeAway: HomeAway?,
-        stageChange: @escaping (DefensiveEventRepairAction) -> Void
+        stageChange: @escaping (GameEventRepairAction) -> Void
     ) {
         self.problem = problem
         self.historyEntry = historyEntry
@@ -858,6 +1042,23 @@ private struct DefensiveEventCorrectionProblemView: View {
                     }
                 }
 
+                if problem.canEditOffensivePitch {
+                    Menu {
+                        ForEach(Self.editableOffensiveResults) { result in
+                            Button(result.label) {
+                                stageChange(.editOffensivePitch(result))
+                                dismiss()
+                            }
+                            .accessibilityIdentifier(
+                                "correction.repair.editTracked.\(result.rawValue)"
+                            )
+                        }
+                    } label: {
+                        Label("Edit Affected Tracked Pitch", systemImage: "pencil")
+                            .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    }
+                }
+
                 if problem.canDeletePitch {
                     Button(role: .destructive) {
                         stageChange(.delete)
@@ -884,7 +1085,9 @@ private struct DefensiveEventCorrectionProblemView: View {
                     }
                     .frame(minHeight: AppTheme.TouchTarget.minimum)
                     .accessibilityIdentifier("correction.repair.play")
-                } else if !problem.canEditPitch && !problem.canDeletePitch {
+                } else if !problem.canEditPitch
+                            && !problem.canEditOffensivePitch
+                            && !problem.canDeletePitch {
                     Text("This event does not support another change in this correction session.")
                         .foregroundStyle(AppTheme.graphite.opacity(0.68))
                 }

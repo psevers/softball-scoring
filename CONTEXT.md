@@ -68,6 +68,10 @@ An in-memory candidate timeline tied to an exact durable record revision. It ret
 
 A staged replacement of one earlier non-terminal defensive Ball, Called Strike, Swinging Strike, or Foul. The edit retains the pitch's event-time inning, half, opponent batting slot, pitcher, record identity, sequence, and timestamp while replaying the complete candidate timeline before Save.
 
+## Tracked-team pitch edit
+
+A staged replacement of one earlier tracked-team Ball, Called Strike, Swinging Strike, or Foul. The edit retains the event-time player identity, batting-order slot and size, record identity, game, sequence, and timestamp. Full replay validates the replacement against the count and tracked batter that existed at that sequence; a current lineup player or later occupant of the same slot cannot replace that identity.
+
 ## Defensive pitch deletion
 
 A staged removal of one earlier defensive pitch. The candidate timeline replays without that exact record; Save remains unavailable when the removal invalidates a downstream record. A valid save preserves every surviving record's identity, sequence, and timestamp, including the deleted sequence gap.

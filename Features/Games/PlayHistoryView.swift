@@ -10,6 +10,7 @@ struct PlayHistoryView: View {
     @State private var isConfirmingUndo = false
     @State private var correctionError: String?
     @State private var pitchEditSession: DefensivePitchEditSession?
+    @State private var offensivePitchEditSession: OffensivePitchEditSession?
     @State private var ballInPlayEditSession: DefensiveBallInPlayEditSession?
     @State private var pendingPitchDeletionSession: DefensivePitchDeletionSession?
     @State private var pitchDeletionSession: DefensivePitchDeletionSession?
@@ -124,6 +125,13 @@ struct PlayHistoryView: View {
                 liveSession: session
             )
         }
+        .sheet(item: $offensivePitchEditSession) { editSession in
+            OffensivePitchEditView(
+                game: game,
+                editSession: editSession,
+                liveSession: session
+            )
+        }
         .sheet(item: $ballInPlayEditSession) { editSession in
             DefensiveBallInPlayEditView(
                 game: game,
@@ -224,6 +232,23 @@ struct PlayHistoryView: View {
                                 "Edit \(result.label) pitch, sequence \(component.sequenceNumber)"
                             )
                             .accessibilityIdentifier("history.editPitch.\(component.sequenceNumber)")
+                        }
+
+                        if let result = component.editableOffensivePitchResult {
+                            Button {
+                                beginOffensivePitchEdit(recordID: component.recordID)
+                            } label: {
+                                Label("Edit Pitch", systemImage: "pencil")
+                                    .frame(minHeight: AppTheme.TouchTarget.minimum)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel(
+                                "Edit \(entry.actor) \(result.label) pitch, sequence "
+                                    + "\(component.sequenceNumber)"
+                            )
+                            .accessibilityIdentifier(
+                                "history.editTrackedPitch.\(component.sequenceNumber)"
+                            )
                         }
 
                         if let result = component.defensivePitchResult {
@@ -362,6 +387,19 @@ struct PlayHistoryView: View {
     private func beginPitchEdit(recordID: UUID) {
         do {
             pitchEditSession = try GameEventCorrection.prepareDefensivePitchEdit(
+                recordID: recordID,
+                game: game,
+                modelContext: modelContext
+            )
+        } catch {
+            session.refresh(game: game, modelContext: modelContext)
+            correctionError = error.localizedDescription
+        }
+    }
+
+    private func beginOffensivePitchEdit(recordID: UUID) {
+        do {
+            offensivePitchEditSession = try GameEventCorrection.prepareOffensivePitchEdit(
                 recordID: recordID,
                 game: game,
                 modelContext: modelContext

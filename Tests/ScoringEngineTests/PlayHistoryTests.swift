@@ -368,6 +368,38 @@ struct PlayHistoryTests {
         ])
     }
 
+    @Test func trackedTeamPitchesExposeTheirEventTimeResultForEditing() throws {
+        let batter = TrackedBatterIdentity(
+            playerID: UUID(),
+            lineupSlot: 1,
+            displayName: "Avery Stone",
+            jerseyNumber: "8",
+            position: .shortstop
+        )
+        let records = try OffensivePitchResult.allCases.enumerated().map { index, result in
+            try GameEventRecord(
+                gameID: UUID(),
+                sequenceNumber: index + 1,
+                body: .offensivePitch(.init(
+                    batter: batter,
+                    battingOrderSize: 10,
+                    result: result
+                ))
+            )
+        }
+        let replay = GameEventReplay.replay(
+            records: records,
+            homeAway: .away,
+            startingPitcherID: UUID()
+        )
+
+        let entry = try #require(PlayHistoryProjector.project(replay: replay).sections.first?.entries.first)
+
+        #expect(entry.actor == "Avery Stone")
+        #expect(entry.actorContext == "Batting 1 of 10 · #8 · SS")
+        #expect(entry.components.map(\.editableOffensivePitchResult) == OffensivePitchResult.allCases)
+    }
+
     @Test func correctionEligibilityIncludesMultiOutAndThirdOutPlays() {
         var state = GameState()
         let homeRun = BallInPlayEvent(

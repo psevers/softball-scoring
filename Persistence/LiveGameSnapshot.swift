@@ -119,13 +119,13 @@ final class LiveGameSession {
         loadError = nil
     }
 
-    func saveDefensiveEventCorrection(
-        _ correctionSession: DefensiveEventCorrectionSession,
+    func saveGameEventCorrection(
+        _ correctionSession: GameEventCorrectionSession,
         game: Game,
         modelContext: ModelContext
     ) throws {
         guard game.id == gameID else { throw LiveGameSnapshotError.gameMismatch }
-        snapshot = try GameEventCorrection.saveDefensiveEventCorrection(
+        snapshot = try GameEventCorrection.saveGameEventCorrection(
             correctionSession,
             game: game,
             modelContext: modelContext
