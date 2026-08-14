@@ -17,6 +17,10 @@ struct PlayHistoryView: View {
     @State private var logicalPlayDeletionSession: DefensiveLogicalPlayDeletionSession?
 
     var body: some View {
+        presentedHistoryPage
+    }
+
+    private var historyPage: some View {
         ZStack {
             ScorebookRuledPaperBackground()
 
@@ -49,6 +53,10 @@ struct PlayHistoryView: View {
         .task {
             session.refresh(game: game, modelContext: modelContext)
         }
+    }
+
+    private var alertedHistoryPage: some View {
+        historyPage
         .alert(
             session.undoCandidate?.confirmationTitle ?? "Undo latest action?",
             isPresented: $isConfirmingUndo,
@@ -105,6 +113,10 @@ struct PlayHistoryView: View {
         } message: { deletionSession in
             Text(deletionSession.confirmationDetail)
         }
+    }
+
+    private var presentedHistoryPage: some View {
+        alertedHistoryPage
         .sheet(item: $pitchEditSession) { editSession in
             DefensivePitchEditView(
                 game: game,
