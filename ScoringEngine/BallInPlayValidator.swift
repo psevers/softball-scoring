@@ -196,18 +196,8 @@ enum OffensivePlateAppearanceValidator {
     ]
 
     static func correctionResults(for stateBefore: GameState) -> [OffensivePlateAppearanceResult] {
-        correctionResults.filter { result in
-            switch result {
-            case .strikeout, .groundOut, .flyOut, .lineOut, .popOut, .sacrificeBunt:
-                stateBefore.outs + 1 < 3
-                    && (result != .sacrificeBunt || stateBefore.outs < 2)
-            case .doublePlay:
-                stateBefore.outs + 2 < 3
-            case .walk, .hitByPitch, .single, .double, .triple, .reachedOnError, .fieldersChoice:
-                true
-            case .homeRun, .sacrificeFly:
-                false
-            }
+        correctionResults.filter {
+            hasNonScoringCorrectionShape($0, stateBefore: stateBefore)
         }
     }
 
@@ -303,6 +293,7 @@ enum OffensivePlateAppearanceValidator {
             return batterMovement.destination == .out && outsOnPlay >= 1
         case .sacrificeBunt:
             return state.outs < 2
+                && outsOnPlay == 1
                 && batterMovement.destination == .out
                 && plateAppearance.movements.contains(where: didExistingRunnerAdvance)
         case .sacrificeFly:
@@ -343,6 +334,52 @@ enum OffensivePlateAppearanceValidator {
             true
         default:
             false
+        }
+    }
+
+    private static func hasNonScoringCorrectionShape(
+        _ result: OffensivePlateAppearanceResult,
+        stateBefore: GameState
+    ) -> Bool {
+        let batter = stateBefore.offensiveCountContext?.batter ?? TrackedBatterIdentity(
+            playerID: UUID(),
+            lineupSlot: stateBefore.currentTrackedBatterSlot,
+            displayName: "Correction candidate",
+            jerseyNumber: "",
+            position: nil
+        )
+        let battingOrderSize = stateBefore.offensiveCountContext?.battingOrderSize
+            ?? max(stateBefore.currentTrackedBatterSlot, 1)
+        let homeAway: HomeAway = stateBefore.half == .top ? .away : .home
+
+        var movementSets: [[RunnerMovementEvent]] = [[]]
+        for source in stateBefore.occupiedTrackedRunnerSources {
+            let destinations = RunnerDestination.allCases.filter { destination in
+                destination != .home
+                    && isLegalMovement(.init(source: source, destination: destination))
+            }
+            movementSets = movementSets.flatMap { movements in
+                destinations.map { destination in
+                    movements + [.init(source: source, destination: destination)]
+                }
+            }
+        }
+
+        return movementSets.contains { movements in
+            let plateAppearance = OffensivePlateAppearanceEvent(
+                batter: batter,
+                battingOrderSize: battingOrderSize,
+                result: result,
+                movements: movements,
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )
+            return isValid(
+                plateAppearance,
+                state: stateBefore,
+                trackedTeamHomeAway: homeAway
+            ) && supportsCorrection(plateAppearance, stateBefore: stateBefore)
         }
     }
 }

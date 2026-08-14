@@ -35,7 +35,7 @@ struct OffensiveRunnerConfirmationSheet: View {
             battingOrder: battingOrder,
             batter: nil,
             battingOrderSize: nil,
-            initialDraft: nil,
+            seedDraft: nil,
             allowsScoring: true,
             title: "Record Our Play",
             confirmationTitle: "Record",
@@ -58,26 +58,19 @@ struct OffensiveRunnerConfirmationSheet: View {
         onCancel: @escaping () -> Void,
         onRecord: @escaping (OffensivePlateAppearanceDraft) -> Void
     ) {
-        self.result = result
-        self.state = state
-        self.homeAway = homeAway
-        self.battingOrder = battingOrder
-        self.batter = batter
-        self.battingOrderSize = battingOrderSize
-        self.allowsScoring = allowsScoring
-        self.title = title
-        self.confirmationTitle = confirmationTitle
-        self.onCancel = onCancel
-        self.onRecord = onRecord
-
-        let suggestion = initialDraft
-        _destinations = State(initialValue: Dictionary(
-            uniqueKeysWithValues: suggestion.movements.map { ($0.source, $0.destination) }
-        ))
-        _rbi = State(initialValue: suggestion.rbi)
-        _countedRunSources = State(initialValue: Set(suggestion.countedRunSources))
-        _thirdOutClassification = State(
-            initialValue: suggestion.thirdOutClassification ?? .forceOrBatterRunner
+        self.init(
+            result: result,
+            state: state,
+            homeAway: homeAway,
+            battingOrder: battingOrder,
+            batter: batter,
+            battingOrderSize: battingOrderSize,
+            seedDraft: initialDraft,
+            allowsScoring: allowsScoring,
+            title: title,
+            confirmationTitle: confirmationTitle,
+            onCancel: onCancel,
+            onRecord: onRecord
         )
     }
 
@@ -88,7 +81,7 @@ struct OffensiveRunnerConfirmationSheet: View {
         battingOrder: [TrackedBatterIdentity],
         batter: TrackedBatterIdentity?,
         battingOrderSize: Int?,
-        initialDraft: OffensivePlateAppearanceDraft?,
+        seedDraft: OffensivePlateAppearanceDraft?,
         allowsScoring: Bool,
         title: String,
         confirmationTitle: String,
@@ -107,7 +100,7 @@ struct OffensiveRunnerConfirmationSheet: View {
         self.onCancel = onCancel
         self.onRecord = onRecord
 
-        let suggestion = initialDraft ?? Self.suggestion(for: result, state: state)
+        let suggestion = seedDraft ?? Self.suggestion(for: result, state: state)
         _destinations = State(initialValue: Dictionary(
             uniqueKeysWithValues: suggestion.movements.map { ($0.source, $0.destination) }
         ))

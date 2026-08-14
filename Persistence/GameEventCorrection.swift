@@ -181,6 +181,7 @@ struct OffensivePlateAppearanceEditSession: Identifiable {
     let originalPlateAppearance: OffensivePlateAppearanceEvent
     let stateBefore: GameState
     let originalStateAfter: GameState
+    let originalBattingLine: BattingLine
 
     fileprivate let expectedTimeline: [GameEventRecordRevision]
 }
@@ -311,6 +312,7 @@ struct GameEventCorrectionProblem: Equatable {
     let canDeletePitch: Bool
     let canEditBallInPlay: Bool
     let canEditOffensivePlateAppearance: Bool
+    let offensiveRunnerIdentities: [TrackedBatterIdentity]
 }
 
 struct GameEventCorrectionSession {
@@ -1012,6 +1014,10 @@ enum GameEventCorrection {
             originalPlateAppearance: plateAppearance,
             stateBefore: entry.stateBefore,
             originalStateAfter: entry.stateAfter,
+            originalBattingLine: snapshot.battingLines[
+                plateAppearance.batter.playerID,
+                default: BattingLine()
+            ],
             expectedTimeline: records.map(GameEventRecordRevision.init)
         )
     }
@@ -2041,6 +2047,7 @@ enum GameEventCorrection {
         let canDeletePitch: Bool
         let canEditBallInPlay: Bool
         let canEditOffensivePlateAppearance: Bool
+        let offensiveRunnerIdentities: [TrackedBatterIdentity]
         switch entry.body {
         case .pitch(let pitch):
             context = "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · "
@@ -2056,6 +2063,7 @@ enum GameEventCorrection {
             canDeletePitch = true
             canEditBallInPlay = false
             canEditOffensivePlateAppearance = false
+            offensiveRunnerIdentities = []
         case .ballInPlay(let play):
             context = "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · "
                 + "Opponent batter \(play.opponentBatterSlot) · \(play.outcome.label)"
@@ -2081,6 +2089,7 @@ enum GameEventCorrection {
                 canEditBallInPlay = false
             }
             canEditOffensivePlateAppearance = false
+            offensiveRunnerIdentities = []
         case .offensivePitch(let pitch):
             context = "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · "
                 + "\(pitch.batter.displayName) · Batting slot \(pitch.batter.lineupSlot) "
@@ -2095,6 +2104,7 @@ enum GameEventCorrection {
             canDeletePitch = false
             canEditBallInPlay = false
             canEditOffensivePlateAppearance = false
+            offensiveRunnerIdentities = []
         case .offensivePlateAppearance(let plateAppearance):
             context = "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · "
                 + "\(plateAppearance.batter.displayName) · Batting slot "
@@ -2115,6 +2125,24 @@ enum GameEventCorrection {
             canDeleteOffensivePitch = false
             canDeletePitch = false
             canEditBallInPlay = false
+            var resolvedRunnerIdentities = [plateAppearance.batter]
+            var resolvedEveryRunner = true
+            if let entryIndex = replay.entries.firstIndex(where: { $0.recordID == entry.recordID }) {
+                for source in entry.stateBefore.occupiedTrackedRunnerSources where source != .batter {
+                    guard let playerID = runnerPlayerID(in: entry.stateBefore, at: source),
+                          let runner = trackedRunnerContext(
+                            playerID: playerID,
+                            source: source,
+                            entries: replay.entries[..<entryIndex]
+                          ) else {
+                        resolvedEveryRunner = false
+                        break
+                    }
+                    resolvedRunnerIdentities.append(runner.identity)
+                }
+            } else {
+                resolvedEveryRunner = false
+            }
             if let originalEntry = originalReplay.entries.first(where: {
                 $0.recordID == entry.recordID
             }),
@@ -2125,10 +2153,11 @@ enum GameEventCorrection {
                 ) && OffensivePlateAppearanceValidator.supportsCorrection(
                     plateAppearance,
                     stateBefore: entry.stateBefore
-                )
+                ) && resolvedEveryRunner
             } else {
                 canEditOffensivePlateAppearance = false
             }
+            offensiveRunnerIdentities = resolvedEveryRunner ? resolvedRunnerIdentities : []
         default:
             context = "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · Saved event"
             explanation = "Full replay rejected this record at its original chronological position."
@@ -2138,6 +2167,7 @@ enum GameEventCorrection {
             canDeletePitch = false
             canEditBallInPlay = false
             canEditOffensivePlateAppearance = false
+            offensiveRunnerIdentities = []
         }
         return GameEventCorrectionProblem(
             id: entry.recordID,
@@ -2149,7 +2179,8 @@ enum GameEventCorrection {
             canDeleteOffensivePitch: canDeleteOffensivePitch,
             canDeletePitch: canDeletePitch,
             canEditBallInPlay: canEditBallInPlay,
-            canEditOffensivePlateAppearance: canEditOffensivePlateAppearance
+            canEditOffensivePlateAppearance: canEditOffensivePlateAppearance,
+            offensiveRunnerIdentities: offensiveRunnerIdentities
         )
     }
 

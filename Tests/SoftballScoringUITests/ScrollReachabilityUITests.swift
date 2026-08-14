@@ -634,7 +634,18 @@ final class ScrollReachabilityUITests: XCTestCase {
             XCTAssertGreaterThanOrEqual(edit.frame.height, 44)
             edit.tap()
             XCTAssertTrue(app.navigationBars["Edit Tracked Play"].waitForExistence(timeout: 3))
-            XCTAssertTrue(app.staticTexts["trackedPlayEdit.current"].exists)
+            let current = app.staticTexts["trackedPlayEdit.current"]
+            let isGroundOut = currentResult == "Ground Out"
+            XCTAssertTrue(current.exists)
+            XCTAssertTrue(current.label.contains("Current: \(currentResult)"))
+            XCTAssertTrue(current.label.contains(isGroundOut ? "Outs 1" : "Outs 0"))
+            XCTAssertTrue(current.label.contains(
+                isGroundOut ? "Bases empty" : "Bases 1B occupied"
+            ))
+            XCTAssertTrue(current.label.contains("Tracked batter 2"))
+            XCTAssertTrue(current.label.contains(
+                "Batting PA 1 · AB 1 · H \(currentResult == "Single" ? 1 : 0)"
+            ))
             return app.collectionViews.firstMatch
         }
 
@@ -672,6 +683,7 @@ final class ScrollReachabilityUITests: XCTestCase {
             let proposed = app.staticTexts["trackedPlayEdit.proposed"]
             XCTAssertTrue(swipeWithinUntilHittable(proposed, in: form, above: save))
             XCTAssertTrue(proposed.label.contains(expectedSummary))
+            XCTAssertTrue(proposed.label.contains("Batting PA 1 · AB 1 · H 0"))
             XCTAssertTrue(save.isEnabled)
             XCTAssertGreaterThanOrEqual(save.frame.height, 44)
             captureScreenshot(
@@ -719,8 +731,8 @@ final class ScrollReachabilityUITests: XCTestCase {
         liveGame.tap()
         XCTAssertEqual(app.staticTexts["offense.currentBatter"].label, "Player 02")
         XCTAssertEqual(app.staticTexts["game.count"].value as? String, "1 out, bases empty")
-        app.buttons["game.history"].tap()
-        XCTAssertTrue(app.buttons["history.entry.1"].label.contains("GO · Batter to Out"))
+        _ = openEditor(currentResult: "Ground Out")
+        app.buttons["trackedPlayEdit.cancel"].tap()
     }
 
     func testUndoTrackedTeamPitchFromPlayHistoryRestoresLiveBatterAndCount() {

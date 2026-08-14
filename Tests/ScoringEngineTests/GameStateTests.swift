@@ -868,6 +868,53 @@ struct GameStateTests {
         #expect(suggestion.rbi == 0)
     }
 
+    @Test func correctionResultsOmitShapesWithoutANonScoringNonThirdOutAssignment() {
+        var emptyBases = GameState()
+        let emptyResults = OffensivePlateAppearanceValidator.correctionResults(for: emptyBases)
+        #expect(!emptyResults.contains(.sacrificeBunt))
+        #expect(!emptyResults.contains(.doublePlay))
+
+        emptyBases.firstBaseRunnerPlayerID = UUID()
+        emptyBases.secondBaseRunnerPlayerID = UUID()
+        emptyBases.thirdBaseRunnerPlayerID = UUID()
+        let loadedResults = OffensivePlateAppearanceValidator.correctionResults(for: emptyBases)
+        #expect(!loadedResults.contains(.walk))
+        #expect(!loadedResults.contains(.hitByPitch))
+
+        emptyBases.outs = 2
+        let twoOutLoadedResults = OffensivePlateAppearanceValidator.correctionResults(for: emptyBases)
+        #expect(!twoOutLoadedResults.contains(.single))
+        #expect(!twoOutLoadedResults.contains(.double))
+        #expect(!twoOutLoadedResults.contains(.triple))
+    }
+
+    @Test func offensiveValidatorRejectsSacrificeBuntWithMultipleOutsOnPlay() {
+        let lineup = trackedLineup(count: 3)
+        var state = GameState()
+        state.firstBaseRunnerPlayerID = lineup[0].playerID
+        state.secondBaseRunnerPlayerID = lineup[1].playerID
+        state.currentTrackedBatterSlot = 3
+        let play = OffensivePlateAppearanceEvent(
+            batter: lineup[2],
+            battingOrderSize: lineup.count,
+            result: .sacrificeBunt,
+            movements: [
+                .init(source: .first, destination: .out),
+                .init(source: .second, destination: .third),
+                .init(source: .batter, destination: .out)
+            ],
+            rbi: 0,
+            countedRunSources: [],
+            thirdOutClassification: nil
+        )
+
+        #expect(!OffensivePlateAppearanceValidator.isValid(
+            play,
+            state: state,
+            trackedTeamHomeAway: .away
+        ))
+    }
+
     @Test func offensiveValidatorRejectsRunnerPassing() {
         let lineup = trackedLineup(count: 3)
         var state = GameState()

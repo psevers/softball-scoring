@@ -244,7 +244,11 @@ struct OffensivePlateAppearanceEditView: View {
                                 + "\(editSession.sequenceNumber)"
                         )
                         .font(.body.monospacedDigit())
-                        Text("Current: \(summary(editSession.originalPlateAppearance))")
+                        Text(
+                            "Current: \(summary(editSession.originalPlateAppearance)) · "
+                                + stateSummary(editSession.originalStateAfter) + " · "
+                                + battingLineSummary(editSession.originalBattingLine)
+                        )
                             .accessibilityIdentifier("trackedPlayEdit.current")
                     }
 
@@ -276,7 +280,11 @@ struct OffensivePlateAppearanceEditView: View {
                             correctionSession: correctionSession,
                             homeAway: editSession.homeAway,
                             proposedSummary: "Proposed: \(summary(proposedPlateAppearance)) · "
-                                + stateSummary(correctionSession.snapshot.replay.state),
+                                + stateSummary(correctionSession.snapshot.replay.state) + " · "
+                                + battingLineSummary(correctionSession.snapshot.battingLines[
+                                    editSession.batter.playerID,
+                                    default: BattingLine()
+                                ]),
                             proposedIdentifier: "trackedPlayEdit.proposed",
                             stageChange: { problem, action in
                                 correction.stageRepair(
@@ -420,6 +428,10 @@ struct OffensivePlateAppearanceEditView: View {
             + "Score \(opponentScore)–\(trackedScore) · Outs \(state.outs) · "
             + "Bases \(bases.isEmpty ? "empty" : bases) · "
             + "Tracked batter \(state.currentTrackedBatterSlot)"
+    }
+
+    private func battingLineSummary(_ line: BattingLine) -> String {
+        "Batting PA \(line.plateAppearances) · AB \(line.atBats) · H \(line.hits)"
     }
 }
 
@@ -1460,7 +1472,7 @@ private struct GameEventCorrectionProblemView: View {
                     result: selectedPlateAppearanceResult,
                     state: affectedState,
                     homeAway: homeAway,
-                    battingOrder: [affectedPlateAppearance.batter],
+                    battingOrder: problem.offensiveRunnerIdentities,
                     batter: affectedPlateAppearance.batter,
                     battingOrderSize: affectedPlateAppearance.battingOrderSize,
                     initialDraft: OffensivePlateAppearanceDraft(

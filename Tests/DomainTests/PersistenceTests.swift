@@ -7668,6 +7668,10 @@ extension PersistenceTests {
         #expect(!invalid.canSave)
         #expect(invalid.firstInvalidRecord?.id == records[2].id)
         #expect(invalid.firstInvalidRecord?.canEditOffensivePlateAppearance == true)
+        #expect(
+            Set(invalid.firstInvalidRecord?.offensiveRunnerIdentities.map(\.playerID) ?? [])
+                == Set([firstBatter.playerID, thirdBatter.playerID])
+        )
         #expect(throws: GameEventCorrectionError.invalidCandidate) {
             _ = try GameEventCorrection.saveGameEventCorrection(
                 invalid,
