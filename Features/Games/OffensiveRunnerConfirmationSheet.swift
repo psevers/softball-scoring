@@ -18,7 +18,7 @@ struct OffensiveRunnerConfirmationSheet: View {
     @State private var rbi: Int
     @State private var countedRunSources: Set<RunnerSource>
     @State private var thirdOutClassification: ThirdOutClassification = .forceOrBatterRunner
-    @State private var validationFailed = false
+    @State private var validationError: OffensivePlateAppearanceValidationError?
 
     init(
         outcome: BallInPlayOutcome,
@@ -179,18 +179,18 @@ struct OffensiveRunnerConfirmationSheet: View {
 
                         if allowsScoring {
                             ScorebookPageSection(dynamicTypeSize.isAccessibilitySize ? nil : "Scoring") {
-                            ScorebookLedgerRow {
-                                Stepper("RBI  \(rbi)", value: $rbi, in: 0...sourcesThatCount.count)
-                                    .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.notation)
-                                    .monospacedDigit()
-                                    .accessibilityIdentifier("runner.rbi")
-                            }
-
-                            if needsThirdOutDecision {
                                 ScorebookLedgerRow {
-                                    thirdOutControls
+                                    Stepper("RBI  \(rbi)", value: $rbi, in: 0...sourcesThatCount.count)
+                                        .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.notation)
+                                        .monospacedDigit()
+                                        .accessibilityIdentifier("runner.rbi")
                                 }
-                            }
+
+                                if needsThirdOutDecision {
+                                    ScorebookLedgerRow {
+                                        thirdOutControls
+                                    }
+                                }
                             }
                         }
 
@@ -206,11 +206,11 @@ struct OffensiveRunnerConfirmationSheet: View {
                             }
                         }
 
-                        if validationFailed {
+                        if let validationError {
                             ScorebookPageSection("Check this play") {
                                 ScorebookLedgerRow {
                                     Label(
-                                        "The result, runner destinations, outs, runs, or RBI do not form a legal play.",
+                                        validationMessage(validationError),
                                         systemImage: "exclamationmark.triangle"
                                     )
                                     .font(AppTheme.Typography.body)
@@ -237,18 +237,18 @@ struct OffensiveRunnerConfirmationSheet: View {
                 }
             }
             .onChange(of: destinations) { _, _ in
-                validationFailed = false
+                validationError = nil
                 countedRunSources.formIntersection(homeSources)
                 if !needsThirdOutDecision { countedRunSources = Set(homeSources) }
                 rbi = min(rbi, sourcesThatCount.count)
             }
             .onChange(of: thirdOutClassification) { _, classification in
-                validationFailed = false
+                validationError = nil
                 countedRunSources = classification == .timingPlay ? Set(homeSources) : []
                 rbi = min(rbi, sourcesThatCount.count)
             }
             .onChange(of: countedRunSources) { _, _ in
-                validationFailed = false
+                validationError = nil
                 rbi = min(rbi, sourcesThatCount.count)
             }
         }
@@ -358,7 +358,7 @@ struct OffensiveRunnerConfirmationSheet: View {
     private func validateAndRecord() {
         guard let resolvedBatter = batter
                 ?? battingOrder.first(where: { $0.lineupSlot == state.currentTrackedBatterSlot }) else {
-            validationFailed = true
+            validationError = .invalidBatter
             return
         }
         let event = OffensivePlateAppearanceEvent(
@@ -370,15 +370,46 @@ struct OffensiveRunnerConfirmationSheet: View {
             countedRunSources: draft.countedRunSources,
             thirdOutClassification: draft.thirdOutClassification
         )
-        guard OffensivePlateAppearanceValidator.isValid(
+        if let error = OffensivePlateAppearanceValidator.validate(
             event,
             state: state,
             trackedTeamHomeAway: homeAway
-        ) else {
-            validationFailed = true
-            return
+        ) {
+            validationError = error
+        } else {
+            onRecord(draft)
         }
-        onRecord(draft)
+    }
+
+    private func validationMessage(_ error: OffensivePlateAppearanceValidationError) -> String {
+        switch error {
+        case .notOffensiveHalf:
+            "Runner destinations can be recorded only while our team is batting."
+        case .invalidBatter:
+            "The tracked batter or batting order changed before this play was confirmed."
+        case .missingRunner(let source):
+            "Choose a destination for \(source.label)."
+        case .unexpectedRunner(let source):
+            "\(source.label) was not part of this plate appearance."
+        case .duplicateRunner(let source):
+            "Choose exactly one destination for \(source.label)."
+        case .illegalDestination(let source, let destination):
+            "\(source.label) cannot finish at \(destination.label) from this starting base."
+        case .baseCollision(let destination):
+            "Two runners cannot both finish at \(destination.label)."
+        case .runnerPassing(let source, let destination):
+            "\(source.label) cannot reach \(destination.label) by passing a runner ahead."
+        case .tooManyOuts:
+            "This play would record more than three outs in the inning."
+        case .invalidRunSources:
+            "Count exactly the runners whose home touches legally score on this play."
+        case .invalidRBI:
+            "RBI must be between zero and the legally counted runs on this play."
+        case .invalidThirdOutClassification:
+            "Classify a run with the third out before choosing which home touches count."
+        case .outcomeMismatch:
+            "The batter result does not match the selected runner destinations."
+        }
     }
 
     private static func suggestion(

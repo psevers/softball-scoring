@@ -136,11 +136,12 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 
 ## Completed tracked-team plate-appearance correction
 
-- Play History exposes Edit Play only for accepted no-run, non-third-out tracked-team plate appearances and opens with event-time player, lineup slot/order size, component history, current result, and runner map.
-- Walk, HBP, strikeout, single, double, triple, error, fielder's choice, ordinary out, sacrifice bunt, and double-play replacements replay through the ordinary offensive validator and reproject PA/AB/H/2B/3B/BB/HBP/SO/sacrifice attribution.
-- Wrong player identity, missing/duplicate/unexpected runners, backward movement, passing, collisions, excess outs, illegal sacrifice, outcome mismatch, scoring, and half-inning-ending proposals cannot produce a saveable candidate.
+- Play History exposes Edit Play for accepted non-third-out tracked-team plate appearances, including scoring plays, and opens with event-time player, lineup slot/order size, component history, current result, runner map, score, runs, RBI, and affected batting lines.
+- Loaded-hit, extra-base-hit, home-run, error-without-RBI, sacrifice-fly, bases-loaded-walk, and bases-loaded-HBP replacements replay through the ordinary offensive validator and reproject PA/AB/R/H/2B/3B/HR/RBI/BB/HBP/SO/sacrifice attribution.
+- Moving a runner from Home to a base or Out removes the run, team score, and runner attribution while replaying bases, outs, current tracked batter, and later history.
+- Wrong player identity, missing/duplicate/unexpected runners, backward movement, passing, collisions, excess outs, illegal sacrifice, invalid run sources, excess RBI, outcome mismatch, and half-inning-ending proposals cannot produce a saveable candidate; the UI identifies the exact problem while Save remains disabled.
 - A rejected downstream tracked-team plate appearance identifies its exact sequence and supports a second scorer-confirmed replacement in the same session; Save remains disabled until the full timeline is clean, then both records persist atomically.
-- Wrong-game, stale-session, projection, save, and cancellation paths preserve the durable timeline. Fresh-context and standard/Accessibility XL UI relaunch coverage verify representative hit-to-error-to-out correction, current/proposed summaries, 44-point controls, next batter, bases, outs, and History.
+- Wrong-game, stale-session, projection, save, and cancellation paths preserve the durable timeline. Fresh-context and standard/Accessibility XL UI relaunch coverage verify representative hit-to-error-to-out correction plus a scoring-double correction, current/proposed score and batting attribution, 44-point controls, next batter, bases, outs, and History.
 
 ## Completed defensive logical-play deletion
 

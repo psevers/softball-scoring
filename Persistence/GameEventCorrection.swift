@@ -182,6 +182,7 @@ struct OffensivePlateAppearanceEditSession: Identifiable {
     let stateBefore: GameState
     let originalStateAfter: GameState
     let originalBattingLine: BattingLine
+    let originalBattingLines: [UUID: BattingLine]
 
     fileprivate let expectedTimeline: [GameEventRecordRevision]
 }
@@ -1018,6 +1019,7 @@ enum GameEventCorrection {
                 plateAppearance.batter.playerID,
                 default: BattingLine()
             ],
+            originalBattingLines: snapshot.battingLines,
             expectedTimeline: records.map(GameEventRecordRevision.init)
         )
     }

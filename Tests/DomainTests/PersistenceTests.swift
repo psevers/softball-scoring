@@ -33,6 +33,32 @@ private struct OffensivePlateAppearanceCorrectionScenario: Sendable {
     let expectedStrikeouts: Int
 }
 
+private struct OffensivePlateAppearanceShape: Sendable {
+    let result: OffensivePlateAppearanceResult
+    let movements: [RunnerMovementEvent]
+    let rbi: Int
+    let countedRunSources: [RunnerSource]
+}
+
+private struct OffensiveScoringCorrectionScenario: Sendable {
+    let name: String
+    let setup: [OffensivePlateAppearanceShape]
+    let original: OffensivePlateAppearanceShape
+    let proposed: OffensivePlateAppearanceShape
+    let expectedScore: Int
+    let expectedOuts: Int
+    let expectedBaseSources: [RunnerSource?]
+    let expectedRunsBySource: [RunnerSource: Int]
+    let expectedBatterRBI: Int
+}
+
+private struct OffensiveScoringRemovalScenario: Sendable {
+    let name: String
+    let proposed: OffensivePlateAppearanceShape
+    let expectedOuts: Int
+    let expectedBaseSources: [RunnerSource?]
+}
+
 private let offensivePlateAppearanceCorrectionScenarios: [OffensivePlateAppearanceCorrectionScenario] = [
     .init(
         result: .walk,
@@ -196,6 +222,269 @@ private let offensivePlateAppearanceCorrectionScenarios: [OffensivePlateAppearan
         expectedWalks: 0,
         expectedHitByPitch: 0,
         expectedStrikeouts: 0
+    )
+]
+
+private let basesLoadedSetup: [OffensivePlateAppearanceShape] = [
+    .init(
+        result: .single,
+        movements: [.init(source: .batter, destination: .first)],
+        rbi: 0,
+        countedRunSources: []
+    ),
+    .init(
+        result: .single,
+        movements: [
+            .init(source: .first, destination: .second),
+            .init(source: .batter, destination: .first)
+        ],
+        rbi: 0,
+        countedRunSources: []
+    ),
+    .init(
+        result: .single,
+        movements: [
+            .init(source: .second, destination: .third),
+            .init(source: .first, destination: .second),
+            .init(source: .batter, destination: .first)
+        ],
+        rbi: 0,
+        countedRunSources: []
+    )
+]
+
+private let runnerOnFirstSetup: [OffensivePlateAppearanceShape] = [
+    .init(
+        result: .single,
+        movements: [.init(source: .batter, destination: .first)],
+        rbi: 0,
+        countedRunSources: []
+    )
+]
+
+private let runnerOnThirdSetup: [OffensivePlateAppearanceShape] = [
+    .init(
+        result: .triple,
+        movements: [.init(source: .batter, destination: .third)],
+        rbi: 0,
+        countedRunSources: []
+    )
+]
+
+private let basesLoadedAward: [RunnerMovementEvent] = [
+    .init(source: .third, destination: .home),
+    .init(source: .second, destination: .third),
+    .init(source: .first, destination: .second),
+    .init(source: .batter, destination: .first)
+]
+
+private let offensiveScoringCorrectionScenarios: [OffensiveScoringCorrectionScenario] = [
+    .init(
+        name: "bases-loaded hit",
+        setup: basesLoadedSetup,
+        original: .init(
+            result: .single,
+            movements: basesLoadedAward,
+            rbi: 1,
+            countedRunSources: [.third]
+        ),
+        proposed: .init(
+            result: .single,
+            movements: [
+                .init(source: .third, destination: .home),
+                .init(source: .second, destination: .home),
+                .init(source: .first, destination: .third),
+                .init(source: .batter, destination: .first)
+            ],
+            rbi: 2,
+            countedRunSources: [.third, .second]
+        ),
+        expectedScore: 2,
+        expectedOuts: 0,
+        expectedBaseSources: [.batter, nil, .first],
+        expectedRunsBySource: [.third: 1, .second: 1],
+        expectedBatterRBI: 2
+    ),
+    .init(
+        name: "extra-base hit",
+        setup: runnerOnFirstSetup,
+        original: .init(
+            result: .reachedOnError,
+            movements: [
+                .init(source: .first, destination: .home),
+                .init(source: .batter, destination: .first)
+            ],
+            rbi: 0,
+            countedRunSources: [.first]
+        ),
+        proposed: .init(
+            result: .double,
+            movements: [
+                .init(source: .first, destination: .home),
+                .init(source: .batter, destination: .second)
+            ],
+            rbi: 1,
+            countedRunSources: [.first]
+        ),
+        expectedScore: 1,
+        expectedOuts: 0,
+        expectedBaseSources: [nil, .batter, nil],
+        expectedRunsBySource: [.first: 1],
+        expectedBatterRBI: 1
+    ),
+    .init(
+        name: "home run",
+        setup: runnerOnFirstSetup,
+        original: .init(
+            result: .double,
+            movements: [
+                .init(source: .first, destination: .home),
+                .init(source: .batter, destination: .second)
+            ],
+            rbi: 1,
+            countedRunSources: [.first]
+        ),
+        proposed: .init(
+            result: .homeRun,
+            movements: [
+                .init(source: .first, destination: .home),
+                .init(source: .batter, destination: .home)
+            ],
+            rbi: 2,
+            countedRunSources: [.first, .batter]
+        ),
+        expectedScore: 2,
+        expectedOuts: 0,
+        expectedBaseSources: [nil, nil, nil],
+        expectedRunsBySource: [.first: 1, .batter: 1],
+        expectedBatterRBI: 2
+    ),
+    .init(
+        name: "error without RBI",
+        setup: runnerOnThirdSetup,
+        original: .init(
+            result: .sacrificeFly,
+            movements: [
+                .init(source: .third, destination: .home),
+                .init(source: .batter, destination: .out)
+            ],
+            rbi: 1,
+            countedRunSources: [.third]
+        ),
+        proposed: .init(
+            result: .reachedOnError,
+            movements: [
+                .init(source: .third, destination: .home),
+                .init(source: .batter, destination: .first)
+            ],
+            rbi: 0,
+            countedRunSources: [.third]
+        ),
+        expectedScore: 1,
+        expectedOuts: 0,
+        expectedBaseSources: [.batter, nil, nil],
+        expectedRunsBySource: [.third: 1],
+        expectedBatterRBI: 0
+    ),
+    .init(
+        name: "sacrifice fly",
+        setup: runnerOnThirdSetup,
+        original: .init(
+            result: .reachedOnError,
+            movements: [
+                .init(source: .third, destination: .home),
+                .init(source: .batter, destination: .first)
+            ],
+            rbi: 0,
+            countedRunSources: [.third]
+        ),
+        proposed: .init(
+            result: .sacrificeFly,
+            movements: [
+                .init(source: .third, destination: .home),
+                .init(source: .batter, destination: .out)
+            ],
+            rbi: 1,
+            countedRunSources: [.third]
+        ),
+        expectedScore: 1,
+        expectedOuts: 1,
+        expectedBaseSources: [nil, nil, nil],
+        expectedRunsBySource: [.third: 1],
+        expectedBatterRBI: 1
+    ),
+    .init(
+        name: "bases-loaded walk",
+        setup: basesLoadedSetup,
+        original: .init(
+            result: .hitByPitch,
+            movements: basesLoadedAward,
+            rbi: 1,
+            countedRunSources: [.third]
+        ),
+        proposed: .init(
+            result: .walk,
+            movements: basesLoadedAward,
+            rbi: 1,
+            countedRunSources: [.third]
+        ),
+        expectedScore: 1,
+        expectedOuts: 0,
+        expectedBaseSources: [.batter, .first, .second],
+        expectedRunsBySource: [.third: 1],
+        expectedBatterRBI: 1
+    ),
+    .init(
+        name: "bases-loaded HBP",
+        setup: basesLoadedSetup,
+        original: .init(
+            result: .walk,
+            movements: basesLoadedAward,
+            rbi: 1,
+            countedRunSources: [.third]
+        ),
+        proposed: .init(
+            result: .hitByPitch,
+            movements: basesLoadedAward,
+            rbi: 1,
+            countedRunSources: [.third]
+        ),
+        expectedScore: 1,
+        expectedOuts: 0,
+        expectedBaseSources: [.batter, .first, .second],
+        expectedRunsBySource: [.third: 1],
+        expectedBatterRBI: 1
+    )
+]
+
+private let offensiveScoringRemovalScenarios: [OffensiveScoringRemovalScenario] = [
+    .init(
+        name: "home to base",
+        proposed: .init(
+            result: .double,
+            movements: [
+                .init(source: .first, destination: .third),
+                .init(source: .batter, destination: .second)
+            ],
+            rbi: 0,
+            countedRunSources: []
+        ),
+        expectedOuts: 0,
+        expectedBaseSources: [nil, .batter, .first]
+    ),
+    .init(
+        name: "home to out",
+        proposed: .init(
+            result: .fieldersChoice,
+            movements: [
+                .init(source: .first, destination: .out),
+                .init(source: .batter, destination: .first)
+            ],
+            rbi: 0,
+            countedRunSources: []
+        ),
+        expectedOuts: 1,
+        expectedBaseSources: [.batter, nil, nil]
     )
 ]
 
@@ -7578,6 +7867,207 @@ extension PersistenceTests {
         #expect(line.runsBattedIn == 0)
     }
 
+    @Test(arguments: offensiveScoringCorrectionScenarios)
+    fileprivate func trackedTeamPlateAppearanceEditReplaysRepresentativeScoringResults(
+        _ scenario: OffensiveScoringCorrectionScenario
+    ) throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let setupBatters = scenario.setup.indices.map { index in
+            makeTrackedBatter(
+                displayName: "Runner \(index + 1)",
+                jerseyNumber: "\(index + 1)",
+                lineupSlot: index + 1
+            )
+        }
+        let batter = makeTrackedBatter(
+            displayName: "Scoring Batter",
+            jerseyNumber: "44",
+            lineupSlot: scenario.setup.count + 1
+        )
+        var records = try zip(setupBatters, scenario.setup).enumerated().map {
+            index, pair in
+            try GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: index + 1,
+                body: .offensivePlateAppearance(.init(
+                    batter: pair.0,
+                    battingOrderSize: 10,
+                    result: pair.1.result,
+                    movements: pair.1.movements,
+                    rbi: pair.1.rbi,
+                    countedRunSources: pair.1.countedRunSources,
+                    thirdOutClassification: nil
+                ))
+            )
+        }
+        let editedRecord = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: records.count + 1,
+            body: .offensivePlateAppearance(.init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: scenario.original.result,
+                movements: scenario.original.movements,
+                rbi: scenario.original.rbi,
+                countedRunSources: scenario.original.countedRunSources,
+                thirdOutClassification: nil
+            ))
+        )
+        records.append(editedRecord)
+        records.forEach(context.insert)
+        try context.save()
+
+        let editSession = try GameEventCorrection.prepareOffensivePlateAppearanceEdit(
+            recordID: editedRecord.id,
+            game: game,
+            modelContext: context
+        )
+        let proposed = OffensivePlateAppearanceEvent(
+            batter: batter,
+            battingOrderSize: 10,
+            result: scenario.proposed.result,
+            movements: scenario.proposed.movements,
+            rbi: scenario.proposed.rbi,
+            countedRunSources: scenario.proposed.countedRunSources,
+            thirdOutClassification: nil
+        )
+        let staged = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+            proposed,
+            in: editSession,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(staged.canSave)
+        #expect(staged.firstInvalidRecord == nil)
+        #expect(staged.snapshot.replay.state.awayScore == scenario.expectedScore)
+        #expect(staged.snapshot.battingLines[batter.playerID]?.runsBattedIn
+            == scenario.expectedBatterRBI)
+
+        _ = try GameEventCorrection.saveGameEventCorrection(
+            staged,
+            game: game,
+            modelContext: context
+        )
+        let saved = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        let state = saved.replay.state
+        let playerIDsBySource = editSession.runnerIdentities.mapValues(\.playerID)
+        #expect(state.half == .top)
+        #expect(state.awayScore == scenario.expectedScore)
+        #expect(state.homeScore == 0)
+        #expect(state.outs == scenario.expectedOuts)
+        #expect(state.currentTrackedBatterSlot == scenario.setup.count + 2)
+        #expect([
+            state.firstBaseRunnerPlayerID,
+            state.secondBaseRunnerPlayerID,
+            state.thirdBaseRunnerPlayerID
+        ] == scenario.expectedBaseSources.map { $0.flatMap { playerIDsBySource[$0] } })
+        #expect(saved.battingLines[batter.playerID]?.runsBattedIn
+            == scenario.expectedBatterRBI)
+        for (source, identity) in editSession.runnerIdentities {
+            #expect(saved.battingLines[identity.playerID]?.runs
+                == scenario.expectedRunsBySource[source, default: 0])
+        }
+        #expect(try saved.records.first(where: { $0.id == editedRecord.id })?.decoded().body
+            == .offensivePlateAppearance(proposed))
+    }
+
+    @Test(arguments: offensiveScoringRemovalScenarios)
+    fileprivate func trackedTeamPlateAppearanceEditRemovingHomeTouchRemovesRunAndScore(
+        _ scenario: OffensiveScoringRemovalScenario
+    ) throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let runner = makeTrackedBatter(displayName: "Lead Runner")
+        let batter = makeTrackedBatter(
+            displayName: "Scoring Batter",
+            jerseyNumber: "12",
+            lineupSlot: 2
+        )
+        let records = try [
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 1,
+                body: .offensivePlateAppearance(.init(
+                    batter: runner,
+                    battingOrderSize: 10,
+                    result: .single,
+                    movements: [.init(source: .batter, destination: .first)],
+                    rbi: 0,
+                    countedRunSources: [],
+                    thirdOutClassification: nil
+                ))
+            ),
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 2,
+                body: .offensivePlateAppearance(.init(
+                    batter: batter,
+                    battingOrderSize: 10,
+                    result: .double,
+                    movements: [
+                        .init(source: .first, destination: .home),
+                        .init(source: .batter, destination: .second)
+                    ],
+                    rbi: 1,
+                    countedRunSources: [.first],
+                    thirdOutClassification: nil
+                ))
+            )
+        ]
+        records.forEach(context.insert)
+        try context.save()
+
+        let editSession = try GameEventCorrection.prepareOffensivePlateAppearanceEdit(
+            recordID: records[1].id,
+            game: game,
+            modelContext: context
+        )
+        let proposed = OffensivePlateAppearanceEvent(
+            batter: batter,
+            battingOrderSize: 10,
+            result: scenario.proposed.result,
+            movements: scenario.proposed.movements,
+            rbi: scenario.proposed.rbi,
+            countedRunSources: scenario.proposed.countedRunSources,
+            thirdOutClassification: nil
+        )
+        let staged = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+            proposed,
+            in: editSession,
+            game: game,
+            modelContext: context
+        )
+        #expect(staged.canSave)
+        #expect(staged.snapshot.replay.state.awayScore == 0)
+
+        _ = try GameEventCorrection.saveGameEventCorrection(
+            staged,
+            game: game,
+            modelContext: context
+        )
+        let saved = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        let playerIDsBySource = editSession.runnerIdentities.mapValues(\.playerID)
+        #expect(saved.replay.state.awayScore == 0)
+        #expect(saved.replay.state.outs == scenario.expectedOuts)
+        #expect([
+            saved.replay.state.firstBaseRunnerPlayerID,
+            saved.replay.state.secondBaseRunnerPlayerID,
+            saved.replay.state.thirdBaseRunnerPlayerID
+        ] == scenario.expectedBaseSources.map { $0.flatMap { playerIDsBySource[$0] } })
+        #expect(saved.battingLines[runner.playerID]?.runs == 0)
+        #expect(saved.battingLines[batter.playerID]?.runsBattedIn == 0)
+    }
+
     @Test func trackedTeamPlateAppearanceEditStagesDownstreamPlateAppearanceRepair() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext
@@ -7721,7 +8211,7 @@ extension PersistenceTests {
         #expect(saved.battingLines == repaired.snapshot.battingLines)
     }
 
-    @Test func trackedTeamPlateAppearanceEditRejectsIllegalCandidatesAndScoringOrThirdOutRecords() throws {
+    @Test func trackedTeamPlateAppearanceEditRejectsIllegalCandidatesAndThirdOutRecords() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext
         let game = makeOffensiveGame()
@@ -7828,8 +8318,8 @@ extension PersistenceTests {
                 battingOrderSize: 10,
                 result: .single,
                 movements: [
-                    .init(source: .first, destination: .second),
-                    .init(source: .batter, destination: .second)
+                    .init(source: .first, destination: .home),
+                    .init(source: .batter, destination: .first)
                 ],
                 rbi: 0,
                 countedRunSources: [],
@@ -7840,11 +8330,23 @@ extension PersistenceTests {
                 battingOrderSize: 10,
                 result: .single,
                 movements: [
-                    .init(source: .first, destination: .second),
-                    .init(source: .batter, destination: .second)
+                    .init(source: .first, destination: .home),
+                    .init(source: .batter, destination: .first)
                 ],
                 rbi: 0,
-                countedRunSources: [],
+                countedRunSources: [.batter],
+                thirdOutClassification: nil
+            ),
+            .init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [
+                    .init(source: .first, destination: .home),
+                    .init(source: .batter, destination: .first)
+                ],
+                rbi: 2,
+                countedRunSources: [.first],
                 thirdOutClassification: nil
             ),
             .init(
@@ -7854,18 +8356,6 @@ extension PersistenceTests {
                 movements: [
                     .init(source: .first, destination: .out),
                     .init(source: .batter, destination: .out)
-                ],
-                rbi: 0,
-                countedRunSources: [],
-                thirdOutClassification: nil
-            ),
-            .init(
-                batter: batter,
-                battingOrderSize: 10,
-                result: .single,
-                movements: [
-                    .init(source: .first, destination: .second),
-                    .init(source: .batter, destination: .second)
                 ],
                 rbi: 0,
                 countedRunSources: [],
@@ -7887,32 +8377,6 @@ extension PersistenceTests {
             sortBy: [SortDescriptor(\GameEventRecord.sequenceNumber)]
         ))
         #expect(try stored.map { try $0.decoded().body } == records.map { try $0.decoded().body })
-
-        let scoringContainer = try AppModelContainer.make(inMemory: true)
-        let scoringContext = scoringContainer.mainContext
-        let scoringGame = makeOffensiveGame()
-        let scoringRecord = try GameEventRecord(
-            gameID: scoringGame.id,
-            sequenceNumber: 1,
-            body: .offensivePlateAppearance(.init(
-                batter: leadRunner,
-                battingOrderSize: 10,
-                result: .homeRun,
-                movements: [.init(source: .batter, destination: .home)],
-                rbi: 1,
-                countedRunSources: [.batter],
-                thirdOutClassification: nil
-            ))
-        )
-        scoringContext.insert(scoringRecord)
-        try scoringContext.save()
-        #expect(throws: GameEventCorrectionError.offensivePlateAppearanceNotEditable) {
-            _ = try GameEventCorrection.prepareOffensivePlateAppearanceEdit(
-                recordID: scoringRecord.id,
-                game: scoringGame,
-                modelContext: scoringContext
-            )
-        }
 
         let thirdOutContainer = try AppModelContainer.make(inMemory: true)
         let thirdOutContext = thirdOutContainer.mainContext

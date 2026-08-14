@@ -78,7 +78,7 @@ A staged removal of one earlier tracked-team Ball, Called Strike, Swinging Strik
 
 ## Tracked-team plate-appearance edit
 
-A staged replacement of one earlier completed tracked-team plate appearance that scored no run and did not end the half-inning. The scorer keeps the persisted event-time batter, batting-order slot and size, record identity, game, sequence, and timestamp while reconfirming the result and exactly one destination for the batter and every event-time runner. Full replay rebuilds bases, outs, count, next batter, and player-attributed batting lines; any rejected downstream plate appearance must be explicitly repaired in the same atomic correction session.
+A staged replacement of one earlier completed tracked-team plate appearance that did not end the half-inning. The scorer keeps the persisted event-time batter, batting-order slot and size, record identity, game, sequence, and timestamp while reconfirming the result, exactly one legal destination for the batter and every event-time runner, every counted home touch, and RBI. Full replay rebuilds score, bases, outs, count, next batter, and player-attributed batting lines; any rejected downstream plate appearance must be explicitly repaired in the same atomic correction session.
 
 ## Defensive pitch deletion
 
