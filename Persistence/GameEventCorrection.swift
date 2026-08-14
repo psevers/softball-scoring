@@ -330,7 +330,7 @@ enum GameEventCorrectionError: LocalizedError {
         case .pitchNotDeletable:
             "This saved event is not a defensive pitch that can be deleted."
         case .ballInPlayNotEditable:
-            "This saved event is not an editable non-scoring defensive Ball In Play result."
+            "This saved event is not an editable defensive Ball In Play result."
         case .invalidCandidate:
             "The proposed change leaves invalid game history and cannot be saved."
         }
@@ -798,7 +798,7 @@ enum GameEventCorrection {
               let entryIndex = snapshot.replay.entries.firstIndex(where: { $0.recordID == recordID }),
               entryIndex > snapshot.replay.entries.startIndex,
               case .ballInPlay(let play) = snapshot.replay.entries[entryIndex].body,
-              BallInPlayValidator.supportsNonScoringCorrection(
+              BallInPlayValidator.supportsCorrection(
                 play,
                 stateBefore: snapshot.replay.entries[entryIndex].stateBefore
               ),
@@ -834,7 +834,7 @@ enum GameEventCorrection {
         guard editSession.gameID == game.id else {
             throw GameEventCorrectionError.gameMismatch
         }
-        guard BallInPlayValidator.supportsNonScoringCorrection(
+        guard BallInPlayValidator.supportsCorrection(
                 proposedPlay,
                 stateBefore: editSession.stateBefore
               ),
@@ -899,7 +899,7 @@ enum GameEventCorrection {
             throw GameEventCorrectionError.gameMismatch
         }
         guard preview.canSave,
-              BallInPlayValidator.supportsNonScoringCorrection(
+              BallInPlayValidator.supportsCorrection(
                 preview.proposedPlay,
                 stateBefore: preview.session.stateBefore
               ),
@@ -944,7 +944,7 @@ enum GameEventCorrection {
         guard let originalEntry = originalSnapshot.replay.entries.first(where: {
             $0.recordID == recordID
         }),
-              BallInPlayValidator.supportsNonScoringCorrection(
+              BallInPlayValidator.supportsCorrection(
                 persistedPlay,
                 stateBefore: originalEntry.stateBefore
               ) else {
@@ -963,7 +963,7 @@ enum GameEventCorrection {
         )
         guard let entry = currentSnapshot.replay.entries.first(where: { $0.recordID == recordID }),
               play.opponentBatterSlot == entry.stateBefore.currentOpponentBatterSlot,
-              BallInPlayValidator.supportsNonScoringCorrection(play, stateBefore: entry.stateBefore),
+              BallInPlayValidator.supportsCorrection(play, stateBefore: entry.stateBefore),
               let homeAway = HomeAway(rawValue: game.homeAwayRawValue),
               BallInPlayValidator.validate(
                 play,
@@ -1178,10 +1178,10 @@ enum GameEventCorrection {
                 $0.recordID == entry.recordID
             }),
                case .ballInPlay(let originalPlay) = originalEntry.body {
-                canEditBallInPlay = BallInPlayValidator.supportsNonScoringCorrection(
+                canEditBallInPlay = BallInPlayValidator.supportsCorrection(
                     originalPlay,
                     stateBefore: originalEntry.stateBefore
-                ) && BallInPlayValidator.supportsNonScoringCorrection(
+                ) && BallInPlayValidator.supportsCorrection(
                     play,
                     stateBefore: entry.stateBefore
                 )

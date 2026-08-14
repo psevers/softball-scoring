@@ -447,7 +447,7 @@ enum PlayHistoryProjector {
             detail: stateChangeDescription(from: trace.stateBefore, to: trace.stateAfter),
             accessibilityDescription: summary,
             isPitch: false,
-            editableDefensiveBallInPlayOutcome: BallInPlayValidator.supportsNonScoringCorrection(
+            editableDefensiveBallInPlayOutcome: BallInPlayValidator.supportsCorrection(
                 play,
                 stateBefore: trace.stateBefore
             ) ? play.outcome : nil

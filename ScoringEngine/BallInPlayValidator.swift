@@ -11,6 +11,7 @@ enum BallInPlayValidationError: Error, Equatable, Sendable {
     case baseCollision(RunnerDestination)
     case tooManyOuts
     case outcomeMismatch
+    case invalidRunCount
     case invalidRBI
     case missingThirdOutRunCount
     case missingThirdOutClassification
@@ -20,20 +21,26 @@ enum BallInPlayValidationError: Error, Equatable, Sendable {
 }
 
 enum BallInPlayValidator {
-    static let nonScoringCorrectionOutcomes: [BallInPlayOutcome] = [
-        .single, .double, .triple, .reachedOnError, .fieldersChoice,
-        .groundOut, .flyOut, .lineOut, .popOut, .sacrificeBunt
+    static let correctionOutcomes: [BallInPlayOutcome] = [
+        .single, .double, .triple, .homeRun, .reachedOnError, .fieldersChoice,
+        .groundOut, .flyOut, .lineOut, .popOut, .sacrificeBunt, .sacrificeFly
     ]
 
-    static func supportsNonScoringCorrection(
+    static func correctionOutcomes(for stateBefore: GameState) -> [BallInPlayOutcome] {
+        guard stateBefore.outs >= 2 else { return correctionOutcomes }
+        let outOutcomes: Set<BallInPlayOutcome> = [
+            .groundOut, .flyOut, .lineOut, .popOut, .sacrificeBunt, .sacrificeFly
+        ]
+        return correctionOutcomes.filter { !outOutcomes.contains($0) }
+    }
+
+    static func supportsCorrection(
         _ play: BallInPlayEvent,
         stateBefore: GameState
     ) -> Bool {
         let outsOnPlay = play.movements.filter { $0.destination == .out }.count
-        return nonScoringCorrectionOutcomes.contains(play.outcome)
+        return correctionOutcomes.contains(play.outcome)
             && outsOnPlay <= 1
-            && !play.movements.contains { $0.destination == .home }
-            && play.rbi == 0
             && play.thirdOutRunsCounted == nil
             && play.thirdOutClassification == nil
             && stateBefore.outs + outsOnPlay < 3
