@@ -13,7 +13,7 @@ struct RunnerConfirmationSheet: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var destinations: [RunnerSource: RunnerDestination]
     @State private var rbi: Int
-    @State private var thirdOutRunsCounted: Int = 0
+    @State private var runsCounted: Int
     @State private var thirdOutClassification: ThirdOutClassification = .forceOrBatterRunner
     @State private var validationError: BallInPlayValidationError?
 
@@ -42,7 +42,12 @@ struct RunnerConfirmationSheet: View {
         } ?? Self.suggestedDestinations(outcome: outcome, state: state)
         _destinations = State(initialValue: suggestions)
         let suggestedRuns = suggestions.values.filter { $0 == .home }.count
-        _rbi = State(initialValue: initialPlay?.rbi ?? (outcome == .reachedOnError ? 0 : suggestedRuns))
+        let initialRunsCounted = initialPlay?.thirdOutRunsCounted ?? suggestedRuns
+        _runsCounted = State(initialValue: initialRunsCounted)
+        _rbi = State(initialValue: min(
+            initialPlay?.rbi ?? (outcome == .reachedOnError ? 0 : suggestedRuns),
+            initialRunsCounted
+        ))
     }
 
     private var movements: [RunnerMovementEvent] {
@@ -68,7 +73,7 @@ struct RunnerConfirmationSheet: View {
     }
 
     private var maximumRBI: Int {
-        min(4, needsThirdOutDecision ? min(thirdOutRunsCounted, maximumThirdOutRunsCounted) : runsOnPlay)
+        min(4, needsThirdOutDecision ? min(runsCounted, maximumThirdOutRunsCounted) : runsCounted)
     }
 
     private var draft: BallInPlayEvent {
@@ -77,7 +82,7 @@ struct RunnerConfirmationSheet: View {
             opponentBatterSlot: state.currentOpponentBatterSlot,
             movements: movements,
             rbi: rbi,
-            thirdOutRunsCounted: needsThirdOutDecision ? thirdOutRunsCounted : nil,
+            thirdOutRunsCounted: needsThirdOutDecision ? runsCounted : nil,
             thirdOutClassification: needsThirdOutDecision ? thirdOutClassification : nil
         )
     }
@@ -117,31 +122,46 @@ struct RunnerConfirmationSheet: View {
 
                         if allowsScoring {
                             ScorebookPageSection(dynamicTypeSize.isAccessibilitySize ? nil : "Scoring") {
-                            ScorebookLedgerRow {
-                                Stepper("RBI  \(rbi)", value: $rbi, in: 0...maximumRBI)
-                                    .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.notation)
-                                    .monospacedDigit()
-                                    .accessibilityIdentifier("runner.rbi")
-                            }
-
-                            if needsThirdOutDecision {
-                                ScorebookLedgerRow {
-                                    VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
-                                        ScorebookLabel("Run on third out")
-                                        Picker("Third out", selection: $thirdOutClassification) {
-                                            Text("Force / Batter").tag(ThirdOutClassification.forceOrBatterRunner)
-                                            Text("Timing Play").tag(ThirdOutClassification.timingPlay)
+                                if runsOnPlay > 0 && !needsThirdOutDecision {
+                                    ScorebookLedgerRow {
+                                        VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                                            Stepper("Runs that count  \(runsCounted)", value: $runsCounted, in: 0...runsOnPlay)
+                                                .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.notation)
+                                                .monospacedDigit()
+                                                .accessibilityIdentifier("runner.runsCounted")
+                                            Text("Every home touch counts unless the play makes the third out.")
+                                                .font(AppTheme.Typography.metadata)
+                                                .foregroundStyle(AppTheme.graphite.opacity(0.68))
                                         }
-                                        .pickerStyle(.segmented)
-                                        Stepper("Runs that count  \(thirdOutRunsCounted)", value: $thirdOutRunsCounted, in: 0...maximumThirdOutRunsCounted)
-                                            .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.notation)
-                                            .monospacedDigit()
-                                        Text("For a force/batter-runner third out this is 0. On a timing play, count only runners who crossed home before the third out.")
-                                            .font(AppTheme.Typography.metadata)
-                                            .foregroundStyle(AppTheme.graphite.opacity(0.68))
                                     }
                                 }
-                            }
+
+                                ScorebookLedgerRow {
+                                    Stepper("RBI  \(rbi)", value: $rbi, in: 0...maximumRBI)
+                                        .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.notation)
+                                        .monospacedDigit()
+                                        .accessibilityIdentifier("runner.rbi")
+                                }
+
+                                if needsThirdOutDecision {
+                                    ScorebookLedgerRow {
+                                        VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                                            ScorebookLabel("Run on third out")
+                                            Picker("Third out", selection: $thirdOutClassification) {
+                                                Text("Force / Batter").tag(ThirdOutClassification.forceOrBatterRunner)
+                                                Text("Timing Play").tag(ThirdOutClassification.timingPlay)
+                                            }
+                                            .pickerStyle(.segmented)
+                                            Stepper("Runs that count  \(runsCounted)", value: $runsCounted, in: 0...maximumThirdOutRunsCounted)
+                                                .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.notation)
+                                                .monospacedDigit()
+                                                .accessibilityIdentifier("runner.runsCounted")
+                                            Text("For a force/batter-runner third out this is 0. On a timing play, count only runners who crossed home before the third out.")
+                                                .font(AppTheme.Typography.metadata)
+                                                .foregroundStyle(AppTheme.graphite.opacity(0.68))
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -186,16 +206,18 @@ struct RunnerConfirmationSheet: View {
             }
             .onChange(of: destinations) { _, _ in
                 validationError = nil
-                thirdOutRunsCounted = min(thirdOutRunsCounted, maximumThirdOutRunsCounted)
+                runsCounted = needsThirdOutDecision
+                    ? min(runsCounted, maximumThirdOutRunsCounted)
+                    : runsOnPlay
                 rbi = min(rbi, maximumRBI)
             }
-            .onChange(of: thirdOutRunsCounted) { _, _ in
+            .onChange(of: runsCounted) { _, _ in
                 validationError = nil
                 rbi = min(rbi, maximumRBI)
             }
             .onChange(of: thirdOutClassification) { _, _ in
                 validationError = nil
-                thirdOutRunsCounted = min(thirdOutRunsCounted, maximumThirdOutRunsCounted)
+                runsCounted = min(runsCounted, maximumThirdOutRunsCounted)
                 rbi = min(rbi, maximumRBI)
             }
         }
@@ -261,6 +283,10 @@ struct RunnerConfirmationSheet: View {
     }
 
     private func validateAndRecord() {
+        if runsOnPlay > 0 && !needsThirdOutDecision && runsCounted != runsOnPlay {
+            validationError = .invalidRunCount
+            return
+        }
         if let error = BallInPlayValidator.validate(draft, state: state, trackedTeamHomeAway: homeAway) {
             validationError = error
         } else {
@@ -276,6 +302,8 @@ struct RunnerConfirmationSheet: View {
             "This play would record more than three outs in the inning."
         case .outcomeMismatch:
             "The batter result does not match the selected runner destination."
+        case .invalidRunCount:
+            "Every home touch must count because this play does not make the third out."
         case .invalidRBI:
             "RBI must be between zero and the runs scored on the play."
         case .missingThirdOutRunCount, .missingThirdOutClassification, .invalidThirdOutRunCount:

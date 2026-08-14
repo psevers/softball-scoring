@@ -117,15 +117,16 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Fresh-context and cold-store reload reproduce the corrected game state, pitcher totals, batting projection, and Play History.
 - Accessibility XXXL UI coverage invalidates a downstream defensive pitch, navigates to it, stages the repair, saves once, and returns to live scoring.
 
-## Completed non-scoring defensive Ball In Play correction
+## Completed defensive Ball In Play correction
 
 - The persistence/replay boundary replaces a saved result while retaining the paired counted In Play pitch and stable result ID, sequence, and timestamp.
-- Single, double, triple, reached-on-error, fielder's-choice, ordinary-out, and sacrifice-bunt paths replay expected bases, outs, opponent batter slot, and pitcher totals.
-- Existing movement validation rejects missing, duplicate, unexpected, backward, passing, colliding, excess-out, and outcome-inconsistent proposals; home, multi-out, and third-out corrections remain unavailable.
-- An invalid downstream eligible non-scoring play identifies its exact record and can join the same staged correction; Save stays disabled until replay is clean, then both replacements persist atomically.
-- A downstream scoring, multi-out, or third-out play remains outside this editor even if a non-scoring replacement would replay cleanly; its original event-time eligibility is enforced at the correction boundary.
+- Loaded-hit, extra-base-hit, home-run, reached-on-error, sacrifice-fly, and fielder's-choice scoring paths replay expected score, bases, outs, opponent batter slot, RBI, and pitcher totals.
+- Existing movement validation rejects missing, duplicate, unexpected, backward, passing, colliding, excess-out, and outcome-inconsistent proposals. Non-third-out home touches must all count, RBI cannot exceed counted runs, and multi-out or third-out corrections remain unavailable.
+- Moving a runner from Home back to a base or Out removes the replayed run and attribution through fresh-context and cold-store reload.
+- An invalid downstream eligible scoring or non-scoring play identifies its exact record and can join the same staged correction; Save stays disabled until replay is clean, then both replacements persist atomically.
+- A downstream multi-out or third-out play remains outside this editor; its original event-time eligibility is enforced at the correction boundary.
 - Wrong-game, stale-session, projection, and failed-save paths preserve the original records; fresh-context and cold-store reload reproduce the corrected state.
-- Accessibility XXXL UI coverage distinguishes the counted pitch from the editable result, reconfirms runner destinations, previews state, saves, and reopens the game with corrected bases and outs.
+- Accessibility XXXL UI coverage distinguishes the counted pitch from the editable result, rejects an illegal counted-run quantity, confirms RBI, previews score/bases/pitcher replay, saves, and reopens the game with the corrected scoring play.
 
 ## Base occupancy matrix for Ball In Play
 

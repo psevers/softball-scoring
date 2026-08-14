@@ -366,6 +366,40 @@ struct PlayHistoryTests {
         ])
     }
 
+    @Test func correctionEligibilityIncludesScoringButExcludesMultiOutAndThirdOutPlays() {
+        var state = GameState()
+        let homeRun = BallInPlayEvent(
+            outcome: .homeRun,
+            opponentBatterSlot: 1,
+            movements: [.init(source: .batter, destination: .home)],
+            rbi: 1,
+            thirdOutRunsCounted: nil
+        )
+        let doublePlay = BallInPlayEvent(
+            outcome: .doublePlay,
+            opponentBatterSlot: 1,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .first, destination: .out)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+
+        #expect(BallInPlayValidator.supportsCorrection(homeRun, stateBefore: state))
+        #expect(!BallInPlayValidator.supportsCorrection(doublePlay, stateBefore: state))
+
+        state.outs = 2
+        let thirdOut = BallInPlayEvent(
+            outcome: .groundOut,
+            opponentBatterSlot: 1,
+            movements: [.init(source: .batter, destination: .out)],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+        #expect(!BallInPlayValidator.supportsCorrection(thirdOut, stateBefore: state))
+    }
+
     private func acceptedEntry(
         sequence: Int,
         body: GameEventBody,

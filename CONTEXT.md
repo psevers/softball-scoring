@@ -74,4 +74,4 @@ A staged removal of one earlier defensive pitch. The candidate timeline replays 
 
 ## Defensive Ball In Play edit
 
-A staged replacement of one completed, non-scoring defensive Ball In Play result. The preceding In Play pitch remains counted while the scorer confirms the corrected outcome and every event-time runner destination. This editor initially excludes home touches, multi-out plays, and third-out plays. A valid save preserves the result record's identity, sequence, and timestamp and rebuilds every later state from the candidate timeline.
+A staged replacement of one completed defensive Ball In Play result that does not record multiple outs or create the third out. The preceding In Play pitch remains counted while the scorer confirms the corrected outcome, every event-time runner destination, every legally counted home touch, and RBI. A valid save preserves the result record's identity, sequence, and timestamp and rebuilds every later score, base, out, batter, and pitcher state from the candidate timeline.

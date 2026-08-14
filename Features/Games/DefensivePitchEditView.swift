@@ -45,7 +45,7 @@ struct DefensiveBallInPlayEditView: View {
 
                     Section("Correct result") {
                         Picker("Result", selection: $selectedOutcome) {
-                            ForEach(BallInPlayValidator.nonScoringCorrectionOutcomes) { outcome in
+                            ForEach(BallInPlayValidator.correctionOutcomes) { outcome in
                                 Text(outcome.label).tag(outcome)
                             }
                         }
@@ -111,7 +111,7 @@ struct DefensiveBallInPlayEditView: View {
                     state: editSession.stateBefore,
                     homeAway: editSession.homeAway,
                     initialPlay: initialPlay,
-                    allowsScoring: false,
+                    allowsScoring: true,
                     title: "Confirm Correction",
                     confirmationTitle: "Preview",
                     onCancel: { isConfirmingRunners = false },
@@ -130,14 +130,14 @@ struct DefensiveBallInPlayEditView: View {
     }
 
     private var initialPlay: BallInPlayEvent {
-        let movements = proposedPlay?.outcome == selectedOutcome
-            ? proposedPlay?.movements ?? editSession.originalPlay.movements
-            : editSession.originalPlay.movements
+        let sourcePlay = proposedPlay?.outcome == selectedOutcome
+            ? proposedPlay ?? editSession.originalPlay
+            : editSession.originalPlay
         return BallInPlayEvent(
             outcome: selectedOutcome,
             opponentBatterSlot: editSession.opponentBatterSlot,
-            movements: movements,
-            rbi: 0,
+            movements: sourcePlay.movements,
+            rbi: sourcePlay.rbi,
             thirdOutRunsCounted: nil
         )
     }
@@ -172,16 +172,25 @@ struct DefensiveBallInPlayEditView: View {
         let movements = play.movements
             .map { "\($0.source.baseLabel) to \($0.destination.label)" }
             .joined(separator: "; ")
-        return "\(play.outcome.label) · \(movements)"
+        let runs = play.movements.filter { $0.destination == .home }.count
+        let scoring = runs > 0
+            ? " · \(runs) \(runs == 1 ? "run" : "runs") · \(play.rbi) RBI"
+            : ""
+        return "\(play.outcome.label) · \(movements)\(scoring)"
     }
 
     private func stateSummary(_ state: GameState) -> String {
+        let homeAway = HomeAway(rawValue: game.homeAwayRawValue)
+        let opponentScore = homeAway == .home ? state.awayScore : state.homeScore
+        let trackedScore = homeAway == .home ? state.homeScore : state.awayScore
+        let pitchTotal = game.startingPitcherID.map { state.pitchCount(for: $0).total } ?? 0
         let bases = [
             state.firstBaseRunnerSlot.map { "1B \($0)" },
             state.secondBaseRunnerSlot.map { "2B \($0)" },
             state.thirdBaseRunnerSlot.map { "3B \($0)" }
         ].compactMap { $0 }.joined(separator: ", ")
-        return "Outs \(state.outs) · Bases \(bases.isEmpty ? "empty" : bases) · "
+        return "Score \(opponentScore)–\(trackedScore) · Pitcher \(pitchTotal) pitches · "
+            + "Outs \(state.outs) · Bases \(bases.isEmpty ? "empty" : bases) · "
             + "Opponent batter \(state.currentOpponentBatterSlot)"
     }
 }
@@ -736,7 +745,7 @@ private struct DefensiveEventCorrectionProblemView: View {
                    affectedState != nil,
                    homeAway != nil {
                     Picker("Correct result", selection: $selectedOutcome) {
-                        ForEach(BallInPlayValidator.nonScoringCorrectionOutcomes) { outcome in
+                        ForEach(BallInPlayValidator.correctionOutcomes) { outcome in
                             Text(outcome.label).tag(outcome)
                         }
                     }
@@ -761,7 +770,7 @@ private struct DefensiveEventCorrectionProblemView: View {
                     state: affectedState,
                     homeAway: homeAway,
                     initialPlay: affectedPlay.outcome == selectedOutcome ? affectedPlay : nil,
-                    allowsScoring: false,
+                    allowsScoring: true,
                     title: "Repair Affected Play",
                     confirmationTitle: "Stage Repair",
                     onCancel: { isConfirmingRunners = false },

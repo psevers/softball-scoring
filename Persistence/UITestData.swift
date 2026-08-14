@@ -233,6 +233,61 @@ enum UITestData {
             ))
         ))
 
+        let runCorrectionGame = Game(
+            seasonID: season.id,
+            opponentName: "UI Run Correction Opponent",
+            gameDate: Date(timeIntervalSince1970: 1_786_822_800),
+            homeAway: .home,
+            status: .inProgress,
+            startingPitcherID: activePlayers[0].id,
+            startedAt: Date(timeIntervalSince1970: 1_786_822_800)
+        )
+        context.insert(runCorrectionGame)
+        for (index, player) in activePlayers.enumerated() {
+            context.insert(LineupEntry(
+                playerID: player.id,
+                battingOrder: index + 1,
+                startingPosition: positions[index],
+                gameID: runCorrectionGame.id
+            ))
+        }
+        let runCorrectionBodies: [GameEventBody] = [
+            .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: activePlayers[0].id,
+                opponentBatterSlot: 1
+            )),
+            .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            )),
+            .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: activePlayers[0].id,
+                opponentBatterSlot: 2
+            )),
+            .ballInPlay(.init(
+                outcome: .reachedOnError,
+                opponentBatterSlot: 2,
+                movements: [
+                    .init(source: .batter, destination: .first),
+                    .init(source: .first, destination: .second)
+                ],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ))
+        ]
+        for (index, body) in runCorrectionBodies.enumerated() {
+            context.insert(try GameEventRecord(
+                gameID: runCorrectionGame.id,
+                sequenceNumber: index + 1,
+                body: body
+            ))
+        }
+
         let undoGame = Game(
             seasonID: season.id,
             opponentName: "UI Undo Opponent",

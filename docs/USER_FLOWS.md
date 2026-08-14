@@ -95,18 +95,18 @@ first invalid downstream record disables Save
 Cancel unchanged, or Save exact deletion → preserve sequence gap → refreshed History + live scoring
 ```
 
-## Edit a completed non-scoring defensive play — Slice 6
+## Edit a completed defensive play — Slice 6
 
 ```text
 Live Game → Play History → expand completed Ball In Play → Edit Play
   ↓
 review the counted In Play pitch and current result separately
   ↓
-choose corrected hit / error / fielder's choice / ordinary out / sacrifice
+choose corrected hit / home run / error / fielder's choice / ordinary out / sacrifice
   ↓
-confirm batter and every occupied runner destination in the existing runner sheet
+confirm batter and every occupied runner destination, counted home touch, and RBI
   ↓
-preview bases / outs / opponent batter / pitcher total / downstream history
+preview score / bases / outs / opponent batter / pitcher total / downstream history
   ↓
 Cancel unchanged, or Save one atomic result replacement → refreshed History + live scoring
 ```

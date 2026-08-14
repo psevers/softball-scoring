@@ -275,11 +275,10 @@ final class ScrollReachabilityUITests: XCTestCase {
             app.buttons["Preview"].tap()
 
             let proposed = app.staticTexts["playEdit.proposed"]
-            XCTAssertTrue(swipeWithinUntilHittable(
-                proposed,
-                in: editForm,
-                above: saveButton
-            ))
+            for _ in 0..<4 where !proposed.exists {
+                editForm.swipeUp()
+            }
+            XCTAssertTrue(proposed.exists)
             XCTAssertTrue(
                 proposed.label.contains(proposedSummary),
                 "Expected \(outcome) summary \(proposedSummary), got \(proposed.label)"
@@ -341,6 +340,97 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
         liveGame.tap()
         XCTAssertEqual(count.value as? String, "1 out, bases empty")
+    }
+
+    func testCorrectDefensiveRunAndRBIPersistsScoreBasesAndPitcherReplay() {
+        let app = launchApp(
+            atAccessibilityExtraExtraExtraLarge: true,
+            persistentStoreName: "run-correction-\(UUID().uuidString)"
+        )
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Run Correction Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let score = app.staticTexts["game.score"]
+        let count = app.staticTexts["game.count"]
+        XCTAssertTrue(score.waitForExistence(timeout: 3))
+        XCTAssertEqual(score.label, "Top of inning 1. UI Run Correction Opponent 0, Us 0")
+        XCTAssertEqual(count.value as? String, "0 outs, on 1B, 2B")
+
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        app.buttons["history.entry.3"].tap()
+        let editPlay = app.buttons["history.editPlay.4"]
+        XCTAssertTrue(editPlay.waitForExistence(timeout: 3))
+        editPlay.tap()
+
+        XCTAssertTrue(app.navigationBars["Edit Play"].waitForExistence(timeout: 3))
+        let editForm = app.collectionViews.firstMatch
+        let saveButton = app.buttons["playEdit.save"]
+        let outcomePicker = app.buttons["playEdit.outcomePicker"]
+        XCTAssertTrue(swipeWithinUntilHittable(outcomePicker, in: editForm, above: saveButton))
+        outcomePicker.tap()
+        XCTAssertTrue(app.buttons["Double"].waitForExistence(timeout: 3))
+        app.buttons["Double"].tap()
+
+        let confirmRunners = app.buttons["playEdit.confirmRunners"]
+        XCTAssertTrue(swipeWithinUntilHittable(confirmRunners, in: editForm, above: saveButton))
+        confirmRunners.tap()
+        XCTAssertTrue(app.navigationBars["Confirm Correction"].waitForExistence(timeout: 3))
+
+        let batterDestination = app.buttons["runner.destination.batter"]
+        XCTAssertTrue(batterDestination.waitForExistence(timeout: 3))
+        batterDestination.tap()
+        app.buttons["2B"].tap()
+        let firstBaseDestination = app.buttons["runner.destination.first"]
+        firstBaseDestination.tap()
+        app.buttons["Home"].tap()
+
+        let runsCounted = app.steppers["runner.runsCounted"]
+        XCTAssertTrue(runsCounted.waitForExistence(timeout: 3))
+        XCTAssertTrue(runsCounted.label.contains("Runs that count  1"))
+        app.buttons["runner.runsCounted-Decrement"].tap()
+        app.buttons["Preview"].tap()
+        let invalidRunCount = app.staticTexts[
+            "Every home touch must count because this play does not make the third out."
+        ]
+        XCTAssertTrue(scrollUntilHittable(invalidRunCount, in: app))
+        XCTAssertTrue(app.navigationBars["Confirm Correction"].exists)
+        app.buttons["runner.runsCounted-Increment"].tap()
+        let rbi = app.steppers["runner.rbi"]
+        XCTAssertTrue(rbi.exists)
+        app.buttons["runner.rbi-Increment"].tap()
+        app.buttons["Preview"].tap()
+
+        let proposed = app.staticTexts["playEdit.proposed"]
+        for _ in 0..<4 where !proposed.exists {
+            editForm.swipeUp()
+        }
+        XCTAssertTrue(proposed.exists)
+        XCTAssertTrue(proposed.label.contains("Double · Batter to 2B; 1B to Home · 1 run · 1 RBI"))
+        XCTAssertTrue(proposed.label.contains("Score 1–0"))
+        XCTAssertTrue(proposed.label.contains("Pitcher 2 pitches"))
+        XCTAssertTrue(proposed.label.contains("Bases 2B 2"))
+        XCTAssertTrue(saveButton.isEnabled)
+        saveButton.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["history.entry.3"].label.contains("1 run · 1 RBI"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertEqual(score.label, "Top of inning 1. UI Run Correction Opponent 1, Us 0")
+        XCTAssertEqual(count.value as? String, "0 outs, on 2B")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Games"].tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertEqual(score.label, "Top of inning 1. UI Run Correction Opponent 1, Us 0")
+        XCTAssertEqual(count.value as? String, "0 outs, on 2B")
+        XCTAssertTrue(app.staticTexts["Pitching · 2 pitches · Opp batter 3"].exists)
     }
 
     func testUndoTrackedTeamPitchFromPlayHistoryRestoresLiveBatterAndCount() {
