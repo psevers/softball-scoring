@@ -109,6 +109,20 @@ first invalid downstream record disables Save
 Cancel unchanged, or Save exact deletion → preserve sequence gap → refreshed History + live scoring
 ```
 
+## Delete an earlier tracked-team pitch — Slice 6
+
+```text
+Live Game → Play History → expand tracked plate appearance → Delete Pitch
+  ↓
+confirm event-time player + batting slot/order size + result + sequence
+  ↓
+stage exact-record removal → replay/project every surviving offensive event
+  ↓
+first invalid downstream event disables Save and offers explicit repair
+  ↓
+Cancel unchanged, or atomically Save → preserve sequence gap → relaunch same corrected batter/count
+```
+
 ## Edit a completed defensive play — Slice 6
 
 ```text
