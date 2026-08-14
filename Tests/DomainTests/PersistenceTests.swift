@@ -6788,6 +6788,76 @@ extension PersistenceTests {
         #expect(saved.battingLines == staged.snapshot.battingLines)
     }
 
+    @Test func trackedTeamPitchDeletionRejectsWalkThatNoLongerMatchesStartedCount() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let batter = makeTrackedBatter()
+        let records = try [
+            GameEventBody.offensivePitch(.init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .ball
+            )),
+            .offensivePitch(.init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .ball
+            )),
+            .offensivePitch(.init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .ball
+            )),
+            .offensivePlateAppearance(.init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .walk,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ))
+        ].enumerated().map { index, body in
+            try GameEventRecord(gameID: game.id, sequenceNumber: index + 1, body: body)
+        }
+        records.forEach(context.insert)
+        try context.save()
+
+        let original = try LiveGameSnapshotLoader.load(game: game, modelContext: context)
+        #expect(original.replay.rejectedRecordIDs.isEmpty)
+        #expect(original.replay.state.currentTrackedBatterSlot == 2)
+        #expect(original.battingLines[batter.playerID]?.walks == 1)
+
+        let session = try GameEventCorrection.beginGameEventCorrection(
+            game: game,
+            modelContext: context
+        )
+        let invalid = try GameEventCorrection.stageOffensivePitchDeletion(
+            recordID: records[0].id,
+            in: session,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(!invalid.canSave)
+        #expect(invalid.firstInvalidRecord?.id == records[3].id)
+        #expect(invalid.firstInvalidRecord?.sequenceNumber == 4)
+        #expect(invalid.snapshot.replay.state.currentTrackedBatterSlot == 1)
+        #expect(invalid.snapshot.replay.state.balls == 2)
+        #expect(invalid.snapshot.battingLines[batter.playerID] == nil)
+        #expect(throws: GameEventCorrectionError.invalidCandidate) {
+            _ = try GameEventCorrection.saveGameEventCorrection(
+                invalid,
+                game: game,
+                modelContext: context
+            )
+        }
+
+        let stored = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>())
+        #expect(stored.count == records.count)
+    }
+
     @Test func trackedTeamPitchEditStagesRepairForInvalidLaterPitch() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext

@@ -1,6 +1,8 @@
 import Foundation
 
 enum GameEventReplay {
+    typealias ValidateEvent = (GameEventRecord, DecodedGameEvent, GameState) -> Bool
+
     enum Rejection: Equatable {
         case invalidSequence
         case unknownKind
@@ -51,7 +53,8 @@ enum GameEventReplay {
     static func replay(
         records: [GameEventRecord],
         homeAway: HomeAway,
-        startingPitcherID: UUID?
+        startingPitcherID: UUID?,
+        validateEvent: ValidateEvent = { _, _, _ in true }
     ) -> Result {
         var state = GameState()
         var rejected: [UUID] = []
@@ -114,7 +117,7 @@ enum GameEventReplay {
                 for: state,
                 homeAway: homeAway,
                 startingPitcherID: startingPitcherID
-            ) else {
+            ), validateEvent(record, decoded, state) else {
                 rejected.append(record.id)
                 entries.append(Entry(
                     recordID: record.id,

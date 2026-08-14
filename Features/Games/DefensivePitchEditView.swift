@@ -537,114 +537,26 @@ struct OffensivePitchDeletionView: View {
     let deletionSession: OffensivePitchDeletionSession
     let liveSession: LiveGameSession
 
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    @State private var correction = GameEventCorrectionCoordinator()
-
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                Form {
-                    Section("Pitch") {
-                        Text(
-                            "\(deletionSession.half.displayName) \(deletionSession.inning) · "
-                                + "\(deletionSession.batter.displayName) · Batting slot "
-                                + "\(deletionSession.batter.lineupSlot) of "
-                                + "\(deletionSession.battingOrderSize) · Sequence "
-                                + "\(deletionSession.sequenceNumber)"
-                        )
-                        .font(.body.monospacedDigit())
-                        Text(
-                            "Delete: \(deletionSession.originalResult.label) · "
-                                + countDescription(deletionSession.originalStateAfter)
-                        )
-                        .accessibilityIdentifier("trackedPitchDelete.current")
-                    }
-
-                    if let correctionSession = correction.session {
-                        GameEventCorrectionSections(
-                            correctionSession: correctionSession,
-                            homeAway: HomeAway(rawValue: game.homeAwayRawValue),
-                            stageChange: { problem, action in
-                                correction.stageRepair(
-                                    recordID: problem.id,
-                                    action: action,
-                                    game: game,
-                                    modelContext: modelContext
-                                )
-                            }
-                        )
-                    } else if correction.errorMessage == nil {
-                        Section("Candidate replay") {
-                            ProgressView("Replaying complete history…")
-                        }
-                    }
-                }
-
-                Divider()
-                HStack(spacing: AppTheme.Spacing.sm) {
-                    Button("Cancel") { dismiss() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
-                        .accessibilityIdentifier("trackedPitchDelete.cancel")
-
-                    Button("Save") { save() }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
-                        .disabled(correction.session?.canSave != true)
-                        .accessibilityIdentifier("trackedPitchDelete.save")
-                }
-                .padding(.horizontal, AppTheme.Spacing.md)
-                .padding(.vertical, AppTheme.Spacing.sm)
-                .background(.bar)
-            }
-            .navigationTitle("Delete Tracked Pitch")
-            .navigationBarTitleDisplayMode(.inline)
-            .task { stage() }
-            .alert("Pitch Deletion Failed", isPresented: Binding(
-                get: { correction.errorMessage != nil },
-                set: { if !$0 { correction.errorMessage = nil } }
-            )) {
-                if correction.requiresReopen {
-                    Button("Return to Play History") {
-                        correction.errorMessage = nil
-                        dismiss()
-                    }
-                    .accessibilityIdentifier("trackedPitchDelete.reopen")
-                } else {
-                    Button("OK", role: .cancel) { correction.errorMessage = nil }
-                }
-            } message: {
-                Text(
-                    correction.errorMessage
-                        ?? "The tracked pitch deletion could not be replayed safely."
-                )
-            }
-        }
-    }
-
-    private func stage() {
-        guard correction.session == nil else { return }
-        do {
-            correction.session = try GameEventCorrection.stageOffensivePitchDeletion(
+        PitchDeletionView(
+            game: game,
+            liveSession: liveSession,
+            navigationTitle: "Delete Tracked Pitch",
+            eventContext: "\(deletionSession.half.displayName) \(deletionSession.inning) · "
+                + "\(deletionSession.batter.displayName) · Batting slot "
+                + "\(deletionSession.batter.lineupSlot) of "
+                + "\(deletionSession.battingOrderSize) · Sequence "
+                + "\(deletionSession.sequenceNumber)",
+            deletionSummary: "Delete: \(deletionSession.originalResult.label) · "
+                + countDescription(deletionSession.originalStateAfter),
+            accessibilityPrefix: "trackedPitchDelete",
+            fallbackError: "The tracked pitch deletion could not be replayed safely."
+        ) { modelContext in
+            try GameEventCorrection.stageOffensivePitchDeletion(
                 deletionSession,
                 game: game,
                 modelContext: modelContext
             )
-        } catch {
-            correction.present(error)
-        }
-    }
-
-    private func save() {
-        if correction.save(
-            liveSession: liveSession,
-            game: game,
-            modelContext: modelContext
-        ) {
-            dismiss()
         }
     }
 
@@ -658,6 +570,47 @@ struct DefensivePitchDeletionView: View {
     let deletionSession: DefensivePitchDeletionSession
     let liveSession: LiveGameSession
 
+    var body: some View {
+        PitchDeletionView(
+            game: game,
+            liveSession: liveSession,
+            navigationTitle: "Delete Pitch",
+            eventContext: "\(deletionSession.half.displayName) \(deletionSession.inning) · "
+                + "Opponent batter \(deletionSession.opponentBatterSlot) · "
+                + "Sequence \(deletionSession.sequenceNumber)",
+            deletionSummary: "Delete: \(deletionSession.originalResult.label) · "
+                + countDescription(deletionSession.originalStateAfter),
+            accessibilityPrefix: "pitchDelete",
+            fallbackError: "The pitch deletion could not be replayed safely."
+        ) { modelContext in
+            let session = try GameEventCorrection.beginGameEventCorrection(
+                game: game,
+                modelContext: modelContext
+            )
+            return try GameEventCorrection.stagePitchDeletion(
+                recordID: deletionSession.recordID,
+                in: session,
+                game: game,
+                modelContext: modelContext
+            )
+        }
+    }
+
+    private func countDescription(_ state: GameState) -> String {
+        "Count \(state.balls)–\(state.strikes)"
+    }
+}
+
+private struct PitchDeletionView: View {
+    let game: Game
+    let liveSession: LiveGameSession
+    let navigationTitle: String
+    let eventContext: String
+    let deletionSummary: String
+    let accessibilityPrefix: String
+    let fallbackError: String
+    let stageDeletion: (ModelContext) throws -> GameEventCorrectionSession
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var correction = GameEventCorrectionCoordinator()
@@ -667,17 +620,10 @@ struct DefensivePitchDeletionView: View {
             VStack(spacing: 0) {
                 Form {
                     Section("Pitch") {
-                        Text(
-                            "\(deletionSession.half.displayName) \(deletionSession.inning) · "
-                                + "Opponent batter \(deletionSession.opponentBatterSlot) · "
-                                + "Sequence \(deletionSession.sequenceNumber)"
-                        )
-                        .font(.body.monospacedDigit())
-                        Text(
-                            "Delete: \(deletionSession.originalResult.label) · "
-                                + countDescription(deletionSession.originalStateAfter)
-                        )
-                        .accessibilityIdentifier("pitchDelete.current")
+                        Text(eventContext)
+                            .font(.body.monospacedDigit())
+                        Text(deletionSummary)
+                            .accessibilityIdentifier("\(accessibilityPrefix).current")
                     }
 
                     if let correctionSession = correction.session {
@@ -705,39 +651,38 @@ struct DefensivePitchDeletionView: View {
                     Button("Cancel") { dismiss() }
                         .buttonStyle(.bordered)
                         .controlSize(.large)
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: AppTheme.TouchTarget.minimum
-                        )
-                        .accessibilityIdentifier("pitchDelete.cancel")
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("\(accessibilityPrefix).cancel")
 
                     Button("Save") { save() }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: AppTheme.TouchTarget.minimum
-                        )
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
                         .disabled(correction.session?.canSave != true)
-                        .accessibilityIdentifier("pitchDelete.save")
+                        .accessibilityIdentifier("\(accessibilityPrefix).save")
                 }
                 .padding(.horizontal, AppTheme.Spacing.md)
                 .padding(.vertical, AppTheme.Spacing.sm)
                 .background(.bar)
             }
-            .navigationTitle("Delete Pitch")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .task { stage() }
             .alert("Pitch Deletion Failed", isPresented: Binding(
                 get: { correction.errorMessage != nil },
                 set: { if !$0 { correction.errorMessage = nil } }
             )) {
-                Button("OK", role: .cancel) { correction.errorMessage = nil }
+                if correction.requiresReopen {
+                    Button("Return to Play History") {
+                        correction.errorMessage = nil
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("\(accessibilityPrefix).reopen")
+                } else {
+                    Button("OK", role: .cancel) { correction.errorMessage = nil }
+                }
             } message: {
-                Text(
-                    correction.errorMessage
-                        ?? "The pitch deletion could not be replayed safely."
-                )
+                Text(correction.errorMessage ?? fallbackError)
             }
         }
     }
@@ -745,18 +690,9 @@ struct DefensivePitchDeletionView: View {
     private func stage() {
         guard correction.session == nil else { return }
         do {
-            let session = try GameEventCorrection.beginGameEventCorrection(
-                game: game,
-                modelContext: modelContext
-            )
-            correction.session = try GameEventCorrection.stagePitchDeletion(
-                recordID: deletionSession.recordID,
-                in: session,
-                game: game,
-                modelContext: modelContext
-            )
+            correction.session = try stageDeletion(modelContext)
         } catch {
-            correction.errorMessage = error.localizedDescription
+            correction.present(error)
         }
     }
 
@@ -768,10 +704,6 @@ struct DefensivePitchDeletionView: View {
         ) {
             dismiss()
         }
-    }
-
-    private func countDescription(_ state: GameState) -> String {
-        "Count \(state.balls)–\(state.strikes)"
     }
 }
 

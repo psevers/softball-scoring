@@ -1593,6 +1593,7 @@ enum GameEventCorrection {
             records: records,
             projectBattingLines: projectBattingLines
         )
+        let validateEvent = terminalCountValidator(originalReplay: originalSnapshot.replay)
         let currentRecords = try applying(
             session.stagedChanges,
             offensivePitchChanges: session.stagedOffensivePitchChanges,
@@ -1603,7 +1604,8 @@ enum GameEventCorrection {
         let currentSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
             game: game,
             records: currentRecords,
-            projectBattingLines: projectBattingLines
+            projectBattingLines: projectBattingLines,
+            validateEvent: validateEvent
         )
         guard let referenceEntry = currentSnapshot.replay.entries.first(where: {
             $0.recordID == recordID
@@ -1655,7 +1657,8 @@ enum GameEventCorrection {
         let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
             game: game,
             records: candidateRecords,
-            projectBattingLines: projectBattingLines
+            projectBattingLines: projectBattingLines,
+            validateEvent: validateEvent
         )
         return GameEventCorrectionSession(
             gameID: game.id,
@@ -1742,7 +1745,15 @@ enum GameEventCorrection {
         in replay: GameEventReplay.Result,
         originalReplay: GameEventReplay.Result
     ) -> GameEventCorrectionProblem? {
-        guard let entry = replay.entries.first(where: { $0.rejection != nil }) else {
+        let entry: GameEventReplay.Entry
+        let hasTerminalCountMismatch: Bool
+        if let rejectedEntry = replay.entries.first(where: { $0.rejection != nil }) {
+            entry = rejectedEntry
+            hasTerminalCountMismatch = violatesOriginalTerminalCount(
+                rejectedEntry,
+                originalReplay: originalReplay
+            )
+        } else {
             return nil
         }
         let context: String
@@ -1803,6 +1814,20 @@ enum GameEventCorrection {
             canDeleteOffensivePitch = true
             canDeletePitch = false
             canEditBallInPlay = false
+        case .offensivePlateAppearance(let plateAppearance) where hasTerminalCountMismatch:
+            context = "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · "
+                + "\(plateAppearance.batter.displayName) · Batting slot "
+                + "\(plateAppearance.batter.lineupSlot) of "
+                + "\(plateAppearance.battingOrderSize) · \(plateAppearance.result.label)"
+            explanation = "Full replay reached tracked batting slot "
+                + "\(entry.stateBefore.currentTrackedBatterSlot) with a "
+                + "\(entry.stateBefore.balls)–\(entry.stateBefore.strikes) count "
+                + "before rejecting this \(plateAppearance.result.label) for its saved count contract."
+            canEditPitch = false
+            canEditOffensivePitch = false
+            canDeleteOffensivePitch = false
+            canDeletePitch = false
+            canEditBallInPlay = false
         default:
             context = "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · Saved event"
             explanation = "Full replay rejected this record at its original chronological position."
@@ -1823,6 +1848,54 @@ enum GameEventCorrection {
             canDeletePitch: canDeletePitch,
             canEditBallInPlay: canEditBallInPlay
         )
+    }
+
+    private static func terminalCountValidator(
+        originalReplay: GameEventReplay.Result
+    ) -> GameEventReplay.ValidateEvent {
+        { record, event, state in
+            guard case .offensivePlateAppearance(let plateAppearance) = event.body,
+                  let originalEntry = originalReplay.entries.first(where: {
+                      $0.recordID == record.id
+                  }),
+                  case .offensivePlateAppearance(let originalPlateAppearance) = originalEntry.body,
+                  terminalCountMatches(
+                    originalPlateAppearance.result,
+                    state: originalEntry.stateBefore
+                  ) else {
+                return true
+            }
+            return terminalCountMatches(plateAppearance.result, state: state)
+        }
+    }
+
+    private static func violatesOriginalTerminalCount(
+        _ entry: GameEventReplay.Entry,
+        originalReplay: GameEventReplay.Result
+    ) -> Bool {
+        guard case .offensivePlateAppearance(let plateAppearance) = entry.body,
+              let originalEntry = originalReplay.entries.first(where: {
+                  $0.recordID == entry.recordID
+              }),
+              case .offensivePlateAppearance(let originalPlateAppearance) = originalEntry.body,
+              terminalCountMatches(
+                originalPlateAppearance.result,
+                state: originalEntry.stateBefore
+              ) else {
+            return false
+        }
+        return !terminalCountMatches(plateAppearance.result, state: entry.stateBefore)
+    }
+
+    private static func terminalCountMatches(
+        _ result: OffensivePlateAppearanceResult,
+        state: GameState
+    ) -> Bool {
+        switch result {
+        case .walk: state.balls == 3
+        case .strikeout: state.strikes == 2
+        default: false
+        }
     }
 
     private static func freshContext(from modelContext: ModelContext) -> ModelContext {

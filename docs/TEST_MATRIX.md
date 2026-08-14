@@ -129,7 +129,7 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 
 - Play History exposes Delete separately from Edit for each tracked-team Ball, Called Strike, Swinging Strike, and Foul component; confirmation names event-time player, batting slot/order size, result, and sequence.
 - Staging removes only the selected record from the candidate, leaves durable history untouched, and preserves every survivor's ID, game, sequence, timestamp, player identity, slot, and batting-order size.
-- Full replay rebuilds the offensive count, tracked batter, and deterministic batting projection while retaining sequence gaps.
+- Full replay rebuilds the offensive count, tracked batter, and deterministic batting projection while retaining sequence gaps; deleting a pitch before an originally count-completing walk or strikeout rejects that plate appearance when its saved terminal-count contract no longer holds.
 - The first rejected downstream tracked pitch disables Save and offers explicit edit or delete repair in the same multi-change session.
 - Wrong-game, stale-session, projection, invalid-candidate, failed-save, and cancellation paths leave every durable record unchanged.
 - Fresh-context replay and the focused Accessibility XL workflow reproduce the deleted-pitch count and same tracked batter after relaunch.
