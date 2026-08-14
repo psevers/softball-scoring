@@ -4176,7 +4176,7 @@ extension PersistenceTests {
         #expect(repaired.stagedLogicalPlayDeletions[0].resultRecordID == records[2].id)
         #expect(repaired.stagedChanges.map(\.recordID) == [records[3].id])
 
-        _ = try GameEventCorrection.saveDefensiveEventCorrection(
+        _ = try GameEventCorrection.saveGameEventCorrection(
             repaired,
             game: game,
             modelContext: context
@@ -4448,7 +4448,7 @@ extension PersistenceTests {
         records.forEach(context.insert)
         try context.save()
 
-        let session = try GameEventCorrection.beginDefensiveEventCorrection(
+        let session = try GameEventCorrection.beginGameEventCorrection(
             game: game,
             modelContext: context
         )
@@ -4485,7 +4485,7 @@ extension PersistenceTests {
         ))
         #expect(stagedStored.map(\.id) == records.map(\.id))
 
-        _ = try GameEventCorrection.saveDefensiveEventCorrection(
+        _ = try GameEventCorrection.saveGameEventCorrection(
             repairedCandidate,
             game: game,
             modelContext: context
@@ -4535,7 +4535,7 @@ extension PersistenceTests {
         records.forEach(context.insert)
         try context.save()
 
-        let session = try GameEventCorrection.beginDefensiveEventCorrection(
+        let session = try GameEventCorrection.beginGameEventCorrection(
             game: game,
             modelContext: context
         )
@@ -4579,7 +4579,7 @@ extension PersistenceTests {
         ])
 
         #expect(throws: SaveFailure.self) {
-            _ = try GameEventCorrection.saveDefensiveEventCorrection(
+            _ = try GameEventCorrection.saveGameEventCorrection(
                 mixedBatch,
                 game: game,
                 modelContext: context,
@@ -4607,7 +4607,7 @@ extension PersistenceTests {
         try context.save()
 
         #expect(throws: GameEventCorrectionError.staleTimeline) {
-            _ = try GameEventCorrection.saveDefensiveEventCorrection(
+            _ = try GameEventCorrection.saveGameEventCorrection(
                 mixedBatch,
                 game: game,
                 modelContext: context
@@ -4652,7 +4652,7 @@ extension PersistenceTests {
             records.forEach(context.insert)
             try context.save()
 
-            let session = try GameEventCorrection.beginDefensiveEventCorrection(
+            let session = try GameEventCorrection.beginGameEventCorrection(
                 game: game,
                 modelContext: context
             )
@@ -4668,7 +4668,7 @@ extension PersistenceTests {
                 game: game,
                 modelContext: context
             )
-            _ = try GameEventCorrection.saveDefensiveEventCorrection(
+            _ = try GameEventCorrection.saveGameEventCorrection(
                 repaired,
                 game: game,
                 modelContext: context
@@ -6158,7 +6158,7 @@ extension PersistenceTests {
         #expect(repaired.snapshot.replay.rejectedRecordIDs.isEmpty)
         #expect(repaired.stagedBallInPlayChanges.map(\.recordID) == [records[1].id, records[3].id])
 
-        _ = try GameEventCorrection.saveDefensiveEventCorrection(
+        _ = try GameEventCorrection.saveGameEventCorrection(
             repaired,
             game: game,
             modelContext: context
@@ -6253,7 +6253,7 @@ extension PersistenceTests {
         #expect(repaired.snapshot.replay.state.outs == 1)
         #expect(repaired.snapshot.replay.state.baseRunnerSlots == [nil, nil, nil])
 
-        _ = try GameEventCorrection.saveDefensiveEventCorrection(
+        _ = try GameEventCorrection.saveGameEventCorrection(
             repaired,
             game: game,
             modelContext: context
@@ -6637,10 +6637,18 @@ extension PersistenceTests {
         #expect(editSession.batter == batter)
         #expect(editSession.battingOrderSize == 10)
         #expect(editSession.originalResult == .ball)
-        let session = try GameEventCorrection.beginDefensiveEventCorrection(
+        let session = try GameEventCorrection.beginGameEventCorrection(
             game: game,
             modelContext: context
         )
+        let noOp = try GameEventCorrection.stageOffensivePitchEdit(
+            recordID: editedRecordID,
+            result: .ball,
+            in: session,
+            game: game,
+            modelContext: context
+        )
+        #expect(!noOp.canSave)
         let staged = try GameEventCorrection.stageOffensivePitchEdit(
             recordID: editedRecordID,
             result: .swingingStrike,
@@ -6655,7 +6663,7 @@ extension PersistenceTests {
         #expect(staged.snapshot.replay.state.balls == 1)
         #expect(staged.snapshot.replay.state.strikes == 0)
         #expect(staged.snapshot.battingLines[batter.playerID]?.hits == 1)
-        _ = try GameEventCorrection.saveDefensiveEventCorrection(
+        _ = try GameEventCorrection.saveGameEventCorrection(
             staged,
             game: game,
             modelContext: context
@@ -6691,7 +6699,7 @@ extension PersistenceTests {
             modelContext: context
         )
         let originalBodies = try records.map { try $0.decoded().body }
-        let session = try GameEventCorrection.beginDefensiveEventCorrection(
+        let session = try GameEventCorrection.beginGameEventCorrection(
             game: game,
             modelContext: context
         )
@@ -6708,7 +6716,7 @@ extension PersistenceTests {
         #expect(invalid.firstInvalidRecord?.id == records[2].id)
         #expect(invalid.firstInvalidRecord?.canEditOffensivePitch == true)
         #expect(throws: GameEventCorrectionError.invalidCandidate) {
-            _ = try GameEventCorrection.saveDefensiveEventCorrection(
+            _ = try GameEventCorrection.saveGameEventCorrection(
                 invalid,
                 game: game,
                 modelContext: context
@@ -6745,7 +6753,7 @@ extension PersistenceTests {
             batter: batter,
             modelContext: context
         ).first)
-        let session = try GameEventCorrection.beginDefensiveEventCorrection(
+        let session = try GameEventCorrection.beginGameEventCorrection(
             game: game,
             modelContext: context
         )
@@ -6782,7 +6790,7 @@ extension PersistenceTests {
             modelContext: context
         )
         #expect(throws: SaveFailure.self) {
-            _ = try GameEventCorrection.saveDefensiveEventCorrection(
+            _ = try GameEventCorrection.saveGameEventCorrection(
                 staged,
                 game: game,
                 modelContext: context,
@@ -6816,6 +6824,7 @@ extension PersistenceTests {
                 modelContext: context
             )
         }
+        #expect(GameEventCorrectionError.staleTimeline.localizedDescription.contains("reopen"))
         #expect(throws: GameEventCorrectionError.staleTimeline) {
             _ = try GameEventCorrection.stageOffensivePitchEdit(
                 recordID: record.id,
@@ -6826,7 +6835,7 @@ extension PersistenceTests {
             )
         }
         #expect(throws: GameEventCorrectionError.staleTimeline) {
-            _ = try GameEventCorrection.saveDefensiveEventCorrection(
+            _ = try GameEventCorrection.saveGameEventCorrection(
                 staged,
                 game: game,
                 modelContext: context

@@ -229,7 +229,7 @@ struct DefensiveLogicalPlayStagedDeletion: Identifiable, Equatable {
     }
 }
 
-struct DefensiveEventCorrectionProblem: Equatable {
+struct GameEventCorrectionProblem: Equatable {
     let id: UUID
     let sequenceNumber: Int
     let context: String
@@ -240,20 +240,22 @@ struct DefensiveEventCorrectionProblem: Equatable {
     let canEditBallInPlay: Bool
 }
 
-struct DefensiveEventCorrectionSession {
+struct GameEventCorrectionSession {
     let gameID: UUID
     let stagedChanges: [DefensivePitchStagedChange]
     let stagedOffensivePitchChanges: [OffensivePitchStagedChange]
     let stagedBallInPlayChanges: [DefensiveBallInPlayStagedChange]
     let stagedLogicalPlayDeletions: [DefensiveLogicalPlayStagedDeletion]
     let snapshot: LiveGameSnapshot
-    let firstInvalidRecord: DefensiveEventCorrectionProblem?
+    let firstInvalidRecord: GameEventCorrectionProblem?
 
     fileprivate let expectedTimeline: [GameEventRecordRevision]
 
     var canSave: Bool {
         (!stagedChanges.isEmpty
-            || !stagedOffensivePitchChanges.isEmpty
+            || stagedOffensivePitchChanges.contains {
+                $0.proposedResult != $0.originalResult
+            }
             || stagedBallInPlayChanges.contains { $0.proposedPlay != $0.originalPlay }
             || !stagedLogicalPlayDeletions.isEmpty)
             && firstInvalidRecord == nil
@@ -289,13 +291,13 @@ struct DefensiveLogicalPlayDeletionSession: Identifiable {
 
 struct DefensiveLogicalPlayDeletionPreview {
     let session: DefensiveLogicalPlayDeletionSession
-    let correctionSession: DefensiveEventCorrectionSession
+    let correctionSession: GameEventCorrectionSession
 
     var snapshot: LiveGameSnapshot {
         correctionSession.snapshot
     }
 
-    var firstInvalidRecord: DefensiveEventCorrectionProblem? {
+    var firstInvalidRecord: GameEventCorrectionProblem? {
         correctionSession.firstInvalidRecord
     }
 
@@ -325,8 +327,8 @@ struct DefensiveBallInPlayEditPreview {
     let session: DefensiveBallInPlayEditSession
     let proposedPlay: BallInPlayEvent
     let snapshot: LiveGameSnapshot
-    let firstInvalidRecord: DefensiveEventCorrectionProblem?
-    let correctionSession: DefensiveEventCorrectionSession?
+    let firstInvalidRecord: GameEventCorrectionProblem?
+    let correctionSession: GameEventCorrectionSession?
 
     var canSave: Bool {
         proposedPlay != session.originalPlay && firstInvalidRecord == nil
@@ -338,14 +340,14 @@ struct DefensivePitchEditPreview {
     let proposedResult: PitchResult
     let snapshot: LiveGameSnapshot
     let firstInvalidRecord: DefensivePitchCorrectionInvalidRecord?
-    fileprivate let correctionSession: DefensiveEventCorrectionSession?
+    fileprivate let correctionSession: GameEventCorrectionSession?
 
     init(
         session: DefensivePitchEditSession,
         proposedResult: PitchResult,
         snapshot: LiveGameSnapshot,
         firstInvalidRecord: DefensivePitchCorrectionInvalidRecord?,
-        correctionSession: DefensiveEventCorrectionSession? = nil
+        correctionSession: GameEventCorrectionSession? = nil
     ) {
         self.session = session
         self.proposedResult = proposedResult
@@ -388,13 +390,13 @@ struct DefensivePitchDeletionPreview {
     let session: DefensivePitchDeletionSession
     let snapshot: LiveGameSnapshot
     let firstInvalidRecord: DefensivePitchCorrectionInvalidRecord?
-    fileprivate let correctionSession: DefensiveEventCorrectionSession?
+    fileprivate let correctionSession: GameEventCorrectionSession?
 
     init(
         session: DefensivePitchDeletionSession,
         snapshot: LiveGameSnapshot,
         firstInvalidRecord: DefensivePitchCorrectionInvalidRecord?,
-        correctionSession: DefensiveEventCorrectionSession? = nil
+        correctionSession: GameEventCorrectionSession? = nil
     ) {
         self.session = session
         self.snapshot = snapshot
@@ -431,7 +433,7 @@ enum GameEventCorrectionError: LocalizedError {
         case .latestActionChanged:
             "The latest scoring action changed before Undo was confirmed. Refresh and try again."
         case .staleTimeline:
-            "The game history changed before the correction was confirmed. Refresh and try again."
+            "The game history changed before the correction was confirmed. Return to Play History and reopen the event."
         case .pitchNotEditable:
             "This saved event is not an editable non-terminal defensive pitch."
         case .offensivePitchNotEditable:
@@ -554,14 +556,14 @@ enum GameEventCorrection {
         )
     }
 
-    static func beginDefensiveEventCorrection(
+    static func beginGameEventCorrection(
         game: Game,
         modelContext: ModelContext
-    ) throws -> DefensiveEventCorrectionSession {
+    ) throws -> GameEventCorrectionSession {
         let correctionContext = freshContext(from: modelContext)
         let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
         let snapshot = try validatedSnapshot(game: game, records: records)
-        return DefensiveEventCorrectionSession(
+        return GameEventCorrectionSession(
             gameID: game.id,
             stagedChanges: [],
             stagedOffensivePitchChanges: [],
@@ -575,11 +577,11 @@ enum GameEventCorrection {
 
     static func stagePitchDeletion(
         recordID: UUID,
-        in session: DefensiveEventCorrectionSession,
+        in session: GameEventCorrectionSession,
         game: Game,
         modelContext: ModelContext,
         projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
-    ) throws -> DefensiveEventCorrectionSession {
+    ) throws -> GameEventCorrectionSession {
         try stagePitchChange(
             recordID: recordID,
             action: .delete,
@@ -593,11 +595,11 @@ enum GameEventCorrection {
     static func stagePitchEdit(
         recordID: UUID,
         result: PitchResult,
-        in session: DefensiveEventCorrectionSession,
+        in session: GameEventCorrectionSession,
         game: Game,
         modelContext: ModelContext,
         projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
-    ) throws -> DefensiveEventCorrectionSession {
+    ) throws -> GameEventCorrectionSession {
         guard isEditablePitch(result) else {
             throw GameEventCorrectionError.pitchNotEditable
         }
@@ -614,11 +616,11 @@ enum GameEventCorrection {
     static func stageOffensivePitchEdit(
         recordID: UUID,
         result: OffensivePitchResult,
-        in session: DefensiveEventCorrectionSession,
+        in session: GameEventCorrectionSession,
         game: Game,
         modelContext: ModelContext,
         projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
-    ) throws -> DefensiveEventCorrectionSession {
+    ) throws -> GameEventCorrectionSession {
         try stageOffensivePitchChange(
             recordID: recordID,
             result: result,
@@ -629,8 +631,8 @@ enum GameEventCorrection {
         )
     }
 
-    static func saveDefensiveEventCorrection(
-        _ session: DefensiveEventCorrectionSession,
+    static func saveGameEventCorrection(
+        _ session: GameEventCorrectionSession,
         game: Game,
         modelContext: ModelContext,
         projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project,
@@ -819,12 +821,12 @@ enum GameEventCorrection {
         game: Game,
         modelContext: ModelContext,
         projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
-    ) throws -> DefensiveEventCorrectionSession {
+    ) throws -> GameEventCorrectionSession {
         guard session.gameID == game.id else {
             throw GameEventCorrectionError.gameMismatch
         }
 
-        let correctionSession = try beginDefensiveEventCorrection(
+        let correctionSession = try beginGameEventCorrection(
             game: game,
             modelContext: modelContext
         )
@@ -855,7 +857,7 @@ enum GameEventCorrection {
             throw GameEventCorrectionError.pitchNotEditable
         }
 
-        let correctionSession = try beginDefensiveEventCorrection(
+        let correctionSession = try beginGameEventCorrection(
             game: game,
             modelContext: modelContext
         )
@@ -898,7 +900,7 @@ enum GameEventCorrection {
         guard let correctionSession = preview.correctionSession else {
             throw GameEventCorrectionError.invalidCandidate
         }
-        return try saveDefensiveEventCorrection(
+        return try saveGameEventCorrection(
             correctionSession,
             game: game,
             modelContext: modelContext,
@@ -944,7 +946,7 @@ enum GameEventCorrection {
             throw GameEventCorrectionError.gameMismatch
         }
 
-        let correctionSession = try beginDefensiveEventCorrection(
+        let correctionSession = try beginGameEventCorrection(
             game: game,
             modelContext: modelContext
         )
@@ -982,7 +984,7 @@ enum GameEventCorrection {
         guard let correctionSession = preview.correctionSession else {
             throw GameEventCorrectionError.invalidCandidate
         }
-        return try saveDefensiveEventCorrection(
+        return try saveGameEventCorrection(
             correctionSession,
             game: game,
             modelContext: modelContext,
@@ -1095,7 +1097,7 @@ enum GameEventCorrection {
         guard deletionSession.gameID == game.id else {
             throw GameEventCorrectionError.gameMismatch
         }
-        let session = try beginDefensiveEventCorrection(game: game, modelContext: modelContext)
+        let session = try beginGameEventCorrection(game: game, modelContext: modelContext)
         guard session.expectedTimeline == deletionSession.expectedTimeline else {
             throw GameEventCorrectionError.staleTimeline
         }
@@ -1112,7 +1114,7 @@ enum GameEventCorrection {
             records: candidateRecords,
             projectBattingLines: projectBattingLines
         )
-        let correctionSession = DefensiveEventCorrectionSession(
+        let correctionSession = GameEventCorrectionSession(
             gameID: game.id,
             stagedChanges: session.stagedChanges,
             stagedOffensivePitchChanges: session.stagedOffensivePitchChanges,
@@ -1144,7 +1146,7 @@ enum GameEventCorrection {
         guard preview.canSave else {
             throw GameEventCorrectionError.invalidCandidate
         }
-        return try saveDefensiveEventCorrection(
+        return try saveGameEventCorrection(
             preview.correctionSession,
             game: game,
             modelContext: modelContext,
@@ -1177,7 +1179,7 @@ enum GameEventCorrection {
             throw GameEventCorrectionError.ballInPlayNotEditable
         }
 
-        let session = try beginDefensiveEventCorrection(game: game, modelContext: modelContext)
+        let session = try beginGameEventCorrection(game: game, modelContext: modelContext)
         guard session.expectedTimeline == editSession.expectedTimeline else {
             throw GameEventCorrectionError.staleTimeline
         }
@@ -1198,7 +1200,7 @@ enum GameEventCorrection {
             records: candidateRecords,
             projectBattingLines: projectBattingLines
         )
-        let correctionSession = DefensiveEventCorrectionSession(
+        let correctionSession = GameEventCorrectionSession(
             gameID: game.id,
             stagedChanges: session.stagedChanges,
             stagedOffensivePitchChanges: session.stagedOffensivePitchChanges,
@@ -1238,7 +1240,7 @@ enum GameEventCorrection {
               let correctionSession = preview.correctionSession else {
             throw GameEventCorrectionError.invalidCandidate
         }
-        return try saveDefensiveEventCorrection(
+        return try saveGameEventCorrection(
             correctionSession,
             game: game,
             modelContext: modelContext,
@@ -1250,11 +1252,11 @@ enum GameEventCorrection {
     static func stageBallInPlayEdit(
         recordID: UUID,
         play: BallInPlayEvent,
-        in session: DefensiveEventCorrectionSession,
+        in session: GameEventCorrectionSession,
         game: Game,
         modelContext: ModelContext,
         projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
-    ) throws -> DefensiveEventCorrectionSession {
+    ) throws -> GameEventCorrectionSession {
         guard session.gameID == game.id else {
             throw GameEventCorrectionError.gameMismatch
         }
@@ -1334,7 +1336,7 @@ enum GameEventCorrection {
             records: candidateRecords,
             projectBattingLines: projectBattingLines
         )
-        return DefensiveEventCorrectionSession(
+        return GameEventCorrectionSession(
             gameID: game.id,
             stagedChanges: session.stagedChanges,
             stagedOffensivePitchChanges: session.stagedOffensivePitchChanges,
@@ -1352,11 +1354,11 @@ enum GameEventCorrection {
     private static func stagePitchChange(
         recordID: UUID,
         action: DefensivePitchStagedAction,
-        in session: DefensiveEventCorrectionSession,
+        in session: GameEventCorrectionSession,
         game: Game,
         modelContext: ModelContext,
         projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines
-    ) throws -> DefensiveEventCorrectionSession {
+    ) throws -> GameEventCorrectionSession {
         guard session.gameID == game.id else {
             throw GameEventCorrectionError.gameMismatch
         }
@@ -1432,7 +1434,7 @@ enum GameEventCorrection {
             records: candidateRecords,
             projectBattingLines: projectBattingLines
         )
-        return DefensiveEventCorrectionSession(
+        return GameEventCorrectionSession(
             gameID: game.id,
             stagedChanges: changes,
             stagedOffensivePitchChanges: session.stagedOffensivePitchChanges,
@@ -1450,11 +1452,11 @@ enum GameEventCorrection {
     private static func stageOffensivePitchChange(
         recordID: UUID,
         result: OffensivePitchResult,
-        in session: DefensiveEventCorrectionSession,
+        in session: GameEventCorrectionSession,
         game: Game,
         modelContext: ModelContext,
         projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines
-    ) throws -> DefensiveEventCorrectionSession {
+    ) throws -> GameEventCorrectionSession {
         guard session.gameID == game.id else {
             throw GameEventCorrectionError.gameMismatch
         }
@@ -1536,7 +1538,7 @@ enum GameEventCorrection {
             records: candidateRecords,
             projectBattingLines: projectBattingLines
         )
-        return DefensiveEventCorrectionSession(
+        return GameEventCorrectionSession(
             gameID: game.id,
             stagedChanges: session.stagedChanges,
             stagedOffensivePitchChanges: offensivePitchChanges,
@@ -1615,7 +1617,7 @@ enum GameEventCorrection {
     private static func firstCorrectionProblem(
         in replay: GameEventReplay.Result,
         originalReplay: GameEventReplay.Result
-    ) -> DefensiveEventCorrectionProblem? {
+    ) -> GameEventCorrectionProblem? {
         guard let entry = replay.entries.first(where: { $0.rejection != nil }) else {
             return nil
         }
@@ -1681,7 +1683,7 @@ enum GameEventCorrection {
             canDeletePitch = false
             canEditBallInPlay = false
         }
-        return DefensiveEventCorrectionProblem(
+        return GameEventCorrectionProblem(
             id: entry.recordID,
             sequenceNumber: entry.sequenceNumber,
             context: context,
@@ -1744,7 +1746,7 @@ enum GameEventCorrection {
     }
 
     private static func legacyInvalidRecord(
-        in correctionSession: DefensiveEventCorrectionSession
+        in correctionSession: GameEventCorrectionSession
     ) -> DefensivePitchCorrectionInvalidRecord? {
         correctionSession.snapshot.replay.entries
             .first(where: { $0.rejection != nil })

@@ -12,7 +12,7 @@ struct DefensiveBallInPlayEditView: View {
     @State private var selectedOutcome: BallInPlayOutcome
     @State private var isConfirmingRunners = false
     @State private var proposedPlay: BallInPlayEvent?
-    @State private var correction = DefensiveEventCorrectionCoordinator()
+    @State private var correction = GameEventCorrectionCoordinator()
 
     init(
         game: Game,
@@ -62,7 +62,7 @@ struct DefensiveBallInPlayEditView: View {
                     }
 
                     if let proposedPlay, let correctionSession = correction.session {
-                        DefensiveEventCorrectionSections(
+                        GameEventCorrectionSections(
                             correctionSession: correctionSession,
                             homeAway: HomeAway(rawValue: game.homeAwayRawValue),
                             proposedSummary: "Proposed: \(playSummary(proposedPlay)) · "
@@ -220,7 +220,7 @@ struct DefensivePitchEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var selectedResult: PitchResult
-    @State private var correction = DefensiveEventCorrectionCoordinator()
+    @State private var correction = GameEventCorrectionCoordinator()
 
     init(
         game: Game,
@@ -270,7 +270,7 @@ struct DefensivePitchEditView: View {
                     }
 
                     if let correctionSession = correction.session {
-                        DefensiveEventCorrectionSections(
+                        GameEventCorrectionSections(
                             correctionSession: correctionSession,
                             homeAway: HomeAway(rawValue: game.homeAwayRawValue),
                             proposedSummary: "Proposed: \(selectedResult.label) · "
@@ -336,7 +336,7 @@ struct DefensivePitchEditView: View {
             return
         }
         do {
-            let session = try GameEventCorrection.beginDefensiveEventCorrection(
+            let session = try GameEventCorrection.beginGameEventCorrection(
                 game: game,
                 modelContext: modelContext
             )
@@ -363,7 +363,7 @@ struct DefensivePitchEditView: View {
         }
     }
 
-    private func proposedState(in correctionSession: DefensiveEventCorrectionSession) -> GameState {
+    private func proposedState(in correctionSession: GameEventCorrectionSession) -> GameState {
         correctionSession.snapshot.replay.entries.first(where: {
             $0.recordID == editSession.recordID
         })?.stateAfter ?? correctionSession.snapshot.replay.state
@@ -382,7 +382,8 @@ struct OffensivePitchEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var selectedResult: OffensivePitchResult
-    @State private var correction = DefensiveEventCorrectionCoordinator()
+    @State private var correction = GameEventCorrectionCoordinator()
+    @State private var hasStalePreview = false
 
     init(
         game: Game,
@@ -434,7 +435,7 @@ struct OffensivePitchEditView: View {
                     }
 
                     if let correctionSession = correction.session {
-                        DefensiveEventCorrectionSections(
+                        GameEventCorrectionSections(
                             correctionSession: correctionSession,
                             homeAway: HomeAway(rawValue: game.homeAwayRawValue),
                             proposedSummary: "Proposed: \(selectedResult.label) · "
@@ -477,7 +478,15 @@ struct OffensivePitchEditView: View {
                 get: { correction.errorMessage != nil },
                 set: { if !$0 { correction.errorMessage = nil } }
             )) {
-                Button("OK", role: .cancel) { correction.errorMessage = nil }
+                if hasStalePreview {
+                    Button("Return to Play History") {
+                        correction.errorMessage = nil
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("trackedPitchEdit.reopen")
+                } else {
+                    Button("OK", role: .cancel) { correction.errorMessage = nil }
+                }
             } message: {
                 Text(correction.errorMessage ?? "The proposed pitch could not be replayed safely.")
             }
@@ -499,6 +508,12 @@ struct OffensivePitchEditView: View {
             )
         } catch {
             correction.session = nil
+            if let correctionError = error as? GameEventCorrectionError,
+               case .staleTimeline = correctionError {
+                hasStalePreview = true
+            } else {
+                hasStalePreview = false
+            }
             correction.errorMessage = error.localizedDescription
         }
     }
@@ -513,7 +528,7 @@ struct OffensivePitchEditView: View {
         }
     }
 
-    private func proposedState(in correctionSession: DefensiveEventCorrectionSession) -> GameState {
+    private func proposedState(in correctionSession: GameEventCorrectionSession) -> GameState {
         correctionSession.snapshot.replay.entries.first(where: {
             $0.recordID == editSession.recordID
         })?.stateAfter ?? correctionSession.snapshot.replay.state
@@ -531,7 +546,7 @@ struct DefensivePitchDeletionView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @State private var correction = DefensiveEventCorrectionCoordinator()
+    @State private var correction = GameEventCorrectionCoordinator()
 
     var body: some View {
         NavigationStack {
@@ -552,7 +567,7 @@ struct DefensivePitchDeletionView: View {
                     }
 
                     if let correctionSession = correction.session {
-                        DefensiveEventCorrectionSections(
+                        GameEventCorrectionSections(
                             correctionSession: correctionSession,
                             homeAway: HomeAway(rawValue: game.homeAwayRawValue),
                             stageChange: { problem, action in
@@ -616,7 +631,7 @@ struct DefensivePitchDeletionView: View {
     private func stage() {
         guard correction.session == nil else { return }
         do {
-            let session = try GameEventCorrection.beginDefensiveEventCorrection(
+            let session = try GameEventCorrection.beginGameEventCorrection(
                 game: game,
                 modelContext: modelContext
             )
@@ -653,7 +668,7 @@ struct DefensiveLogicalPlayDeletionView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @State private var correction = DefensiveEventCorrectionCoordinator()
+    @State private var correction = GameEventCorrectionCoordinator()
 
     var body: some View {
         NavigationStack {
@@ -675,7 +690,7 @@ struct DefensiveLogicalPlayDeletionView: View {
                     }
 
                     if let correctionSession = correction.session {
-                        DefensiveEventCorrectionSections(
+                        GameEventCorrectionSections(
                             correctionSession: correctionSession,
                             homeAway: HomeAway(rawValue: game.homeAwayRawValue),
                             stageChange: { problem, action in
@@ -755,7 +770,7 @@ struct DefensiveLogicalPlayDeletionView: View {
     }
 }
 
-private enum DefensiveEventRepairAction {
+private enum GameEventRepairAction {
     case edit(PitchResult)
     case editOffensivePitch(OffensivePitchResult)
     case delete
@@ -764,13 +779,13 @@ private enum DefensiveEventRepairAction {
 
 @MainActor
 @Observable
-private final class DefensiveEventCorrectionCoordinator {
-    var session: DefensiveEventCorrectionSession?
+private final class GameEventCorrectionCoordinator {
+    var session: GameEventCorrectionSession?
     var errorMessage: String?
 
     func stageRepair(
         recordID: UUID,
-        action: DefensiveEventRepairAction,
+        action: GameEventRepairAction,
         game: Game,
         modelContext: ModelContext
     ) {
@@ -821,7 +836,7 @@ private final class DefensiveEventCorrectionCoordinator {
     ) -> Bool {
         guard let session, session.canSave else { return false }
         do {
-            try liveSession.saveDefensiveEventCorrection(
+            try liveSession.saveGameEventCorrection(
                 session,
                 game: game,
                 modelContext: modelContext
@@ -834,7 +849,7 @@ private final class DefensiveEventCorrectionCoordinator {
     }
 }
 
-private extension DefensiveEventCorrectionSession {
+private extension GameEventCorrectionSession {
     func historyEntry(for recordID: UUID) -> PlayHistoryEntry? {
         snapshot.history.sections
             .flatMap(\.entries)
@@ -842,21 +857,21 @@ private extension DefensiveEventCorrectionSession {
     }
 }
 
-private struct DefensiveEventCorrectionSections: View {
-    let correctionSession: DefensiveEventCorrectionSession
+private struct GameEventCorrectionSections: View {
+    let correctionSession: GameEventCorrectionSession
     let homeAway: HomeAway?
     let proposedSummary: String?
     let proposedIdentifier: String?
-    let stageChange: (DefensiveEventCorrectionProblem, DefensiveEventRepairAction) -> Void
+    let stageChange: (GameEventCorrectionProblem, GameEventRepairAction) -> Void
 
     init(
-        correctionSession: DefensiveEventCorrectionSession,
+        correctionSession: GameEventCorrectionSession,
         homeAway: HomeAway?,
         proposedSummary: String? = nil,
         proposedIdentifier: String? = nil,
         stageChange: @escaping (
-            DefensiveEventCorrectionProblem,
-            DefensiveEventRepairAction
+            GameEventCorrectionProblem,
+            GameEventRepairAction
         ) -> Void
     ) {
         self.correctionSession = correctionSession
@@ -883,7 +898,7 @@ private struct DefensiveEventCorrectionSections: View {
                     } else {
                         nil
                     }
-                    DefensiveEventCorrectionProblemView(
+                    GameEventCorrectionProblemView(
                         problem: invalid,
                         historyEntry: correctionSession.historyEntry(for: invalid.id),
                         affectedPlay: affectedPlay,
@@ -951,30 +966,30 @@ private struct DefensiveEventCorrectionSections: View {
     }
 }
 
-private struct DefensiveEventCorrectionProblemView: View {
+private struct GameEventCorrectionProblemView: View {
     private static let editableResults: [PitchResult] = [
         .ball, .calledStrike, .swingingStrike, .foul
     ]
     private static let editableOffensiveResults = OffensivePitchResult.allCases
 
-    let problem: DefensiveEventCorrectionProblem
+    let problem: GameEventCorrectionProblem
     let historyEntry: PlayHistoryEntry?
     let affectedPlay: BallInPlayEvent?
     let affectedState: GameState?
     let homeAway: HomeAway?
-    let stageChange: (DefensiveEventRepairAction) -> Void
+    let stageChange: (GameEventRepairAction) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedOutcome: BallInPlayOutcome
     @State private var isConfirmingRunners = false
 
     init(
-        problem: DefensiveEventCorrectionProblem,
+        problem: GameEventCorrectionProblem,
         historyEntry: PlayHistoryEntry?,
         affectedPlay: BallInPlayEvent?,
         affectedState: GameState?,
         homeAway: HomeAway?,
-        stageChange: @escaping (DefensiveEventRepairAction) -> Void
+        stageChange: @escaping (GameEventRepairAction) -> Void
     ) {
         self.problem = problem
         self.historyEntry = historyEntry
