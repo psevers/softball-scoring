@@ -58,7 +58,7 @@ struct PlayHistoryView: View {
         }
     }
 
-    private var alertedHistoryPage: some View {
+    private var undoAlertedHistoryPage: some View {
         historyPage
         .alert(
             session.undoCandidate?.confirmationTitle ?? "Undo latest action?",
@@ -80,6 +80,10 @@ struct PlayHistoryView: View {
         } message: {
             Text(correctionError ?? "The scorebook correction could not be completed.")
         }
+    }
+
+    private var pitchAlertedHistoryPage: some View {
+        undoAlertedHistoryPage
         .alert(
             pendingPitchDeletionSession?.confirmationTitle ?? "Delete pitch?",
             isPresented: Binding(
@@ -116,6 +120,10 @@ struct PlayHistoryView: View {
         } message: { deletionSession in
             Text(deletionSession.confirmationDetail)
         }
+    }
+
+    private var alertedHistoryPage: some View {
+        pitchAlertedHistoryPage
         .alert(
             pendingLogicalPlayDeletionSession?.confirmationTitle ?? "Delete completed play?",
             isPresented: Binding(
