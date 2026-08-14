@@ -102,11 +102,15 @@ Live Game → Play History → expand completed Ball In Play → Edit Play
   ↓
 review the counted In Play pitch and current result separately
   ↓
-choose corrected hit / home run / error / fielder's choice / ordinary out / sacrifice
+choose corrected hit / home run / error / fielder's choice / ordinary out / sacrifice / double play
   ↓
-confirm batter and every occupied runner destination, counted home touch, and RBI
+confirm batter and every occupied runner destination, including each explicit out source
   ↓
-preview score / bases / outs / opponent batter / pitcher total / downstream history
+if the play creates the third out with a home touch, classify force/batter-runner or timing
+  ↓
+confirm legally counted runs and RBI
+  ↓
+preview score before the inning transition, then cleared count/bases/outs and next batter state
   ↓
 Cancel unchanged, or Save one atomic result replacement → refreshed History + live scoring
 ```

@@ -5230,6 +5230,240 @@ extension PersistenceTests {
         #expect(try reloaded.records.last?.decoded().body == .ballInPlay(proposedPlay))
     }
 
+    @Test func defensiveDoublePlayCorrectionRecordsTwoExplicitOuts() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let originalPlay = BallInPlayEvent(
+            outcome: .reachedOnError,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .first),
+                .init(source: .first, destination: .second)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+        let records = try defensiveBallInPlayRecords(
+            for: [
+                .init(
+                    outcome: .single,
+                    opponentBatterSlot: 1,
+                    movements: [.init(source: .batter, destination: .first)],
+                    rbi: 0,
+                    thirdOutRunsCounted: nil
+                ),
+                originalPlay
+            ],
+            gameID: game.id,
+            pitcherID: pitcherID
+        )
+        records.forEach(context.insert)
+        try context.save()
+
+        let target = try #require(records.last)
+        let edit = try GameEventCorrection.prepareDefensiveBallInPlayEdit(
+            recordID: target.id,
+            game: game,
+            modelContext: context
+        )
+        let doublePlay = BallInPlayEvent(
+            outcome: .doublePlay,
+            opponentBatterSlot: 2,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .first, destination: .out)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+        let preview = try GameEventCorrection.stageDefensiveBallInPlayEdit(
+            doublePlay,
+            in: edit,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(preview.canSave)
+        #expect(preview.snapshot.replay.rejectedRecordIDs.isEmpty)
+        #expect(preview.snapshot.replay.state.outs == 2)
+        #expect(preview.snapshot.replay.state.baseRunnerSlots == [nil, nil, nil])
+        #expect(preview.snapshot.replay.state.currentOpponentBatterSlot == 3)
+        #expect(preview.snapshot.replay.state.pitchCount(for: pitcherID).total == 2)
+
+        _ = try GameEventCorrection.saveDefensiveBallInPlayEdit(
+            preview,
+            game: game,
+            modelContext: context
+        )
+        let reloaded = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+
+        #expect(reloaded.replay.state == preview.snapshot.replay.state)
+        #expect(reloaded.records.map(\.id) == records.map(\.id))
+        #expect(try reloaded.records.last?.decoded().body == .ballInPlay(doublePlay))
+    }
+
+    @Test func thirdOutCorrectionRecalculatesForceAndTimingRunsBeforeInningTransition() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let forceThirdOut = BallInPlayEvent(
+            outcome: .doublePlay,
+            opponentBatterSlot: 4,
+            movements: [
+                .init(source: .batter, destination: .out),
+                .init(source: .first, destination: .out),
+                .init(source: .third, destination: .home)
+            ],
+            rbi: 0,
+            thirdOutRunsCounted: 0,
+            thirdOutClassification: .forceOrBatterRunner
+        )
+        let records = try defensiveBallInPlayRecords(
+            for: [
+                .init(
+                    outcome: .triple,
+                    opponentBatterSlot: 1,
+                    movements: [.init(source: .batter, destination: .third)],
+                    rbi: 0,
+                    thirdOutRunsCounted: nil
+                ),
+                .init(
+                    outcome: .single,
+                    opponentBatterSlot: 2,
+                    movements: [
+                        .init(source: .batter, destination: .first),
+                        .init(source: .third, destination: .third)
+                    ],
+                    rbi: 0,
+                    thirdOutRunsCounted: nil
+                ),
+                .init(
+                    outcome: .flyOut,
+                    opponentBatterSlot: 3,
+                    movements: [
+                        .init(source: .batter, destination: .out),
+                        .init(source: .first, destination: .first),
+                        .init(source: .third, destination: .third)
+                    ],
+                    rbi: 0,
+                    thirdOutRunsCounted: nil
+                ),
+                forceThirdOut
+            ],
+            gameID: game.id,
+            pitcherID: pitcherID
+        )
+        records.forEach(context.insert)
+        try context.save()
+
+        let original = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        #expect(original.replay.state.awayScore == 0)
+        #expect(original.replay.state.half == .bottom)
+        #expect(original.replay.state.currentOpponentBatterSlot == 5)
+
+        let target = try #require(records.last)
+        let edit = try GameEventCorrection.prepareDefensiveBallInPlayEdit(
+            recordID: target.id,
+            game: game,
+            modelContext: context
+        )
+        let timingThirdOut = BallInPlayEvent(
+            outcome: .doublePlay,
+            opponentBatterSlot: 4,
+            movements: forceThirdOut.movements,
+            rbi: 1,
+            thirdOutRunsCounted: 1,
+            thirdOutClassification: .timingPlay
+        )
+        let preview = try GameEventCorrection.stageDefensiveBallInPlayEdit(
+            timingThirdOut,
+            in: edit,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(preview.canSave)
+        #expect(preview.snapshot.replay.rejectedRecordIDs.isEmpty)
+        #expect(preview.snapshot.replay.state.awayScore == 1)
+        #expect(preview.snapshot.replay.state.half == .bottom)
+        #expect(preview.snapshot.replay.state.outs == 0)
+        #expect(preview.snapshot.replay.state.balls == 0)
+        #expect(preview.snapshot.replay.state.strikes == 0)
+        #expect(preview.snapshot.replay.state.baseRunnerSlots == [nil, nil, nil])
+        #expect(preview.snapshot.replay.state.currentOpponentBatterSlot == 5)
+        #expect(preview.snapshot.replay.state.currentTrackedBatterSlot == 1)
+        #expect(preview.snapshot.replay.state.pitchCount(for: pitcherID).total == 4)
+
+        let invalidThirdOuts = [
+            BallInPlayEvent(
+                outcome: .doublePlay,
+                opponentBatterSlot: 4,
+                movements: forceThirdOut.movements,
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ),
+            BallInPlayEvent(
+                outcome: .doublePlay,
+                opponentBatterSlot: 4,
+                movements: forceThirdOut.movements,
+                rbi: 1,
+                thirdOutRunsCounted: 1,
+                thirdOutClassification: .forceOrBatterRunner
+            ),
+            BallInPlayEvent(
+                outcome: .doublePlay,
+                opponentBatterSlot: 4,
+                movements: [
+                    .init(source: .batter, destination: .out),
+                    .init(source: .first, destination: .out),
+                    .init(source: .third, destination: .out)
+                ],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            )
+        ]
+        for invalidThirdOut in invalidThirdOuts {
+            #expect(throws: GameEventCorrectionError.ballInPlayNotEditable) {
+                _ = try GameEventCorrection.stageDefensiveBallInPlayEdit(
+                    invalidThirdOut,
+                    in: edit,
+                    game: game,
+                    modelContext: context
+                )
+            }
+        }
+
+        let unchanged = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        #expect(unchanged.replay.state.awayScore == 0)
+        #expect(try unchanged.records.last?.decoded().body == .ballInPlay(forceThirdOut))
+
+        _ = try GameEventCorrection.saveDefensiveBallInPlayEdit(
+            preview,
+            game: game,
+            modelContext: context
+        )
+        let reloaded = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+
+        #expect(reloaded.replay.state == preview.snapshot.replay.state)
+        #expect(reloaded.records.map(\.id) == records.map(\.id))
+        #expect(try reloaded.records.last?.decoded().body == .ballInPlay(timingThirdOut))
+    }
+
     @Test(arguments: defensiveScoringCorrectionScenarios)
     fileprivate func representativeDefensiveScoringCorrectionsReplay(
         _ scenario: DefensiveScoringCorrectionScenario

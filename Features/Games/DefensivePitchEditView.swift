@@ -112,7 +112,6 @@ struct DefensiveBallInPlayEditView: View {
                     homeAway: editSession.homeAway,
                     initialPlay: initialPlay,
                     allowsScoring: true,
-                    restrictsToSingleNonThirdOut: true,
                     title: "Confirm Correction",
                     confirmationTitle: "Preview",
                     onCancel: { isConfirmingRunners = false },
@@ -139,7 +138,8 @@ struct DefensiveBallInPlayEditView: View {
             opponentBatterSlot: editSession.opponentBatterSlot,
             movements: sourcePlay.movements,
             rbi: sourcePlay.rbi,
-            thirdOutRunsCounted: nil
+            thirdOutRunsCounted: sourcePlay.thirdOutRunsCounted,
+            thirdOutClassification: sourcePlay.thirdOutClassification
         )
     }
 
@@ -173,11 +173,20 @@ struct DefensiveBallInPlayEditView: View {
         let movements = play.movements
             .map { "\($0.source.baseLabel) to \($0.destination.label)" }
             .joined(separator: "; ")
-        let runs = play.movements.filter { $0.destination == .home }.count
-        let scoring = runs > 0
+        let homeTouches = play.movements.filter { $0.destination == .home }.count
+        let outsOnPlay = play.movements.filter { $0.destination == .out }.count
+        let runs = editSession.stateBefore.outs + outsOnPlay == 3
+            ? play.thirdOutRunsCounted ?? 0
+            : homeTouches
+        let scoring = homeTouches > 0
             ? " · \(runs) \(runs == 1 ? "run" : "runs") · \(play.rbi) RBI"
             : ""
-        return "\(play.outcome.label) · \(movements)\(scoring)"
+        let thirdOut = switch play.thirdOutClassification {
+        case .forceOrBatterRunner: " · Force / batter-runner third out"
+        case .timingPlay: " · Timing play third out"
+        case nil: ""
+        }
+        return "\(play.outcome.label) · \(movements)\(scoring)\(thirdOut)"
     }
 
     private func stateSummary(_ state: GameState) -> String {
@@ -190,9 +199,12 @@ struct DefensiveBallInPlayEditView: View {
             state.secondBaseRunnerSlot.map { "2B \($0)" },
             state.thirdBaseRunnerSlot.map { "3B \($0)" }
         ].compactMap { $0 }.joined(separator: ", ")
-        return "Score \(opponentScore)–\(trackedScore) · Pitcher \(pitchTotal) pitches · "
-            + "Outs \(state.outs) · Bases \(bases.isEmpty ? "empty" : bases) · "
-            + "Opponent batter \(state.currentOpponentBatterSlot)"
+        return "\(state.half.displayName) \(state.inning) · "
+            + "Score \(opponentScore)–\(trackedScore) · Pitcher \(pitchTotal) pitches · "
+            + "Count \(state.balls)–\(state.strikes) · Outs \(state.outs) · "
+            + "Bases \(bases.isEmpty ? "empty" : bases) · "
+            + "Opponent batter \(state.currentOpponentBatterSlot) · "
+            + "Tracked batter \(state.currentTrackedBatterSlot)"
     }
 }
 
@@ -772,7 +784,6 @@ private struct DefensiveEventCorrectionProblemView: View {
                     homeAway: homeAway,
                     initialPlay: affectedPlay.outcome == selectedOutcome ? affectedPlay : nil,
                     allowsScoring: true,
-                    restrictsToSingleNonThirdOut: true,
                     title: "Repair Affected Play",
                     confirmationTitle: "Stage Repair",
                     onCancel: { isConfirmingRunners = false },
