@@ -4,9 +4,16 @@ import SwiftData
 
 @MainActor
 enum UITestData {
-    static func makeContainer() throws -> ModelContainer {
-        let container = try AppModelContainer.make(inMemory: true)
+    static func makeContainer(storeURL: URL? = nil) throws -> ModelContainer {
+        let container = try AppModelContainer.make(
+            inMemory: storeURL == nil,
+            storeURL: storeURL
+        )
         let context = container.mainContext
+        if storeURL != nil,
+           try !context.fetch(FetchDescriptor<Team>()).isEmpty {
+            return container
+        }
 
         context.insert(Team(name: "UI Test Team", abbreviation: "UIT"))
         let season = Season(name: "UI Test Season", isActive: true)

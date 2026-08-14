@@ -10,6 +10,7 @@ struct PlayHistoryView: View {
     @State private var isConfirmingUndo = false
     @State private var correctionError: String?
     @State private var pitchEditSession: DefensivePitchEditSession?
+    @State private var ballInPlayEditSession: DefensiveBallInPlayEditSession?
     @State private var pendingPitchDeletionSession: DefensivePitchDeletionSession?
     @State private var pitchDeletionSession: DefensivePitchDeletionSession?
 
@@ -86,6 +87,13 @@ struct PlayHistoryView: View {
         }
         .sheet(item: $pitchEditSession) { editSession in
             DefensivePitchEditView(
+                game: game,
+                editSession: editSession,
+                liveSession: session
+            )
+        }
+        .sheet(item: $ballInPlayEditSession) { editSession in
+            DefensiveBallInPlayEditView(
                 game: game,
                 editSession: editSession,
                 liveSession: session
@@ -192,6 +200,20 @@ struct PlayHistoryView: View {
                             )
                             .accessibilityIdentifier("history.deletePitch.\(component.sequenceNumber)")
                         }
+
+                        if let outcome = component.editableDefensiveBallInPlayOutcome {
+                            Button {
+                                beginBallInPlayEdit(recordID: component.recordID)
+                            } label: {
+                                Label("Edit Play", systemImage: "square.and.pencil")
+                                    .frame(minHeight: AppTheme.TouchTarget.minimum)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel(
+                                "Edit \(outcome.label) result, sequence \(component.sequenceNumber)"
+                            )
+                            .accessibilityIdentifier("history.editPlay.\(component.sequenceNumber)")
+                        }
                     }
                 }
             }
@@ -294,6 +316,19 @@ struct PlayHistoryView: View {
     private func beginPitchDeletion(recordID: UUID) {
         do {
             pendingPitchDeletionSession = try GameEventCorrection.prepareDefensivePitchDeletion(
+                recordID: recordID,
+                game: game,
+                modelContext: modelContext
+            )
+        } catch {
+            session.refresh(game: game, modelContext: modelContext)
+            correctionError = error.localizedDescription
+        }
+    }
+
+    private func beginBallInPlayEdit(recordID: UUID) {
+        do {
+            ballInPlayEditSession = try GameEventCorrection.prepareDefensiveBallInPlayEdit(
                 recordID: recordID,
                 game: game,
                 modelContext: modelContext

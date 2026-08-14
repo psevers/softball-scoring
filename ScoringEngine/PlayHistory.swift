@@ -38,6 +38,7 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
     let isPitch: Bool
     let defensivePitchResult: PitchResult?
     let editableDefensivePitchResult: PitchResult?
+    let editableDefensiveBallInPlayOutcome: BallInPlayOutcome?
 
     init(
         recordID: UUID,
@@ -47,7 +48,8 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
         accessibilityDescription: String,
         isPitch: Bool,
         defensivePitchResult: PitchResult? = nil,
-        editableDefensivePitchResult: PitchResult? = nil
+        editableDefensivePitchResult: PitchResult? = nil,
+        editableDefensiveBallInPlayOutcome: BallInPlayOutcome? = nil
     ) {
         self.recordID = recordID
         self.sequenceNumber = sequenceNumber
@@ -57,6 +59,7 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
         self.isPitch = isPitch
         self.defensivePitchResult = defensivePitchResult
         self.editableDefensivePitchResult = editableDefensivePitchResult
+        self.editableDefensiveBallInPlayOutcome = editableDefensiveBallInPlayOutcome
     }
 }
 
@@ -443,7 +446,11 @@ enum PlayHistoryProjector {
             summary: summary,
             detail: stateChangeDescription(from: trace.stateBefore, to: trace.stateAfter),
             accessibilityDescription: summary,
-            isPitch: false
+            isPitch: false,
+            editableDefensiveBallInPlayOutcome: BallInPlayValidator.supportsNonScoringCorrection(
+                play,
+                stateBefore: trace.stateBefore
+            ) ? play.outcome : nil
         )
     }
 

@@ -71,3 +71,7 @@ A staged replacement of one earlier non-terminal defensive Ball, Called Strike, 
 ## Defensive pitch deletion
 
 A staged removal of one earlier defensive pitch. The candidate timeline replays without that exact record; Save remains unavailable when the removal invalidates a downstream record. A valid save preserves every surviving record's identity, sequence, and timestamp, including the deleted sequence gap.
+
+## Defensive Ball In Play edit
+
+A staged replacement of one completed, non-scoring defensive Ball In Play result. The preceding In Play pitch remains counted while the scorer confirms the corrected outcome and every event-time runner destination. This editor initially excludes home touches, multi-out plays, and third-out plays. A valid save preserves the result record's identity, sequence, and timestamp and rebuilds every later state from the candidate timeline.

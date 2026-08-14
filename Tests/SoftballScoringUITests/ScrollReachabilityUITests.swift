@@ -203,6 +203,146 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(correctedDouble.label.contains("2B · Batter to 2B"))
     }
 
+    func testCorrectDefensiveBallInPlayResultPersistsReplayedBasesAndOuts() {
+        let app = launchApp(
+            atAccessibilityExtraExtraExtraLarge: true,
+            persistentStoreName: "play-edit-\(UUID().uuidString)"
+        )
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Ball In Play Undo Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let score = app.staticTexts["game.score"]
+        let count = app.staticTexts["game.count"]
+        XCTAssertTrue(score.waitForExistence(timeout: 3))
+        XCTAssertTrue(count.waitForExistence(timeout: 3))
+        XCTAssertEqual(score.label, "Top of inning 1. UI Ball In Play Undo Opponent 0, Us 0")
+        XCTAssertEqual(count.value as? String, "0 outs, on 1B")
+
+        func correctPlay(
+            outcome: String,
+            destination: String,
+            proposedSummary: String,
+            replaySummary: String,
+            historySummary: String
+        ) {
+            app.buttons["game.history"].tap()
+            XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+            app.buttons["history.entry.1"].tap()
+            let editPlay = app.buttons["history.editPlay.2"]
+            XCTAssertTrue(editPlay.waitForExistence(timeout: 3))
+            XCTAssertGreaterThanOrEqual(editPlay.frame.height, 44)
+            editPlay.tap()
+
+            XCTAssertTrue(app.navigationBars["Edit Play"].waitForExistence(timeout: 3))
+            XCTAssertEqual(
+                app.staticTexts["playEdit.countedPitch"].label,
+                "Ball In Play pitch · Sequence 1 · Counted"
+            )
+            let editForm = app.collectionViews.firstMatch
+            XCTAssertTrue(editForm.waitForExistence(timeout: 3))
+            XCTAssertFalse(app.buttons["playEdit.save"].isEnabled)
+
+            let outcomePicker = app.buttons["playEdit.outcomePicker"]
+            let saveButton = app.buttons["playEdit.save"]
+            XCTAssertTrue(swipeWithinUntilHittable(
+                outcomePicker,
+                in: editForm,
+                above: saveButton
+            ))
+            outcomePicker.tap()
+            XCTAssertTrue(app.buttons[outcome].waitForExistence(timeout: 3))
+            app.buttons[outcome].tap()
+            XCTAssertTrue(waitForValue(outcome, on: outcomePicker))
+            let confirmRunners = app.buttons["playEdit.confirmRunners"]
+            XCTAssertTrue(swipeWithinUntilHittable(
+                confirmRunners,
+                in: editForm,
+                above: saveButton
+            ))
+            confirmRunners.tap()
+
+            XCTAssertTrue(app.navigationBars["Confirm Correction"].waitForExistence(timeout: 3))
+            let batterDestination = app.buttons["runner.destination.batter"]
+            XCTAssertTrue(batterDestination.waitForExistence(timeout: 3))
+            XCTAssertGreaterThanOrEqual(batterDestination.frame.height, 44)
+            batterDestination.tap()
+            XCTAssertTrue(app.buttons[destination].waitForExistence(timeout: 3))
+            app.buttons[destination].tap()
+            app.buttons["Preview"].tap()
+
+            let proposed = app.staticTexts["playEdit.proposed"]
+            XCTAssertTrue(swipeWithinUntilHittable(
+                proposed,
+                in: editForm,
+                above: saveButton
+            ))
+            XCTAssertTrue(
+                proposed.label.contains(proposedSummary),
+                "Expected \(outcome) summary \(proposedSummary), got \(proposed.label)"
+            )
+            XCTAssertTrue(
+                proposed.label.contains(replaySummary),
+                "Expected \(outcome) replay \(replaySummary), got \(proposed.label)"
+            )
+            let save = app.buttons["playEdit.save"]
+            XCTAssertTrue(save.isEnabled)
+            XCTAssertGreaterThanOrEqual(save.frame.height, 44)
+            save.tap()
+
+            XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+            XCTAssertTrue(app.buttons["history.entry.1"].label.contains(historySummary))
+            app.navigationBars["Play History"].buttons.firstMatch.tap()
+            XCTAssertTrue(
+                app.navigationBars["UI Ball In Play Undo Opponent"]
+                    .waitForExistence(timeout: 3)
+            )
+        }
+
+        correctPlay(
+            outcome: "Reached on Error",
+            destination: "1B",
+            proposedSummary: "Proposed: Reached on Error · Batter to 1B",
+            replaySummary: "Outs 0 · Bases 1B 1 · Opponent batter 2",
+            historySummary: "E · Batter to 1B"
+        )
+        correctPlay(
+            outcome: "Triple",
+            destination: "3B",
+            proposedSummary: "Proposed: Triple · Batter to 3B",
+            replaySummary: "Outs 0 · Bases 3B 1 · Opponent batter 2",
+            historySummary: "3B · Batter to 3B"
+        )
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Games"].tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertEqual(score.label, "Top of inning 1. UI Ball In Play Undo Opponent 0, Us 0")
+        XCTAssertEqual(count.value as? String, "0 outs, on 3B")
+
+        correctPlay(
+            outcome: "Ground Out",
+            destination: "Out",
+            proposedSummary: "Proposed: Ground Out · Batter to Out",
+            replaySummary: "Outs 1 · Bases empty · Opponent batter 2",
+            historySummary: "GO · Batter to Out"
+        )
+        XCTAssertEqual(score.label, "Top of inning 1. UI Ball In Play Undo Opponent 0, Us 0")
+        XCTAssertEqual(count.value as? String, "1 out, bases empty")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Games"].tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertEqual(count.value as? String, "1 out, bases empty")
+    }
+
     func testUndoTrackedTeamPitchFromPlayHistoryRestoresLiveBatterAndCount() {
         let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()
@@ -1093,7 +1233,8 @@ final class ScrollReachabilityUITests: XCTestCase {
 
     private func launchApp(
         atAccessibilityTextSize: Bool = false,
-        atAccessibilityExtraExtraExtraLarge: Bool = false
+        atAccessibilityExtraExtraExtraLarge: Bool = false,
+        persistentStoreName: String? = nil
     ) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -1110,6 +1251,14 @@ final class ScrollReachabilityUITests: XCTestCase {
             "-UIPreferredContentSizeCategoryName",
             contentSizeCategory
         ]
+        if let persistentStoreName {
+            app.launchArguments += [
+                "-uiTestingStore",
+                FileManager.default.temporaryDirectory
+                    .appendingPathComponent("\(persistentStoreName).store")
+                    .path
+            ]
+        }
         app.launch()
         return app
     }
@@ -1198,13 +1347,19 @@ final class ScrollReachabilityUITests: XCTestCase {
 
     private func swipeWithinUntilHittable(
         _ element: XCUIElement,
-        in scrollContainer: XCUIElement
+        in scrollContainer: XCUIElement,
+        above obstruction: XCUIElement? = nil
     ) -> Bool {
         let deadline = Date().addingTimeInterval(20)
-        while !element.isHittable && Date() < deadline {
-            scrollContainer.swipeUp()
+        while !isSafelyHittable(element, in: scrollContainer, above: obstruction),
+              Date() < deadline {
+            if element.exists && element.frame.minY < scrollContainer.frame.minY {
+                scrollContainer.swipeDown()
+            } else {
+                scrollContainer.swipeUp()
+            }
         }
-        return element.isHittable
+        return isSafelyHittable(element, in: scrollContainer, above: obstruction)
     }
 
     private func scrollFromTopUntilHittable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
