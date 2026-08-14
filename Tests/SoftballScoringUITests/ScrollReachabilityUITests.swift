@@ -593,6 +593,136 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertEqual(count.value as? String, "0 outs, bases empty")
     }
 
+    func testTrackedTeamPlateAppearanceEditPersistsHitErrorAndOutAtStandardText() {
+        exerciseTrackedTeamPlateAppearanceEdit(atAccessibilityTextSize: false)
+    }
+
+    func testTrackedTeamPlateAppearanceEditPersistsHitErrorAndOutAtAccessibilityXL() {
+        exerciseTrackedTeamPlateAppearanceEdit(atAccessibilityTextSize: true)
+    }
+
+    private func exerciseTrackedTeamPlateAppearanceEdit(atAccessibilityTextSize: Bool) {
+        let app = launchApp(
+            atAccessibilityTextSize: atAccessibilityTextSize,
+            persistentStoreName: "tracked-play-edit-\(UUID().uuidString)"
+        )
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let single = app.buttons["1B"]
+        XCTAssertTrue(scrollUntilHittable(single, in: app))
+        single.tap()
+        XCTAssertTrue(app.navigationBars["Record Our Play"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.buttons["runner.destination.batter"].value as? String, "1B")
+        app.buttons["Record"].tap()
+        XCTAssertEqual(app.staticTexts["offense.currentBatter"].label, "Player 02")
+        XCTAssertEqual(app.staticTexts["game.count"].value as? String, "0 outs, on 1B")
+
+        func openEditor(currentResult: String) -> XCUIElement {
+            app.buttons["game.history"].tap()
+            XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+            let entry = app.buttons["history.entry.1"]
+            XCTAssertTrue(entry.waitForExistence(timeout: 3))
+            if !app.buttons["history.editTrackedPlay.1"].exists { entry.tap() }
+            let edit = app.buttons["history.editTrackedPlay.1"]
+            XCTAssertTrue(edit.waitForExistence(timeout: 3))
+            XCTAssertEqual(edit.label, "Edit Player 01 \(currentResult) result, sequence 1")
+            XCTAssertGreaterThanOrEqual(edit.frame.height, 44)
+            edit.tap()
+            XCTAssertTrue(app.navigationBars["Edit Tracked Play"].waitForExistence(timeout: 3))
+            XCTAssertTrue(app.staticTexts["trackedPlayEdit.current"].exists)
+            return app.collectionViews.firstMatch
+        }
+
+        func stageAndSave(
+            currentResult: String,
+            result: String,
+            destination: String?,
+            expectedSummary: String,
+            screenshotSuffix: String
+        ) {
+            let form = openEditor(currentResult: currentResult)
+            let save = app.buttons["trackedPlayEdit.save"]
+            XCTAssertFalse(save.isEnabled)
+            let resultPicker = app.buttons["trackedPlayEdit.resultPicker"]
+            XCTAssertTrue(swipeWithinUntilHittable(resultPicker, in: form, above: save))
+            resultPicker.tap()
+            XCTAssertTrue(app.buttons[result].waitForExistence(timeout: 3))
+            app.buttons[result].tap()
+            XCTAssertTrue(waitForValue(result, on: resultPicker))
+
+            let confirm = app.buttons["trackedPlayEdit.confirmRunners"]
+            XCTAssertTrue(swipeWithinUntilHittable(confirm, in: form, above: save))
+            confirm.tap()
+            XCTAssertTrue(app.navigationBars["Confirm Correction"].waitForExistence(timeout: 3))
+            XCTAssertTrue(app.staticTexts["Player 01"].waitForExistence(timeout: 3))
+            let batterDestination = app.buttons["runner.destination.batter"]
+            XCTAssertGreaterThanOrEqual(batterDestination.frame.height, 44)
+            if let destination {
+                batterDestination.tap()
+                XCTAssertTrue(app.buttons[destination].waitForExistence(timeout: 3))
+                app.buttons[destination].tap()
+            }
+            app.buttons["Preview"].tap()
+
+            let proposed = app.staticTexts["trackedPlayEdit.proposed"]
+            XCTAssertTrue(swipeWithinUntilHittable(proposed, in: form, above: save))
+            XCTAssertTrue(proposed.label.contains(expectedSummary))
+            XCTAssertTrue(save.isEnabled)
+            XCTAssertGreaterThanOrEqual(save.frame.height, 44)
+            captureScreenshot(
+                named: "ticket22-\(atAccessibilityTextSize ? "ax" : "standard")-\(screenshotSuffix)",
+                from: app
+            )
+            save.tap()
+            XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        }
+
+        stageAndSave(
+            currentResult: "Single",
+            result: "Reached on Error",
+            destination: nil,
+            expectedSummary: "Reached on Error · Batter to 1B",
+            screenshotSuffix: "error"
+        )
+        XCTAssertTrue(app.buttons["history.entry.1"].label.contains("E · Batter to 1B"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertEqual(app.staticTexts["game.count"].value as? String, "0 outs, on 1B")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Games"].tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertEqual(app.staticTexts["offense.currentBatter"].label, "Player 02")
+        XCTAssertEqual(app.staticTexts["game.count"].value as? String, "0 outs, on 1B")
+
+        stageAndSave(
+            currentResult: "Reached on Error",
+            result: "Ground Out",
+            destination: "Out",
+            expectedSummary: "Ground Out · Batter to Out",
+            screenshotSuffix: "out"
+        )
+        XCTAssertTrue(app.buttons["history.entry.1"].label.contains("GO · Batter to Out"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertEqual(app.staticTexts["game.count"].value as? String, "1 out, bases empty")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Games"].tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertEqual(app.staticTexts["offense.currentBatter"].label, "Player 02")
+        XCTAssertEqual(app.staticTexts["game.count"].value as? String, "1 out, bases empty")
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.buttons["history.entry.1"].label.contains("GO · Batter to Out"))
+    }
+
     func testUndoTrackedTeamPitchFromPlayHistoryRestoresLiveBatterAndCount() {
         let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()

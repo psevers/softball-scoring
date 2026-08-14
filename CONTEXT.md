@@ -76,6 +76,10 @@ A staged replacement of one earlier tracked-team Ball, Called Strike, Swinging S
 
 A staged removal of one earlier tracked-team Ball, Called Strike, Swinging Strike, or Foul. Confirmation names the event-time player, batting-order slot and size, result, and sequence. Full replay reconstructs the count and player-attributed projection from the surviving timeline; Save remains unavailable until every downstream event satisfies its event-time batter and count contract.
 
+## Tracked-team plate-appearance edit
+
+A staged replacement of one earlier completed tracked-team plate appearance that scored no run and did not end the half-inning. The scorer keeps the persisted event-time batter, batting-order slot and size, record identity, game, sequence, and timestamp while reconfirming the result and exactly one destination for the batter and every event-time runner. Full replay rebuilds bases, outs, count, next batter, and player-attributed batting lines; any rejected downstream plate appearance must be explicitly repaired in the same atomic correction session.
+
 ## Defensive pitch deletion
 
 A staged removal of one earlier defensive pitch. The candidate timeline replays without that exact record; Save remains unavailable when the removal invalidates a downstream record. A valid save preserves every surviving record's identity, sequence, and timestamp, including the deleted sequence gap.

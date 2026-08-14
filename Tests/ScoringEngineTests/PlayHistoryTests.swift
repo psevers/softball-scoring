@@ -400,6 +400,61 @@ struct PlayHistoryTests {
         #expect(entry.components.map(\.editableOffensivePitchResult) == OffensivePitchResult.allCases)
     }
 
+    @Test func onlyNonScoringNonThirdOutTrackedPlateAppearancesExposeTheirEditResult() throws {
+        let batter = TrackedBatterIdentity(
+            playerID: UUID(),
+            lineupSlot: 1,
+            displayName: "Avery Stone",
+            jerseyNumber: "8",
+            position: .shortstop
+        )
+        let editable = OffensivePlateAppearanceEvent(
+            batter: batter,
+            battingOrderSize: 10,
+            result: .single,
+            movements: [.init(source: .batter, destination: .first)],
+            rbi: 0,
+            countedRunSources: [],
+            thirdOutClassification: nil
+        )
+        let scoring = OffensivePlateAppearanceEvent(
+            batter: batter,
+            battingOrderSize: 10,
+            result: .homeRun,
+            movements: [.init(source: .batter, destination: .home)],
+            rbi: 1,
+            countedRunSources: [.batter],
+            thirdOutClassification: nil
+        )
+        let thirdOut = OffensivePlateAppearanceEvent(
+            batter: batter,
+            battingOrderSize: 10,
+            result: .groundOut,
+            movements: [.init(source: .batter, destination: .out)],
+            rbi: 0,
+            countedRunSources: [],
+            thirdOutClassification: nil
+        )
+        var thirdOutState = GameState()
+        thirdOutState.outs = 2
+        let history = PlayHistoryProjector.project(replay: .init(
+            state: GameState(),
+            rejectedRecordIDs: [],
+            entries: [
+                acceptedEntry(sequence: 1, body: .offensivePlateAppearance(editable)),
+                acceptedEntry(sequence: 2, body: .offensivePlateAppearance(scoring)),
+                acceptedEntry(
+                    sequence: 3,
+                    body: .offensivePlateAppearance(thirdOut),
+                    before: thirdOutState
+                )
+            ]
+        ))
+        let components = history.sections.flatMap(\.entries).flatMap(\.components)
+
+        #expect(components.map(\.editableOffensivePlateAppearanceResult) == [.single, nil, nil])
+    }
+
     @Test func correctionEligibilityIncludesMultiOutAndThirdOutPlays() {
         var state = GameState()
         let homeRun = BallInPlayEvent(

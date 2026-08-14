@@ -51,6 +51,7 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
     let defensivePitchResult: PitchResult?
     let editableDefensivePitchResult: PitchResult?
     let editableOffensivePitchResult: OffensivePitchResult?
+    let editableOffensivePlateAppearanceResult: OffensivePlateAppearanceResult?
     let editableDefensiveBallInPlayOutcome: BallInPlayOutcome?
 
     init(
@@ -63,6 +64,7 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
         defensivePitchResult: PitchResult? = nil,
         editableDefensivePitchResult: PitchResult? = nil,
         editableOffensivePitchResult: OffensivePitchResult? = nil,
+        editableOffensivePlateAppearanceResult: OffensivePlateAppearanceResult? = nil,
         editableDefensiveBallInPlayOutcome: BallInPlayOutcome? = nil
     ) {
         self.recordID = recordID
@@ -74,6 +76,7 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
         self.defensivePitchResult = defensivePitchResult
         self.editableDefensivePitchResult = editableDefensivePitchResult
         self.editableOffensivePitchResult = editableOffensivePitchResult
+        self.editableOffensivePlateAppearanceResult = editableOffensivePlateAppearanceResult
         self.editableDefensiveBallInPlayOutcome = editableDefensiveBallInPlayOutcome
     }
 }
@@ -487,7 +490,12 @@ enum PlayHistoryProjector {
             summary: summary,
             detail: stateChangeDescription(from: trace.stateBefore, to: trace.stateAfter),
             accessibilityDescription: summary,
-            isPitch: false
+            isPitch: false,
+            editableOffensivePlateAppearanceResult:
+                OffensivePlateAppearanceValidator.supportsCorrection(
+                    plateAppearance,
+                    stateBefore: trace.stateBefore
+                ) ? plateAppearance.result : nil
         )
     }
 

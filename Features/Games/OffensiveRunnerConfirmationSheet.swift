@@ -1,10 +1,15 @@
 import SwiftUI
 
 struct OffensiveRunnerConfirmationSheet: View {
-    let outcome: BallInPlayOutcome
+    let result: OffensivePlateAppearanceResult
     let state: GameState
     let homeAway: HomeAway
     let battingOrder: [TrackedBatterIdentity]
+    let batter: TrackedBatterIdentity?
+    let battingOrderSize: Int?
+    let allowsScoring: Bool
+    let title: String
+    let confirmationTitle: String
     let onCancel: () -> Void
     let onRecord: (OffensivePlateAppearanceDraft) -> Void
 
@@ -23,19 +28,94 @@ struct OffensiveRunnerConfirmationSheet: View {
         onCancel: @escaping () -> Void,
         onRecord: @escaping (OffensivePlateAppearanceDraft) -> Void
     ) {
-        self.outcome = outcome
+        self.init(
+            result: .init(ballInPlayOutcome: outcome),
+            state: state,
+            homeAway: homeAway,
+            battingOrder: battingOrder,
+            batter: nil,
+            battingOrderSize: nil,
+            initialDraft: nil,
+            allowsScoring: true,
+            title: "Record Our Play",
+            confirmationTitle: "Record",
+            onCancel: onCancel,
+            onRecord: onRecord
+        )
+    }
+
+    init(
+        result: OffensivePlateAppearanceResult,
+        state: GameState,
+        homeAway: HomeAway,
+        battingOrder: [TrackedBatterIdentity],
+        batter: TrackedBatterIdentity,
+        battingOrderSize: Int,
+        initialDraft: OffensivePlateAppearanceDraft,
+        allowsScoring: Bool,
+        title: String,
+        confirmationTitle: String,
+        onCancel: @escaping () -> Void,
+        onRecord: @escaping (OffensivePlateAppearanceDraft) -> Void
+    ) {
+        self.result = result
         self.state = state
         self.homeAway = homeAway
         self.battingOrder = battingOrder
+        self.batter = batter
+        self.battingOrderSize = battingOrderSize
+        self.allowsScoring = allowsScoring
+        self.title = title
+        self.confirmationTitle = confirmationTitle
         self.onCancel = onCancel
         self.onRecord = onRecord
 
-        let suggestion = OffensiveMovementSuggestions.ballInPlay(outcome, state: state)
+        let suggestion = initialDraft
         _destinations = State(initialValue: Dictionary(
             uniqueKeysWithValues: suggestion.movements.map { ($0.source, $0.destination) }
         ))
         _rbi = State(initialValue: suggestion.rbi)
         _countedRunSources = State(initialValue: Set(suggestion.countedRunSources))
+        _thirdOutClassification = State(
+            initialValue: suggestion.thirdOutClassification ?? .forceOrBatterRunner
+        )
+    }
+
+    private init(
+        result: OffensivePlateAppearanceResult,
+        state: GameState,
+        homeAway: HomeAway,
+        battingOrder: [TrackedBatterIdentity],
+        batter: TrackedBatterIdentity?,
+        battingOrderSize: Int?,
+        initialDraft: OffensivePlateAppearanceDraft?,
+        allowsScoring: Bool,
+        title: String,
+        confirmationTitle: String,
+        onCancel: @escaping () -> Void,
+        onRecord: @escaping (OffensivePlateAppearanceDraft) -> Void
+    ) {
+        self.result = result
+        self.state = state
+        self.homeAway = homeAway
+        self.battingOrder = battingOrder
+        self.batter = batter
+        self.battingOrderSize = battingOrderSize
+        self.allowsScoring = allowsScoring
+        self.title = title
+        self.confirmationTitle = confirmationTitle
+        self.onCancel = onCancel
+        self.onRecord = onRecord
+
+        let suggestion = initialDraft ?? Self.suggestion(for: result, state: state)
+        _destinations = State(initialValue: Dictionary(
+            uniqueKeysWithValues: suggestion.movements.map { ($0.source, $0.destination) }
+        ))
+        _rbi = State(initialValue: suggestion.rbi)
+        _countedRunSources = State(initialValue: Set(suggestion.countedRunSources))
+        _thirdOutClassification = State(
+            initialValue: suggestion.thirdOutClassification ?? .forceOrBatterRunner
+        )
     }
 
     private var movements: [RunnerMovementEvent] {
@@ -63,7 +143,7 @@ struct OffensiveRunnerConfirmationSheet: View {
 
     private var draft: OffensivePlateAppearanceDraft {
         OffensivePlateAppearanceDraft(
-            result: .init(ballInPlayOutcome: outcome),
+            result: result,
             movements: movements,
             rbi: rbi,
             countedRunSources: sourcesThatCount,
@@ -80,7 +160,7 @@ struct OffensiveRunnerConfirmationSheet: View {
                     ScorebookLedger {
                         ScorebookPageSection {
                             VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
-                                Text(outcome.label)
+                                Text(result.label)
                                     .font(dynamicTypeSize.isAccessibilitySize ? .headline : AppTheme.Typography.notation)
                                 Text("Confirm each runner’s destination.")
                                     .font(dynamicTypeSize.isAccessibilitySize ? .callout : AppTheme.Typography.body)
@@ -104,7 +184,8 @@ struct OffensiveRunnerConfirmationSheet: View {
                             }
                         }
 
-                        ScorebookPageSection(dynamicTypeSize.isAccessibilitySize ? nil : "Scoring") {
+                        if allowsScoring {
+                            ScorebookPageSection(dynamicTypeSize.isAccessibilitySize ? nil : "Scoring") {
                             ScorebookLedgerRow {
                                 Stepper("RBI  \(rbi)", value: $rbi, in: 0...sourcesThatCount.count)
                                     .font(dynamicTypeSize.isAccessibilitySize ? .body : AppTheme.Typography.notation)
@@ -116,6 +197,7 @@ struct OffensiveRunnerConfirmationSheet: View {
                                 ScorebookLedgerRow {
                                     thirdOutControls
                                 }
+                            }
                             }
                         }
 
@@ -150,14 +232,14 @@ struct OffensiveRunnerConfirmationSheet: View {
                     ScorebookMarginRule()
                 }
             }
-            .navigationTitle("Record Our Play")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", action: onCancel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Record", action: validateAndRecord)
+                    Button(confirmationTitle, action: validateAndRecord)
                         .fontWeight(.semibold)
                 }
             }
@@ -228,13 +310,21 @@ struct OffensiveRunnerConfirmationSheet: View {
     }
 
     private func destinationPicker(_ source: RunnerSource) -> some View {
-        Picker(source.label, selection: destinationBinding(source)) {
+        Menu {
             ForEach(legalDestinations(for: source)) { destination in
-                Text(destination.label).tag(destination)
+                Button(destination.label) {
+                    destinations[source] = destination
+                }
             }
+        } label: {
+            Text((destinations[source] ?? .out).label)
+                .frame(
+                    minWidth: AppTheme.TouchTarget.minimum,
+                    minHeight: AppTheme.TouchTarget.minimum + 1
+                )
         }
-        .labelsHidden()
-        .pickerStyle(.menu)
+        .accessibilityLabel(source.label)
+        .accessibilityValue((destinations[source] ?? .out).label)
         .accessibilityIdentifier("runner.destination.\(source.rawValue)")
     }
 
@@ -253,13 +343,6 @@ struct OffensiveRunnerConfirmationSheet: View {
         return battingOrder.first(where: { $0.playerID == playerID })?.displayName ?? source.label
     }
 
-    private func destinationBinding(_ source: RunnerSource) -> Binding<RunnerDestination> {
-        Binding(
-            get: { destinations[source] ?? .out },
-            set: { destinations[source] = $0 }
-        )
-    }
-
     private func countedBinding(_ source: RunnerSource) -> Binding<Bool> {
         Binding(
             get: { countedRunSources.contains(source) },
@@ -271,21 +354,23 @@ struct OffensiveRunnerConfirmationSheet: View {
     }
 
     private func legalDestinations(for source: RunnerSource) -> [RunnerDestination] {
-        switch source {
+        let destinations: [RunnerDestination] = switch source {
         case .batter, .first: RunnerDestination.allCases
         case .second: [.second, .third, .home, .out]
         case .third: [.third, .home, .out]
         }
+        return allowsScoring ? destinations : destinations.filter { $0 != .home }
     }
 
     private func validateAndRecord() {
-        guard let batter = battingOrder.first(where: { $0.lineupSlot == state.currentTrackedBatterSlot }) else {
+        guard let resolvedBatter = batter
+                ?? battingOrder.first(where: { $0.lineupSlot == state.currentTrackedBatterSlot }) else {
             validationFailed = true
             return
         }
         let event = OffensivePlateAppearanceEvent(
-            batter: batter,
-            battingOrderSize: battingOrder.count,
+            batter: resolvedBatter,
+            battingOrderSize: battingOrderSize ?? battingOrder.count,
             result: draft.result,
             movements: draft.movements,
             rbi: draft.rbi,
@@ -301,6 +386,51 @@ struct OffensiveRunnerConfirmationSheet: View {
             return
         }
         onRecord(draft)
+    }
+
+    private static func suggestion(
+        for result: OffensivePlateAppearanceResult,
+        state: GameState
+    ) -> OffensivePlateAppearanceDraft {
+        let suggestion: OffensiveMovementSuggestion = switch result {
+        case .walk, .hitByPitch:
+            OffensiveMovementSuggestions.awardedFirstBase(state: state)
+        case .strikeout:
+            OffensiveMovementSuggestions.strikeout(state: state)
+        case .homeRun:
+            OffensiveMovementSuggestions.homeRun(state: state)
+        case .single:
+            OffensiveMovementSuggestions.ballInPlay(.single, state: state)
+        case .double:
+            OffensiveMovementSuggestions.ballInPlay(.double, state: state)
+        case .triple:
+            OffensiveMovementSuggestions.ballInPlay(.triple, state: state)
+        case .reachedOnError:
+            OffensiveMovementSuggestions.ballInPlay(.reachedOnError, state: state)
+        case .fieldersChoice:
+            OffensiveMovementSuggestions.ballInPlay(.fieldersChoice, state: state)
+        case .groundOut:
+            OffensiveMovementSuggestions.ballInPlay(.groundOut, state: state)
+        case .flyOut:
+            OffensiveMovementSuggestions.ballInPlay(.flyOut, state: state)
+        case .lineOut:
+            OffensiveMovementSuggestions.ballInPlay(.lineOut, state: state)
+        case .popOut:
+            OffensiveMovementSuggestions.ballInPlay(.popOut, state: state)
+        case .sacrificeBunt:
+            OffensiveMovementSuggestions.ballInPlay(.sacrificeBunt, state: state)
+        case .sacrificeFly:
+            OffensiveMovementSuggestions.ballInPlay(.sacrificeFly, state: state)
+        case .doublePlay:
+            OffensiveMovementSuggestions.ballInPlay(.doublePlay, state: state)
+        }
+        return OffensivePlateAppearanceDraft(
+            result: result,
+            movements: suggestion.movements,
+            rbi: suggestion.rbi,
+            countedRunSources: suggestion.countedRunSources,
+            thirdOutClassification: nil
+        )
     }
 }
 

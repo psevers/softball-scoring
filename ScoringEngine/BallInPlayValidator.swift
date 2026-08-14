@@ -189,6 +189,40 @@ enum BallInPlayValidator {
 }
 
 enum OffensivePlateAppearanceValidator {
+    static let correctionResults: [OffensivePlateAppearanceResult] = [
+        .walk, .hitByPitch, .strikeout,
+        .single, .double, .triple, .reachedOnError, .fieldersChoice,
+        .groundOut, .flyOut, .lineOut, .popOut, .sacrificeBunt, .doublePlay
+    ]
+
+    static func correctionResults(for stateBefore: GameState) -> [OffensivePlateAppearanceResult] {
+        correctionResults.filter { result in
+            switch result {
+            case .strikeout, .groundOut, .flyOut, .lineOut, .popOut, .sacrificeBunt:
+                stateBefore.outs + 1 < 3
+                    && (result != .sacrificeBunt || stateBefore.outs < 2)
+            case .doublePlay:
+                stateBefore.outs + 2 < 3
+            case .walk, .hitByPitch, .single, .double, .triple, .reachedOnError, .fieldersChoice:
+                true
+            case .homeRun, .sacrificeFly:
+                false
+            }
+        }
+    }
+
+    static func supportsCorrection(
+        _ plateAppearance: OffensivePlateAppearanceEvent,
+        stateBefore: GameState
+    ) -> Bool {
+        let outsOnPlay = plateAppearance.movements.filter { $0.destination == .out }.count
+        return correctionResults.contains(plateAppearance.result)
+            && plateAppearance.countedRunSources.isEmpty
+            && plateAppearance.rbi == 0
+            && plateAppearance.thirdOutClassification == nil
+            && stateBefore.outs + outsOnPlay < 3
+    }
+
     static func isValid(
         _ plateAppearance: OffensivePlateAppearanceEvent,
         state: GameState,

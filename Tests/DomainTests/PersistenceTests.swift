@@ -18,6 +18,187 @@ private struct DefensiveBallInPlayCorrectionScenario: Sendable {
     let expectedBases: [Int?]
 }
 
+private struct OffensivePlateAppearanceCorrectionScenario: Sendable {
+    let result: OffensivePlateAppearanceResult
+    let startsWithRunnerOnFirst: Bool
+    let movements: [RunnerMovementEvent]
+    let expectedOuts: Int
+    let expectedBaseSources: [RunnerSource?]
+    let expectedAtBats: Int
+    let expectedHits: Int
+    let expectedDoubles: Int
+    let expectedTriples: Int
+    let expectedWalks: Int
+    let expectedHitByPitch: Int
+    let expectedStrikeouts: Int
+}
+
+private let offensivePlateAppearanceCorrectionScenarios: [OffensivePlateAppearanceCorrectionScenario] = [
+    .init(
+        result: .walk,
+        startsWithRunnerOnFirst: false,
+        movements: [.init(source: .batter, destination: .first)],
+        expectedOuts: 0,
+        expectedBaseSources: [.batter, nil, nil],
+        expectedAtBats: 0,
+        expectedHits: 0,
+        expectedDoubles: 0,
+        expectedTriples: 0,
+        expectedWalks: 1,
+        expectedHitByPitch: 0,
+        expectedStrikeouts: 0
+    ),
+    .init(
+        result: .hitByPitch,
+        startsWithRunnerOnFirst: false,
+        movements: [.init(source: .batter, destination: .first)],
+        expectedOuts: 0,
+        expectedBaseSources: [.batter, nil, nil],
+        expectedAtBats: 0,
+        expectedHits: 0,
+        expectedDoubles: 0,
+        expectedTriples: 0,
+        expectedWalks: 0,
+        expectedHitByPitch: 1,
+        expectedStrikeouts: 0
+    ),
+    .init(
+        result: .strikeout,
+        startsWithRunnerOnFirst: false,
+        movements: [.init(source: .batter, destination: .out)],
+        expectedOuts: 1,
+        expectedBaseSources: [nil, nil, nil],
+        expectedAtBats: 1,
+        expectedHits: 0,
+        expectedDoubles: 0,
+        expectedTriples: 0,
+        expectedWalks: 0,
+        expectedHitByPitch: 0,
+        expectedStrikeouts: 1
+    ),
+    .init(
+        result: .single,
+        startsWithRunnerOnFirst: false,
+        movements: [.init(source: .batter, destination: .first)],
+        expectedOuts: 0,
+        expectedBaseSources: [.batter, nil, nil],
+        expectedAtBats: 1,
+        expectedHits: 1,
+        expectedDoubles: 0,
+        expectedTriples: 0,
+        expectedWalks: 0,
+        expectedHitByPitch: 0,
+        expectedStrikeouts: 0
+    ),
+    .init(
+        result: .double,
+        startsWithRunnerOnFirst: false,
+        movements: [.init(source: .batter, destination: .second)],
+        expectedOuts: 0,
+        expectedBaseSources: [nil, .batter, nil],
+        expectedAtBats: 1,
+        expectedHits: 1,
+        expectedDoubles: 1,
+        expectedTriples: 0,
+        expectedWalks: 0,
+        expectedHitByPitch: 0,
+        expectedStrikeouts: 0
+    ),
+    .init(
+        result: .triple,
+        startsWithRunnerOnFirst: false,
+        movements: [.init(source: .batter, destination: .third)],
+        expectedOuts: 0,
+        expectedBaseSources: [nil, nil, .batter],
+        expectedAtBats: 1,
+        expectedHits: 1,
+        expectedDoubles: 0,
+        expectedTriples: 1,
+        expectedWalks: 0,
+        expectedHitByPitch: 0,
+        expectedStrikeouts: 0
+    ),
+    .init(
+        result: .reachedOnError,
+        startsWithRunnerOnFirst: false,
+        movements: [.init(source: .batter, destination: .first)],
+        expectedOuts: 0,
+        expectedBaseSources: [.batter, nil, nil],
+        expectedAtBats: 1,
+        expectedHits: 0,
+        expectedDoubles: 0,
+        expectedTriples: 0,
+        expectedWalks: 0,
+        expectedHitByPitch: 0,
+        expectedStrikeouts: 0
+    ),
+    .init(
+        result: .fieldersChoice,
+        startsWithRunnerOnFirst: true,
+        movements: [
+            .init(source: .first, destination: .out),
+            .init(source: .batter, destination: .first)
+        ],
+        expectedOuts: 1,
+        expectedBaseSources: [.batter, nil, nil],
+        expectedAtBats: 1,
+        expectedHits: 0,
+        expectedDoubles: 0,
+        expectedTriples: 0,
+        expectedWalks: 0,
+        expectedHitByPitch: 0,
+        expectedStrikeouts: 0
+    ),
+    .init(
+        result: .groundOut,
+        startsWithRunnerOnFirst: false,
+        movements: [.init(source: .batter, destination: .out)],
+        expectedOuts: 1,
+        expectedBaseSources: [nil, nil, nil],
+        expectedAtBats: 1,
+        expectedHits: 0,
+        expectedDoubles: 0,
+        expectedTriples: 0,
+        expectedWalks: 0,
+        expectedHitByPitch: 0,
+        expectedStrikeouts: 0
+    ),
+    .init(
+        result: .sacrificeBunt,
+        startsWithRunnerOnFirst: true,
+        movements: [
+            .init(source: .first, destination: .second),
+            .init(source: .batter, destination: .out)
+        ],
+        expectedOuts: 1,
+        expectedBaseSources: [nil, .first, nil],
+        expectedAtBats: 0,
+        expectedHits: 0,
+        expectedDoubles: 0,
+        expectedTriples: 0,
+        expectedWalks: 0,
+        expectedHitByPitch: 0,
+        expectedStrikeouts: 0
+    ),
+    .init(
+        result: .doublePlay,
+        startsWithRunnerOnFirst: true,
+        movements: [
+            .init(source: .first, destination: .out),
+            .init(source: .batter, destination: .out)
+        ],
+        expectedOuts: 2,
+        expectedBaseSources: [nil, nil, nil],
+        expectedAtBats: 1,
+        expectedHits: 0,
+        expectedDoubles: 0,
+        expectedTriples: 0,
+        expectedWalks: 0,
+        expectedHitByPitch: 0,
+        expectedStrikeouts: 0
+    )
+]
+
 private let defensiveBallInPlayCorrectionScenarios: [DefensiveBallInPlayCorrectionScenario] = [
     .init(
         outcome: .single,
@@ -7177,6 +7358,722 @@ extension PersistenceTests {
                 modelContext: context
             )
         }
+    }
+
+    @Test func trackedTeamPlateAppearanceEditPreservesEventIdentityAndReprojectsBattingLines() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let leadRunner = makeTrackedBatter()
+        let batter = makeTrackedBatter(
+            displayName: "Jordan Lee",
+            jerseyNumber: "12",
+            position: .centerField,
+            lineupSlot: 2
+        )
+        let editedRecordID = UUID()
+        let editedTimestamp = Date(timeIntervalSince1970: 1_787_200_000)
+        let records = try [
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 1,
+                body: .offensivePlateAppearance(.init(
+                    batter: leadRunner,
+                    battingOrderSize: 10,
+                    result: .single,
+                    movements: [.init(source: .batter, destination: .first)],
+                    rbi: 0,
+                    countedRunSources: [],
+                    thirdOutClassification: nil
+                ))
+            ),
+            GameEventRecord(
+                id: editedRecordID,
+                gameID: game.id,
+                sequenceNumber: 2,
+                timestamp: editedTimestamp,
+                body: .offensivePlateAppearance(.init(
+                    batter: batter,
+                    battingOrderSize: 10,
+                    result: .single,
+                    movements: [
+                        .init(source: .first, destination: .second),
+                        .init(source: .batter, destination: .first)
+                    ],
+                    rbi: 0,
+                    countedRunSources: [],
+                    thirdOutClassification: nil
+                ))
+            )
+        ]
+        records.forEach(context.insert)
+        try context.save()
+
+        let editSession = try GameEventCorrection.prepareOffensivePlateAppearanceEdit(
+            recordID: editedRecordID,
+            game: game,
+            modelContext: context
+        )
+        #expect(editSession.batter == batter)
+        #expect(editSession.battingOrderSize == 10)
+        #expect(editSession.runnerIdentities[.first] == leadRunner)
+
+        let proposed = OffensivePlateAppearanceEvent(
+            batter: batter,
+            battingOrderSize: 10,
+            result: .reachedOnError,
+            movements: [
+                .init(source: .first, destination: .second),
+                .init(source: .batter, destination: .first)
+            ],
+            rbi: 0,
+            countedRunSources: [],
+            thirdOutClassification: nil
+        )
+        let staged = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+            proposed,
+            in: editSession,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(staged.canSave)
+        #expect(staged.firstInvalidRecord == nil)
+        #expect(staged.snapshot.replay.state.currentTrackedBatterSlot == 3)
+        #expect(staged.snapshot.replay.state.firstBaseRunnerPlayerID == batter.playerID)
+        #expect(staged.snapshot.replay.state.secondBaseRunnerPlayerID == leadRunner.playerID)
+        #expect(staged.snapshot.battingLines[batter.playerID]?.hits == 0)
+        #expect(staged.snapshot.battingLines[batter.playerID]?.atBats == 1)
+
+        _ = try GameEventCorrection.saveGameEventCorrection(
+            staged,
+            game: game,
+            modelContext: context
+        )
+
+        let saved = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        let savedRecord = try #require(saved.records.first(where: { $0.id == editedRecordID }))
+        #expect(savedRecord.sequenceNumber == 2)
+        #expect(savedRecord.timestamp == editedTimestamp)
+        #expect(try savedRecord.decoded().body == .offensivePlateAppearance(proposed))
+        #expect(saved.replay.state == staged.snapshot.replay.state)
+        #expect(saved.battingLines == staged.snapshot.battingLines)
+    }
+
+    @Test(arguments: offensivePlateAppearanceCorrectionScenarios)
+    fileprivate func trackedTeamPlateAppearanceEditReplaysRepresentativeNonScoringResults(
+        _ scenario: OffensivePlateAppearanceCorrectionScenario
+    ) throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let leadRunner = makeTrackedBatter()
+        let batter = makeTrackedBatter(
+            displayName: "Jordan Lee",
+            jerseyNumber: "12",
+            position: .centerField,
+            lineupSlot: scenario.startsWithRunnerOnFirst ? 2 : 1
+        )
+        var records: [GameEventRecord] = []
+        if scenario.startsWithRunnerOnFirst {
+            records.append(try GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 1,
+                body: .offensivePlateAppearance(.init(
+                    batter: leadRunner,
+                    battingOrderSize: 10,
+                    result: .single,
+                    movements: [.init(source: .batter, destination: .first)],
+                    rbi: 0,
+                    countedRunSources: [],
+                    thirdOutClassification: nil
+                ))
+            ))
+        }
+        let originalMovements: [RunnerMovementEvent] = scenario.startsWithRunnerOnFirst
+            ? [
+                .init(source: .first, destination: .second),
+                .init(source: .batter, destination: .first)
+            ]
+            : [.init(source: .batter, destination: .first)]
+        let originalResult: OffensivePlateAppearanceResult = scenario.result == .reachedOnError
+            ? .single
+            : .reachedOnError
+        let editedRecord = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: records.count + 1,
+            body: .offensivePlateAppearance(.init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: originalResult,
+                movements: originalMovements,
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ))
+        )
+        records.append(editedRecord)
+        records.forEach(context.insert)
+        try context.save()
+
+        let editSession = try GameEventCorrection.prepareOffensivePlateAppearanceEdit(
+            recordID: editedRecord.id,
+            game: game,
+            modelContext: context
+        )
+        let proposed = OffensivePlateAppearanceEvent(
+            batter: batter,
+            battingOrderSize: 10,
+            result: scenario.result,
+            movements: scenario.movements,
+            rbi: 0,
+            countedRunSources: [],
+            thirdOutClassification: nil
+        )
+        let staged = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+            proposed,
+            in: editSession,
+            game: game,
+            modelContext: context
+        )
+        #expect(staged.canSave)
+        #expect(staged.firstInvalidRecord == nil)
+        _ = try GameEventCorrection.saveGameEventCorrection(
+            staged,
+            game: game,
+            modelContext: context
+        )
+
+        let saved = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        let state = saved.replay.state
+        let playerIDsBySource: [RunnerSource: UUID] = [
+            .batter: batter.playerID,
+            .first: leadRunner.playerID
+        ]
+        #expect(state.half == .top)
+        #expect(state.awayScore == 0)
+        #expect(state.homeScore == 0)
+        #expect(state.outs == scenario.expectedOuts)
+        #expect([
+            state.firstBaseRunnerPlayerID,
+            state.secondBaseRunnerPlayerID,
+            state.thirdBaseRunnerPlayerID
+        ] == scenario.expectedBaseSources.map { $0.flatMap { playerIDsBySource[$0] } })
+        let line = try #require(saved.battingLines[batter.playerID])
+        #expect(line.plateAppearances == 1)
+        #expect(line.atBats == scenario.expectedAtBats)
+        #expect(line.hits == scenario.expectedHits)
+        #expect(line.doubles == scenario.expectedDoubles)
+        #expect(line.triples == scenario.expectedTriples)
+        #expect(line.walks == scenario.expectedWalks)
+        #expect(line.hitByPitch == scenario.expectedHitByPitch)
+        #expect(line.strikeouts == scenario.expectedStrikeouts)
+        #expect(line.runs == 0)
+        #expect(line.runsBattedIn == 0)
+    }
+
+    @Test func trackedTeamPlateAppearanceEditStagesDownstreamPlateAppearanceRepair() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let firstBatter = makeTrackedBatter()
+        let secondBatter = makeTrackedBatter(
+            displayName: "Jordan Lee",
+            jerseyNumber: "12",
+            position: .centerField,
+            lineupSlot: 2
+        )
+        let thirdBatter = makeTrackedBatter(
+            displayName: "Riley Chen",
+            jerseyNumber: "18",
+            position: .shortstop,
+            lineupSlot: 3
+        )
+        let plateAppearances = [
+            OffensivePlateAppearanceEvent(
+                batter: firstBatter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ),
+            OffensivePlateAppearanceEvent(
+                batter: secondBatter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [
+                    .init(source: .first, destination: .second),
+                    .init(source: .batter, destination: .first)
+                ],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ),
+            OffensivePlateAppearanceEvent(
+                batter: thirdBatter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [
+                    .init(source: .second, destination: .third),
+                    .init(source: .first, destination: .second),
+                    .init(source: .batter, destination: .first)
+                ],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )
+        ]
+        let records = try plateAppearances.enumerated().map { index, plateAppearance in
+            try GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: index + 1,
+                body: .offensivePlateAppearance(plateAppearance)
+            )
+        }
+        records.forEach(context.insert)
+        try context.save()
+        let originalBodies = try records.map { try $0.decoded().body }
+
+        let editSession = try GameEventCorrection.prepareOffensivePlateAppearanceEdit(
+            recordID: records[1].id,
+            game: game,
+            modelContext: context
+        )
+        let invalid = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+            .init(
+                batter: secondBatter,
+                battingOrderSize: 10,
+                result: .groundOut,
+                movements: [
+                    .init(source: .first, destination: .first),
+                    .init(source: .batter, destination: .out)
+                ],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ),
+            in: editSession,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(!invalid.canSave)
+        #expect(invalid.firstInvalidRecord?.id == records[2].id)
+        #expect(invalid.firstInvalidRecord?.canEditOffensivePlateAppearance == true)
+        #expect(throws: GameEventCorrectionError.invalidCandidate) {
+            _ = try GameEventCorrection.saveGameEventCorrection(
+                invalid,
+                game: game,
+                modelContext: context
+            )
+        }
+        #expect(try records.map { try $0.decoded().body } == originalBodies)
+
+        let repaired = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+            recordID: records[2].id,
+            plateAppearance: .init(
+                batter: thirdBatter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [
+                    .init(source: .first, destination: .second),
+                    .init(source: .batter, destination: .first)
+                ],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ),
+            in: invalid,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(repaired.canSave)
+        #expect(repaired.firstInvalidRecord == nil)
+        #expect(repaired.stagedOffensivePlateAppearanceChanges.count == 2)
+        #expect(repaired.snapshot.replay.state.outs == 1)
+        #expect(repaired.snapshot.replay.state.firstBaseRunnerPlayerID == thirdBatter.playerID)
+        #expect(repaired.snapshot.replay.state.secondBaseRunnerPlayerID == firstBatter.playerID)
+        #expect(repaired.snapshot.replay.state.currentTrackedBatterSlot == 4)
+
+        _ = try GameEventCorrection.saveGameEventCorrection(
+            repaired,
+            game: game,
+            modelContext: context
+        )
+        let saved = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        #expect(saved.replay.state == repaired.snapshot.replay.state)
+        #expect(saved.battingLines == repaired.snapshot.battingLines)
+    }
+
+    @Test func trackedTeamPlateAppearanceEditRejectsIllegalCandidatesAndScoringOrThirdOutRecords() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let leadRunner = makeTrackedBatter()
+        let batter = makeTrackedBatter(
+            displayName: "Jordan Lee",
+            jerseyNumber: "12",
+            position: .centerField,
+            lineupSlot: 2
+        )
+        let records = try [
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 1,
+                body: .offensivePlateAppearance(.init(
+                    batter: leadRunner,
+                    battingOrderSize: 10,
+                    result: .single,
+                    movements: [.init(source: .batter, destination: .first)],
+                    rbi: 0,
+                    countedRunSources: [],
+                    thirdOutClassification: nil
+                ))
+            ),
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 2,
+                body: .offensivePlateAppearance(.init(
+                    batter: batter,
+                    battingOrderSize: 10,
+                    result: .single,
+                    movements: [
+                        .init(source: .first, destination: .second),
+                        .init(source: .batter, destination: .first)
+                    ],
+                    rbi: 0,
+                    countedRunSources: [],
+                    thirdOutClassification: nil
+                ))
+            )
+        ]
+        records.forEach(context.insert)
+        try context.save()
+        let editSession = try GameEventCorrection.prepareOffensivePlateAppearanceEdit(
+            recordID: records[1].id,
+            game: game,
+            modelContext: context
+        )
+        let wrongBatter = makeTrackedBatter(
+            displayName: "Wrong Batter",
+            jerseyNumber: "99",
+            position: .catcher,
+            lineupSlot: 2
+        )
+        let illegalCandidates: [OffensivePlateAppearanceEvent] = [
+            .init(
+                batter: wrongBatter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [
+                    .init(source: .first, destination: .second),
+                    .init(source: .batter, destination: .first)
+                ],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ),
+            .init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [.init(source: .first, destination: .second)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ),
+            .init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [
+                    .init(source: .first, destination: .second),
+                    .init(source: .batter, destination: .first),
+                    .init(source: .batter, destination: .second)
+                ],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ),
+            .init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [
+                    .init(source: .first, destination: .first),
+                    .init(source: .batter, destination: .second)
+                ],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ),
+            .init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [
+                    .init(source: .first, destination: .second),
+                    .init(source: .batter, destination: .second)
+                ],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ),
+            .init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [
+                    .init(source: .first, destination: .second),
+                    .init(source: .batter, destination: .second)
+                ],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ),
+            .init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .sacrificeBunt,
+                movements: [
+                    .init(source: .first, destination: .out),
+                    .init(source: .batter, destination: .out)
+                ],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ),
+            .init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [
+                    .init(source: .first, destination: .second),
+                    .init(source: .batter, destination: .second)
+                ],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )
+        ]
+
+        for candidate in illegalCandidates {
+            #expect(throws: GameEventCorrectionError.offensivePlateAppearanceNotEditable) {
+                _ = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+                    candidate,
+                    in: editSession,
+                    game: game,
+                    modelContext: context
+                )
+            }
+        }
+        let stored = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>(
+            sortBy: [SortDescriptor(\GameEventRecord.sequenceNumber)]
+        ))
+        #expect(try stored.map { try $0.decoded().body } == records.map { try $0.decoded().body })
+
+        let scoringContainer = try AppModelContainer.make(inMemory: true)
+        let scoringContext = scoringContainer.mainContext
+        let scoringGame = makeOffensiveGame()
+        let scoringRecord = try GameEventRecord(
+            gameID: scoringGame.id,
+            sequenceNumber: 1,
+            body: .offensivePlateAppearance(.init(
+                batter: leadRunner,
+                battingOrderSize: 10,
+                result: .homeRun,
+                movements: [.init(source: .batter, destination: .home)],
+                rbi: 1,
+                countedRunSources: [.batter],
+                thirdOutClassification: nil
+            ))
+        )
+        scoringContext.insert(scoringRecord)
+        try scoringContext.save()
+        #expect(throws: GameEventCorrectionError.offensivePlateAppearanceNotEditable) {
+            _ = try GameEventCorrection.prepareOffensivePlateAppearanceEdit(
+                recordID: scoringRecord.id,
+                game: scoringGame,
+                modelContext: scoringContext
+            )
+        }
+
+        let thirdOutContainer = try AppModelContainer.make(inMemory: true)
+        let thirdOutContext = thirdOutContainer.mainContext
+        let thirdOutGame = makeOffensiveGame()
+        let outBatters = [
+            leadRunner,
+            batter,
+            makeTrackedBatter(
+                displayName: "Riley Chen",
+                jerseyNumber: "18",
+                position: .shortstop,
+                lineupSlot: 3
+            )
+        ]
+        let outs = try [1, 2].map { sequenceNumber in
+            try GameEventRecord(
+                gameID: thirdOutGame.id,
+                sequenceNumber: sequenceNumber,
+                body: .offensivePlateAppearance(.init(
+                    batter: outBatters[sequenceNumber - 1],
+                    battingOrderSize: 10,
+                    result: .groundOut,
+                    movements: [.init(source: .batter, destination: .out)],
+                    rbi: 0,
+                    countedRunSources: [],
+                    thirdOutClassification: nil
+                ))
+            )
+        }
+        outs.forEach(thirdOutContext.insert)
+        let thirdOutRecord = try GameEventRecord(
+            gameID: thirdOutGame.id,
+            sequenceNumber: 3,
+            body: .offensivePlateAppearance(.init(
+                batter: outBatters[2],
+                battingOrderSize: 10,
+                result: .strikeout,
+                movements: [.init(source: .batter, destination: .out)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            ))
+        )
+        thirdOutContext.insert(thirdOutRecord)
+        try thirdOutContext.save()
+        #expect(throws: GameEventCorrectionError.offensivePlateAppearanceNotEditable) {
+            _ = try GameEventCorrection.prepareOffensivePlateAppearanceEdit(
+                recordID: thirdOutRecord.id,
+                game: thirdOutGame,
+                modelContext: thirdOutContext
+            )
+        }
+    }
+
+    @Test func trackedTeamPlateAppearanceEditRejectsWrongGameStaleSessionAndFailuresAtomically() throws {
+        struct ProjectionFailure: Error {}
+        struct SaveFailure: Error {}
+
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let otherGame = makeOffensiveGame()
+        let batter = makeTrackedBatter()
+        let original = OffensivePlateAppearanceEvent(
+            batter: batter,
+            battingOrderSize: 10,
+            result: .single,
+            movements: [.init(source: .batter, destination: .first)],
+            rbi: 0,
+            countedRunSources: [],
+            thirdOutClassification: nil
+        )
+        let record = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 1,
+            body: .offensivePlateAppearance(original)
+        )
+        context.insert(record)
+        try context.save()
+        let editSession = try GameEventCorrection.prepareOffensivePlateAppearanceEdit(
+            recordID: record.id,
+            game: game,
+            modelContext: context
+        )
+        let proposed = OffensivePlateAppearanceEvent(
+            batter: batter,
+            battingOrderSize: 10,
+            result: .reachedOnError,
+            movements: [.init(source: .batter, destination: .first)],
+            rbi: 0,
+            countedRunSources: [],
+            thirdOutClassification: nil
+        )
+
+        #expect(throws: GameEventCorrectionError.gameMismatch) {
+            _ = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+                proposed,
+                in: editSession,
+                game: otherGame,
+                modelContext: context
+            )
+        }
+        #expect(throws: ProjectionFailure.self) {
+            _ = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+                proposed,
+                in: editSession,
+                game: game,
+                modelContext: context,
+                projectBattingLines: { _ in throw ProjectionFailure() }
+            )
+        }
+        let staged = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+            proposed,
+            in: editSession,
+            game: game,
+            modelContext: context
+        )
+        #expect(throws: SaveFailure.self) {
+            _ = try GameEventCorrection.saveGameEventCorrection(
+                staged,
+                game: game,
+                modelContext: context,
+                save: { _ in throw SaveFailure() }
+            )
+        }
+        let afterFailedSave = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>())
+        #expect(afterFailedSave.count == 1)
+        #expect(try afterFailedSave[0].decoded().body == .offensivePlateAppearance(original))
+
+        let newer = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 2,
+            body: .offensivePitch(.init(
+                batter: makeTrackedBatter(
+                    displayName: "Jordan Lee",
+                    jerseyNumber: "12",
+                    position: .centerField,
+                    lineupSlot: 2
+                ),
+                battingOrderSize: 10,
+                result: .ball
+            ))
+        )
+        context.insert(newer)
+        try context.save()
+        #expect(throws: GameEventCorrectionError.staleTimeline) {
+            _ = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+                proposed,
+                in: editSession,
+                game: game,
+                modelContext: context
+            )
+        }
+        #expect(throws: GameEventCorrectionError.staleTimeline) {
+            _ = try GameEventCorrection.saveGameEventCorrection(
+                staged,
+                game: game,
+                modelContext: context
+            )
+        }
+        let stored = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>(
+            sortBy: [SortDescriptor(\GameEventRecord.sequenceNumber)]
+        ))
+        #expect(stored.map(\.id) == [record.id, newer.id])
+        #expect(try stored[0].decoded().body == .offensivePlateAppearance(original))
     }
 
     private func twoConsecutiveSingles(pitcherID: UUID) -> [GameEventBody] {

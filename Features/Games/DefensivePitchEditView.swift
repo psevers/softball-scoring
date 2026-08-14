@@ -208,6 +208,221 @@ struct DefensiveBallInPlayEditView: View {
     }
 }
 
+struct OffensivePlateAppearanceEditView: View {
+    let game: Game
+    let editSession: OffensivePlateAppearanceEditSession
+    let liveSession: LiveGameSession
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @State private var selectedResult: OffensivePlateAppearanceResult
+    @State private var isConfirmingRunners = false
+    @State private var proposedPlateAppearance: OffensivePlateAppearanceEvent?
+    @State private var correction = GameEventCorrectionCoordinator()
+
+    init(
+        game: Game,
+        editSession: OffensivePlateAppearanceEditSession,
+        liveSession: LiveGameSession
+    ) {
+        self.game = game
+        self.editSession = editSession
+        self.liveSession = liveSession
+        _selectedResult = State(initialValue: editSession.originalPlateAppearance.result)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Form {
+                    Section("Completed plate appearance") {
+                        Text(
+                            "\(editSession.half.displayName) \(editSession.inning) · "
+                                + "\(editSession.batter.displayName) · Batting slot "
+                                + "\(editSession.batter.lineupSlot) of "
+                                + "\(editSession.battingOrderSize) · Sequence "
+                                + "\(editSession.sequenceNumber)"
+                        )
+                        .font(.body.monospacedDigit())
+                        Text("Current: \(summary(editSession.originalPlateAppearance))")
+                            .accessibilityIdentifier("trackedPlayEdit.current")
+                    }
+
+                    Section("Correct result") {
+                        Picker("Result", selection: $selectedResult) {
+                            ForEach(
+                                OffensivePlateAppearanceValidator.correctionResults(
+                                    for: editSession.stateBefore
+                                ),
+                                id: \.self
+                            ) { result in
+                                Text(result.label).tag(result)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("trackedPlayEdit.resultPicker")
+                        .accessibilityValue(selectedResult.label)
+
+                        Button("Confirm Runner Destinations") {
+                            isConfirmingRunners = true
+                        }
+                        .frame(minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("trackedPlayEdit.confirmRunners")
+                    }
+
+                    if let proposedPlateAppearance, let correctionSession = correction.session {
+                        GameEventCorrectionSections(
+                            correctionSession: correctionSession,
+                            homeAway: editSession.homeAway,
+                            proposedSummary: "Proposed: \(summary(proposedPlateAppearance)) · "
+                                + stateSummary(correctionSession.snapshot.replay.state),
+                            proposedIdentifier: "trackedPlayEdit.proposed",
+                            stageChange: { problem, action in
+                                correction.stageRepair(
+                                    recordID: problem.id,
+                                    action: action,
+                                    game: game,
+                                    modelContext: modelContext
+                                )
+                            }
+                        )
+                    }
+                }
+
+                Divider()
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    Button("Cancel") { dismiss() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("trackedPlayEdit.cancel")
+
+                    Button("Save") { save() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .disabled(correction.session?.canSave != true)
+                        .accessibilityIdentifier("trackedPlayEdit.save")
+                }
+                .padding(.horizontal, AppTheme.Spacing.md)
+                .padding(.vertical, AppTheme.Spacing.sm)
+                .background(.bar)
+            }
+            .navigationTitle("Edit Tracked Play")
+            .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: selectedResult) { _, _ in
+                proposedPlateAppearance = nil
+                correction.session = nil
+            }
+            .sheet(isPresented: $isConfirmingRunners) {
+                OffensiveRunnerConfirmationSheet(
+                    result: selectedResult,
+                    state: editSession.stateBefore,
+                    homeAway: editSession.homeAway,
+                    battingOrder: editSession.runnerIdentities.values.sorted {
+                        $0.lineupSlot < $1.lineupSlot
+                    },
+                    batter: editSession.batter,
+                    battingOrderSize: editSession.battingOrderSize,
+                    initialDraft: initialDraft,
+                    allowsScoring: false,
+                    title: "Confirm Correction",
+                    confirmationTitle: "Preview",
+                    onCancel: { isConfirmingRunners = false },
+                    onRecord: stage
+                )
+            }
+            .alert("Play Edit Failed", isPresented: Binding(
+                get: { correction.errorMessage != nil },
+                set: { if !$0 { correction.errorMessage = nil } }
+            )) {
+                if correction.requiresReopen {
+                    Button("Return to Play History") {
+                        correction.errorMessage = nil
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("trackedPlayEdit.reopen")
+                } else {
+                    Button("OK", role: .cancel) { correction.errorMessage = nil }
+                }
+            } message: {
+                Text(
+                    correction.errorMessage
+                        ?? "The proposed plate appearance could not be replayed safely."
+                )
+            }
+        }
+    }
+
+    private var initialDraft: OffensivePlateAppearanceDraft {
+        let source = proposedPlateAppearance ?? editSession.originalPlateAppearance
+        return OffensivePlateAppearanceDraft(
+            result: selectedResult,
+            movements: source.movements,
+            rbi: 0,
+            countedRunSources: [],
+            thirdOutClassification: nil
+        )
+    }
+
+    private func stage(_ draft: OffensivePlateAppearanceDraft) {
+        let plateAppearance = OffensivePlateAppearanceEvent(
+            batter: editSession.batter,
+            battingOrderSize: editSession.battingOrderSize,
+            result: draft.result,
+            movements: draft.movements,
+            rbi: draft.rbi,
+            countedRunSources: draft.countedRunSources,
+            thirdOutClassification: draft.thirdOutClassification
+        )
+        do {
+            correction.session = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+                plateAppearance,
+                in: editSession,
+                game: game,
+                modelContext: modelContext
+            )
+            proposedPlateAppearance = plateAppearance
+            isConfirmingRunners = false
+        } catch {
+            correction.session = nil
+            correction.present(error)
+        }
+    }
+
+    private func save() {
+        if correction.save(
+            liveSession: liveSession,
+            game: game,
+            modelContext: modelContext
+        ) {
+            dismiss()
+        }
+    }
+
+    private func summary(_ plateAppearance: OffensivePlateAppearanceEvent) -> String {
+        let movements = plateAppearance.movements
+            .map { "\($0.source.baseLabel) to \($0.destination.label)" }
+            .joined(separator: "; ")
+        return "\(plateAppearance.result.label) · \(movements)"
+    }
+
+    private func stateSummary(_ state: GameState) -> String {
+        let trackedScore = editSession.homeAway == .home ? state.homeScore : state.awayScore
+        let opponentScore = editSession.homeAway == .home ? state.awayScore : state.homeScore
+        let bases = [
+            state.firstBaseRunnerPlayerID.map { _ in "1B occupied" },
+            state.secondBaseRunnerPlayerID.map { _ in "2B occupied" },
+            state.thirdBaseRunnerPlayerID.map { _ in "3B occupied" }
+        ].compactMap { $0 }.joined(separator: ", ")
+        return "\(state.half.displayName) \(state.inning) · "
+            + "Score \(opponentScore)–\(trackedScore) · Outs \(state.outs) · "
+            + "Bases \(bases.isEmpty ? "empty" : bases) · "
+            + "Tracked batter \(state.currentTrackedBatterSlot)"
+    }
+}
+
 struct DefensivePitchEditView: View {
     private static let supportedResults: [PitchResult] = [
         .ball, .calledStrike, .swingingStrike, .foul
@@ -822,6 +1037,7 @@ private enum GameEventRepairAction {
     case deleteOffensivePitch
     case delete
     case editBallInPlay(BallInPlayEvent)
+    case editOffensivePlateAppearance(OffensivePlateAppearanceEvent)
 }
 
 @MainActor
@@ -884,6 +1100,14 @@ private final class GameEventCorrectionCoordinator {
                 self.session = try GameEventCorrection.stageBallInPlayEdit(
                     recordID: recordID,
                     play: play,
+                    in: session,
+                    game: game,
+                    modelContext: modelContext
+                )
+            case .editOffensivePlateAppearance(let plateAppearance):
+                self.session = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+                    recordID: recordID,
+                    plateAppearance: plateAppearance,
                     in: session,
                     game: game,
                     modelContext: modelContext
@@ -963,10 +1187,17 @@ private struct GameEventCorrectionSections: View {
                     } else {
                         nil
                     }
+                    let affectedPlateAppearance: OffensivePlateAppearanceEvent? =
+                        if case .offensivePlateAppearance(let plateAppearance) = affectedEntry?.body {
+                            plateAppearance
+                        } else {
+                            nil
+                        }
                     GameEventCorrectionProblemView(
                         problem: invalid,
                         historyEntry: correctionSession.historyEntry(for: invalid.id),
                         affectedPlay: affectedPlay,
+                        affectedPlateAppearance: affectedPlateAppearance,
                         affectedState: affectedEntry?.stateBefore,
                         homeAway: homeAway,
                         stageChange: { stageChange(invalid, $0) }
@@ -1014,6 +1245,13 @@ private struct GameEventCorrectionSections: View {
                     .font(.body.monospacedDigit())
                     .accessibilityIdentifier("correction.change.\(change.sequenceNumber)")
             }
+            if !correctionSession.stagedOffensivePlateAppearanceChanges.isEmpty {
+                ForEach(correctionSession.stagedOffensivePlateAppearanceChanges) { change in
+                    Text(change.summary)
+                        .font(.body.monospacedDigit())
+                        .accessibilityIdentifier("correction.change.\(change.sequenceNumber)")
+                }
+            }
         }
 
         Section("Preview") {
@@ -1040,18 +1278,22 @@ private struct GameEventCorrectionProblemView: View {
     let problem: GameEventCorrectionProblem
     let historyEntry: PlayHistoryEntry?
     let affectedPlay: BallInPlayEvent?
+    let affectedPlateAppearance: OffensivePlateAppearanceEvent?
     let affectedState: GameState?
     let homeAway: HomeAway?
     let stageChange: (GameEventRepairAction) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedOutcome: BallInPlayOutcome
+    @State private var selectedPlateAppearanceResult: OffensivePlateAppearanceResult
     @State private var isConfirmingRunners = false
+    @State private var isConfirmingPlateAppearanceRunners = false
 
     init(
         problem: GameEventCorrectionProblem,
         historyEntry: PlayHistoryEntry?,
         affectedPlay: BallInPlayEvent?,
+        affectedPlateAppearance: OffensivePlateAppearanceEvent?,
         affectedState: GameState?,
         homeAway: HomeAway?,
         stageChange: @escaping (GameEventRepairAction) -> Void
@@ -1059,10 +1301,14 @@ private struct GameEventCorrectionProblemView: View {
         self.problem = problem
         self.historyEntry = historyEntry
         self.affectedPlay = affectedPlay
+        self.affectedPlateAppearance = affectedPlateAppearance
         self.affectedState = affectedState
         self.homeAway = homeAway
         self.stageChange = stageChange
         _selectedOutcome = State(initialValue: affectedPlay?.outcome ?? .single)
+        _selectedPlateAppearanceResult = State(
+            initialValue: affectedPlateAppearance?.result ?? .single
+        )
     }
 
     var body: some View {
@@ -1157,10 +1403,31 @@ private struct GameEventCorrectionProblemView: View {
                     }
                     .frame(minHeight: AppTheme.TouchTarget.minimum)
                     .accessibilityIdentifier("correction.repair.play")
+                }
+
+                if problem.canEditOffensivePlateAppearance,
+                   let affectedState,
+                   affectedPlateAppearance != nil,
+                   homeAway != nil {
+                    Picker("Correct tracked result", selection: $selectedPlateAppearanceResult) {
+                        ForEach(
+                            OffensivePlateAppearanceValidator.correctionResults(for: affectedState),
+                            id: \.self
+                        ) { result in
+                            Text(result.label).tag(result)
+                        }
+                    }
+
+                    Button("Confirm Tracked Runner Destinations") {
+                        isConfirmingPlateAppearanceRunners = true
+                    }
+                    .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    .accessibilityIdentifier("correction.repair.trackedPlay")
                 } else if !problem.canEditPitch
                             && !problem.canEditOffensivePitch
                             && !problem.canDeleteOffensivePitch
-                            && !problem.canDeletePitch {
+                            && !problem.canDeletePitch
+                            && !problem.canEditBallInPlay {
                     Text("This event does not support another change in this correction session.")
                         .foregroundStyle(AppTheme.graphite.opacity(0.68))
                 }
@@ -1182,6 +1449,42 @@ private struct GameEventCorrectionProblemView: View {
                     onRecord: { play in
                         stageChange(.editBallInPlay(play))
                         isConfirmingRunners = false
+                        dismiss()
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $isConfirmingPlateAppearanceRunners) {
+            if let affectedPlateAppearance, let affectedState, let homeAway {
+                OffensiveRunnerConfirmationSheet(
+                    result: selectedPlateAppearanceResult,
+                    state: affectedState,
+                    homeAway: homeAway,
+                    battingOrder: [affectedPlateAppearance.batter],
+                    batter: affectedPlateAppearance.batter,
+                    battingOrderSize: affectedPlateAppearance.battingOrderSize,
+                    initialDraft: OffensivePlateAppearanceDraft(
+                        result: selectedPlateAppearanceResult,
+                        movements: affectedPlateAppearance.movements,
+                        rbi: 0,
+                        countedRunSources: [],
+                        thirdOutClassification: nil
+                    ),
+                    allowsScoring: false,
+                    title: "Repair Affected Tracked Play",
+                    confirmationTitle: "Stage Repair",
+                    onCancel: { isConfirmingPlateAppearanceRunners = false },
+                    onRecord: { draft in
+                        stageChange(.editOffensivePlateAppearance(.init(
+                            batter: affectedPlateAppearance.batter,
+                            battingOrderSize: affectedPlateAppearance.battingOrderSize,
+                            result: draft.result,
+                            movements: draft.movements,
+                            rbi: draft.rbi,
+                            countedRunSources: draft.countedRunSources,
+                            thirdOutClassification: draft.thirdOutClassification
+                        )))
+                        isConfirmingPlateAppearanceRunners = false
                         dismiss()
                     }
                 )

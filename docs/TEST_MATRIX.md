@@ -134,6 +134,14 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Wrong-game, stale-session, projection, invalid-candidate, failed-save, and cancellation paths leave every durable record unchanged.
 - Fresh-context replay and the focused Accessibility XL workflow reproduce the deleted-pitch count and same tracked batter after relaunch.
 
+## Completed tracked-team plate-appearance correction
+
+- Play History exposes Edit Play only for accepted no-run, non-third-out tracked-team plate appearances and opens with event-time player, lineup slot/order size, component history, current result, and runner map.
+- Walk, HBP, strikeout, single, double, triple, error, fielder's choice, ordinary out, sacrifice bunt, and double-play replacements replay through the ordinary offensive validator and reproject PA/AB/H/2B/3B/BB/HBP/SO/sacrifice attribution.
+- Wrong player identity, missing/duplicate/unexpected runners, backward movement, passing, collisions, excess outs, illegal sacrifice, outcome mismatch, scoring, and half-inning-ending proposals cannot produce a saveable candidate.
+- A rejected downstream tracked-team plate appearance identifies its exact sequence and supports a second scorer-confirmed replacement in the same session; Save remains disabled until the full timeline is clean, then both records persist atomically.
+- Wrong-game, stale-session, projection, save, and cancellation paths preserve the durable timeline. Fresh-context and standard/Accessibility XL UI relaunch coverage verify representative hit-to-error-to-out correction, current/proposed summaries, 44-point controls, next batter, bases, outs, and History.
+
 ## Completed defensive logical-play deletion
 
 - Play History exposes Delete Completed Play only for an accepted paired defensive In Play pitch and Ball In Play result while retaining individual component actions.
