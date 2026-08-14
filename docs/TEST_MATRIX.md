@@ -117,6 +117,14 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Fresh-context and cold-store reload reproduce the corrected game state, pitcher totals, batting projection, and Play History.
 - Accessibility XXXL UI coverage invalidates a downstream defensive pitch, navigates to it, stages the repair, saves once, and returns to live scoring.
 
+## Earlier tracked-team pitch correction
+
+- Play History exposes Ball, Called Strike, Swinging Strike, and Foul components with their event-time player identity, lineup slot, and batting-order size.
+- The persistence boundary accepts only a replacement result and preserves stable record ID, game ID, sequence, timestamp, player identity, slot, and order size.
+- Candidate replay validates the event-time count and batter, preserves later batter transitions and deterministic batting projection, and exposes the first invalid downstream offensive pitch for staged repair.
+- Wrong-game, stale-session, projection, invalid-candidate, failed-save, and cancellation paths leave the durable timeline unchanged.
+- Fresh-context replay and the focused Accessibility XL UI workflow reproduce the edited count and same tracked batter after relaunch.
+
 ## Completed defensive logical-play deletion
 
 - Play History exposes Delete Completed Play only for an accepted paired defensive In Play pitch and Ball In Play result while retaining individual component actions.

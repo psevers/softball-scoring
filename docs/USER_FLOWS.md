@@ -81,6 +81,20 @@ full candidate replay/projection → first invalid later record disables Save
 Cancel unchanged, or Save one payload/kind → refreshed History + live scoring
 ```
 
+## Edit an earlier tracked-team pitch — Slice 6
+
+```text
+Live Game → Play History → expand tracked plate appearance → Edit Pitch
+  ↓
+review event-time player + batting slot/order size + sequence + current result/count
+  ↓
+choose Ball / Called Strike / Swinging Strike / Foul
+  ↓
+rebuild from persisted batter context → replay/project every later offensive event
+  ↓
+Cancel unchanged, stage any rejected downstream repair, or atomically Save → relaunch same batter/count
+```
+
 ## Delete an earlier defensive pitch — Slice 6
 
 ```text

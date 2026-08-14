@@ -642,6 +642,67 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertEqual(currentBatter.label, "Player 01")
     }
 
+    func testEarlierTrackedTeamPitchEditPreservesBatterAndCountAfterRelaunch() {
+        let app = launchApp(
+            atAccessibilityTextSize: true,
+            persistentStoreName: "tracked-pitch-edit-\(UUID().uuidString)"
+        )
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let currentBatter = app.staticTexts["offense.currentBatter"]
+        let count = app.staticTexts["game.count"]
+        XCTAssertTrue(currentBatter.waitForExistence(timeout: 3))
+        XCTAssertEqual(currentBatter.label, "Player 01")
+        XCTAssertTrue(scrollUntilHittable(app.buttons["offense.pitch.ball"], in: app))
+        app.buttons["offense.pitch.ball"].tap()
+        XCTAssertTrue(scrollUntilHittable(app.buttons["offense.pitch.calledStrike"], in: app))
+        app.buttons["offense.pitch.calledStrike"].tap()
+        XCTAssertTrue(waitForLabel("1 – 1", on: count))
+
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        app.buttons["history.entry.1"].tap()
+        let editPitch = app.buttons["history.editTrackedPitch.1"]
+        XCTAssertTrue(editPitch.waitForExistence(timeout: 3))
+        XCTAssertEqual(editPitch.label, "Edit Player 01 Ball pitch, sequence 1")
+        editPitch.tap()
+
+        XCTAssertTrue(app.navigationBars["Edit Tracked Pitch"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Top 1 · Player 01 · Batting slot 1 of 14 · Sequence 1"].exists)
+        XCTAssertTrue(app.staticTexts["Current: Ball · Count 1–0"].exists)
+        XCTAssertFalse(app.buttons["trackedPitchEdit.save"].isEnabled)
+        let form = app.collectionViews.firstMatch
+        let swingingStrike = app.buttons["trackedPitchEdit.result.swingingStrike"]
+        XCTAssertTrue(swipeWithinUntilHittable(swingingStrike, in: form))
+        swingingStrike.tap()
+        let proposed = app.staticTexts["trackedPitchEdit.proposed"]
+        XCTAssertTrue(swipeWithinUntilHittable(proposed, in: form))
+        XCTAssertEqual(proposed.label, "Proposed: Swinging Strike · Count 0–1")
+        let save = app.buttons["trackedPitchEdit.save"]
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["history.entry.1"].label.contains("Player 01"))
+        XCTAssertTrue(app.buttons["history.entry.1"].label.contains("0–2 count"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertEqual(currentBatter.label, "Player 01")
+        XCTAssertEqual(count.label, "0 – 2")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Games"].tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertEqual(app.staticTexts["offense.currentBatter"].label, "Player 01")
+        XCTAssertEqual(app.staticTexts["game.count"].label, "0 – 2")
+    }
+
     func testUndoTrackedTeamScoringPlateAppearanceRestoresBatterScoreAndBattingLine() {
         let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()

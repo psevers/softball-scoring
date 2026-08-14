@@ -50,6 +50,7 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
     let isPitch: Bool
     let defensivePitchResult: PitchResult?
     let editableDefensivePitchResult: PitchResult?
+    let editableOffensivePitchResult: OffensivePitchResult?
     let editableDefensiveBallInPlayOutcome: BallInPlayOutcome?
 
     init(
@@ -61,6 +62,7 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
         isPitch: Bool,
         defensivePitchResult: PitchResult? = nil,
         editableDefensivePitchResult: PitchResult? = nil,
+        editableOffensivePitchResult: OffensivePitchResult? = nil,
         editableDefensiveBallInPlayOutcome: BallInPlayOutcome? = nil
     ) {
         self.recordID = recordID
@@ -71,6 +73,7 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
         self.isPitch = isPitch
         self.defensivePitchResult = defensivePitchResult
         self.editableDefensivePitchResult = editableDefensivePitchResult
+        self.editableOffensivePitchResult = editableOffensivePitchResult
         self.editableDefensiveBallInPlayOutcome = editableDefensiveBallInPlayOutcome
     }
 }
@@ -437,7 +440,8 @@ enum PlayHistoryProjector {
             summary: result,
             detail: detail,
             accessibilityDescription: "\(result). \(detail).",
-            isPitch: true
+            isPitch: true,
+            editableOffensivePitchResult: pitch.result
         )
     }
 
