@@ -60,6 +60,7 @@ enum GameEventReplay {
         var rejected: [UUID] = []
         var entries: [Entry] = []
         var seenSequenceNumbers = Set<Int>()
+        var completedDefensivePlayReferences: [UUID: RelatedDefensivePlayReference] = [:]
 
         let ordered = records.sorted { lhs, rhs in
             if lhs.sequenceNumber == rhs.sequenceNumber { return lhs.timestamp < rhs.timestamp }
@@ -116,7 +117,8 @@ enum GameEventReplay {
                 decoded,
                 for: state,
                 homeAway: homeAway,
-                startingPitcherID: startingPitcherID
+                startingPitcherID: startingPitcherID,
+                completedDefensivePlayReferences: completedDefensivePlayReferences
             ), validateEvent(record, decoded, state) else {
                 rejected.append(record.id)
                 entries.append(Entry(
@@ -136,6 +138,9 @@ enum GameEventReplay {
                 to: &state,
                 trackedTeamHomeAway: homeAway
             )
+            if isCompletedDefensivePlay(decoded.body, stateBefore: stateBefore) {
+                completedDefensivePlayReferences[record.id] = record.relatedDefensivePlayReference
+            }
             entries.append(Entry(
                 recordID: record.id,
                 sequenceNumber: record.sequenceNumber,
@@ -154,7 +159,8 @@ enum GameEventReplay {
         _ event: DecodedGameEvent,
         for state: GameState,
         homeAway: HomeAway,
-        startingPitcherID: UUID?
+        startingPitcherID: UUID?,
+        completedDefensivePlayReferences: [UUID: RelatedDefensivePlayReference]
     ) -> Bool {
         switch event.body {
         case .pitch(let pitch):
@@ -167,6 +173,9 @@ enum GameEventReplay {
             return startingPitcherID == reconciliation.pitcherID
                 && state.pitchCount(for: reconciliation.pitcherID)
                     .reconciling(reconciliation) != nil
+                && reconciliation.relatedPlay.map {
+                    completedDefensivePlayReferences[$0.recordID] == $0
+                } != false
 
         case .ballInPlay(let play):
             return BallInPlayValidator.validate(
@@ -195,6 +204,24 @@ enum GameEventReplay {
                 state: state,
                 trackedTeamHomeAway: homeAway
             )
+        }
+    }
+
+    static func isCompletedDefensivePlay(
+        _ body: GameEventBody,
+        stateBefore: GameState
+    ) -> Bool {
+        switch body {
+        case .pitch(let pitch):
+            pitch.result.completesPlateAppearance(
+                balls: stateBefore.balls,
+                strikes: stateBefore.strikes
+            )
+        case .ballInPlay:
+            true
+        case .pitchCountReconciliation, .offensivePitch,
+             .offensiveBaseRunning, .offensivePlateAppearance:
+            false
         }
     }
 }

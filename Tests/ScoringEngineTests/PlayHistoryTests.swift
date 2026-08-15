@@ -43,6 +43,56 @@ struct PlayHistoryTests {
         #expect(entry.accessibilityDescription.contains("Unclassified plus 1"))
     }
 
+    @Test func relatedPitchCountReconciliationGroupsWithItsCompletedPlay() throws {
+        let pitcherID = UUID()
+        let gameID = UUID()
+        let pitch = try GameEventRecord(
+            gameID: gameID,
+            sequenceNumber: 1,
+            body: .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        let play = try GameEventRecord(
+            gameID: gameID,
+            sequenceNumber: 2,
+            body: .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ))
+        )
+        let reconciliation = try GameEventRecord(
+            gameID: gameID,
+            sequenceNumber: 3,
+            body: .pitchCountReconciliation(.init(
+                pitcherID: pitcherID,
+                adjustment: .init(total: 3, balls: 1, strikes: 1),
+                relatedPlay: play.relatedDefensivePlayReference
+            ))
+        )
+
+        let replay = GameEventReplay.replay(
+            records: [pitch, play, reconciliation],
+            homeAway: .home,
+            startingPitcherID: pitcherID
+        )
+        let entry = try #require(
+            PlayHistoryProjector.project(replay: replay).sections.first?.entries.first
+        )
+
+        #expect(entry.summary == "1B · Batter to 1B")
+        #expect(entry.components.map(\.sequenceNumber) == [1, 2, 3])
+        #expect(entry.detail.contains("Pitch total +3"))
+        #expect(entry.detail.contains("Balls +1"))
+        #expect(entry.detail.contains("Strikes +1"))
+        #expect(entry.detail.contains("Unclassified +1"))
+    }
+
     @Test func completedBallInPlayPairsPitchAndResultWhilePendingPlayStaysVisible() throws {
         let pitcherID = UUID()
         let gameID = UUID()

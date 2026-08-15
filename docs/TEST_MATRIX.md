@@ -55,13 +55,16 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 
 ## Pitch-count reconciliation
 
-- Codec round-trip retains target pitcher identity and signed total/ball/strike adjustments.
+- Codec round-trip retains target pitcher identity, signed total/ball/strike adjustments, and an optional exact related-play reference; legacy payloads without the reference still decode.
 - Positive, negative, classified, and unclassified adjustments replay deterministically without changing live count or non-pitch state.
 - Negative resulting totals, over-classification, and a non-starting pitcher identity are rejected.
+- The editor lists only earlier readable, accepted completed defensive plays from the same game. Missing, cross-game, unreadable, and non-defensive targets are rejected before persistence.
+- Associated history retains the pitch/result/reconciliation component sequence numbers and explains signed total, ball, strike, and unclassified values on the logical play.
+- Editing the target invalidates its revision reference until explicit re-association; deleting the target invalidates it until explicit re-association or explicit association removal. If deleting the play also makes a negative adjustment invalid, explicit reconciliation deletion repairs the batch. These paths cover rollback and fresh replay and save with the surrounding correction atomically.
 - Append uses the authoritative next sequence; wrong-game, stale-session, invalid-candidate, and save-failure paths persist nothing partially.
 - Fresh-context replay reproduces the adjusted totals and unchanged batting projection.
-- Play History explains every signed adjustment, and latest-action Undo removes only the reconciliation.
-- Focused UI coverage saves, relaunches, undoes, and replaces signed adjustments while preserving the live count.
+- Play History explains every signed adjustment, and latest-action Undo removes only the reconciliation while leaving its related play intact.
+- Focused UI coverage associates, groups, saves, relaunches, undoes, and replaces signed adjustments while preserving the live count.
 
 ## Read-only Play History
 

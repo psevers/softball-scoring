@@ -1382,6 +1382,8 @@ private enum GameEventRepairAction {
     case editBallInPlay(BallInPlayEvent)
     case editOffensiveBaseRunning(OffensiveBaseRunningEvent)
     case editOffensivePlateAppearance(OffensivePlateAppearanceEvent)
+    case repairPitchCountReconciliation(UUID?)
+    case deletePitchCountReconciliation
 }
 
 @MainActor
@@ -1484,6 +1486,21 @@ private final class GameEventCorrectionCoordinator {
                 self.session = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
                     recordID: recordID,
                     plateAppearance: plateAppearance,
+                    in: session,
+                    game: game,
+                    modelContext: modelContext
+                )
+            case .repairPitchCountReconciliation(let relatedPlayRecordID):
+                self.session = try GameEventCorrection.stagePitchCountReconciliationAssociation(
+                    recordID: recordID,
+                    relatedPlayRecordID: relatedPlayRecordID,
+                    in: session,
+                    game: game,
+                    modelContext: modelContext
+                )
+            case .deletePitchCountReconciliation:
+                self.session = try GameEventCorrection.stagePitchCountReconciliationDeletion(
+                    recordID: recordID,
                     in: session,
                     game: game,
                     modelContext: modelContext
@@ -1639,6 +1656,11 @@ private struct GameEventCorrectionSections: View {
                         .font(.body.monospacedDigit())
                         .accessibilityIdentifier("correction.change.\(change.sequenceNumber)")
                 }
+            }
+            ForEach(correctionSession.stagedPitchCountReconciliationChanges) { change in
+                Text(change.summary)
+                    .font(.body.monospacedDigit())
+                    .accessibilityIdentifier("correction.change.\(change.sequenceNumber)")
             }
         }
 
@@ -1888,6 +1910,45 @@ private struct GameEventCorrectionProblemView: View {
                     .accessibilityIdentifier("correction.repair.deleteTrackedBaseRunning")
                 }
 
+                if problem.canRepairPitchCountReconciliation {
+                    if !problem.relatedDefensivePlays.isEmpty {
+                        Menu {
+                            ForEach(problem.relatedDefensivePlays) { play in
+                                Button(play.summary) {
+                                    stageChange(.repairPitchCountReconciliation(play.recordID))
+                                    dismiss()
+                                }
+                                .accessibilityIdentifier(
+                                    "correction.repair.reconciliation.\(play.sequenceNumber)"
+                                )
+                            }
+                        } label: {
+                            Label("Re-associate Related Play", systemImage: "link")
+                                .frame(minHeight: AppTheme.TouchTarget.minimum)
+                        }
+                    }
+
+                    Button(role: .destructive) {
+                        stageChange(.repairPitchCountReconciliation(nil))
+                        dismiss()
+                    } label: {
+                        Label("Remove Related Play Association", systemImage: "link.badge.minus")
+                            .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    }
+                    .accessibilityIdentifier("correction.repair.reconciliation.remove")
+                }
+
+                if problem.canDeletePitchCountReconciliation {
+                    Button(role: .destructive) {
+                        stageChange(.deletePitchCountReconciliation)
+                        dismiss()
+                    } label: {
+                        Label("Delete Affected Reconciliation", systemImage: "trash")
+                            .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    }
+                    .accessibilityIdentifier("correction.repair.reconciliation.delete")
+                }
+
                 if !problem.canEditPitch
                             && !problem.canEditOffensivePitch
                             && !problem.canDeleteOffensivePitch
@@ -1896,6 +1957,8 @@ private struct GameEventCorrectionProblemView: View {
                             && !problem.canEditOffensiveBaseRunning
                             && !problem.canEditOffensivePlateAppearance
                             && !problem.canDeleteOffensiveBaseRunning
+                            && !problem.canRepairPitchCountReconciliation
+                            && !problem.canDeletePitchCountReconciliation
                             && problem.logicalPlayDeletion == nil {
                     Text("This event does not support another change in this correction session.")
                         .foregroundStyle(AppTheme.graphite.opacity(0.68))

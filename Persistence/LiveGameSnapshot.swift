@@ -138,6 +138,7 @@ final class LiveGameSession {
 
     func savePitchCountReconciliation(
         adjustment: PitchCountAdjustment,
+        relatedPlayRecordID: UUID?,
         session: PitchCountReconciliationSession,
         game: Game,
         modelContext: ModelContext
@@ -145,6 +146,7 @@ final class LiveGameSession {
         guard game.id == gameID else { throw LiveGameSnapshotError.gameMismatch }
         snapshot = try GameEventCorrection.savePitchCountReconciliation(
             adjustment: adjustment,
+            relatedPlayRecordID: relatedPlayRecordID,
             session: session,
             game: game,
             modelContext: modelContext

@@ -121,12 +121,26 @@ struct UndoLatestActionCandidate: Identifiable {
     }
 }
 
+struct CompletedDefensivePlayOption: Identifiable, Equatable, Sendable {
+    var id: UUID { recordID }
+
+    let recordID: UUID
+    let sequenceNumber: Int
+    let inning: Int
+    let half: InningHalf
+    let opponentBatterSlot: Int
+    let summary: String
+
+    fileprivate let reference: RelatedDefensivePlayReference
+}
+
 struct PitchCountReconciliationSession: Identifiable {
     var id: UUID { pitcherID }
 
     let gameID: UUID
     let pitcherID: UUID
     let currentCount: PitchCount
+    let completedDefensivePlays: [CompletedDefensivePlayOption]
 
     fileprivate let expectedTimeline: [GameEventRecordRevision]
 
@@ -366,6 +380,34 @@ struct DefensiveBallInPlayStagedChange: Identifiable, Equatable {
     }
 }
 
+struct PitchCountReconciliationStagedChange: Identifiable, Equatable {
+    var id: UUID { recordID }
+
+    let recordID: UUID
+    let sequenceNumber: Int
+    let originalReconciliation: PitchCountReconciliationEvent
+    let proposedReconciliation: PitchCountReconciliationEvent?
+
+    var summary: String {
+        guard let proposedReconciliation else {
+            return "Sequence \(sequenceNumber) · Delete pitch reconciliation"
+        }
+        if let relatedPlay = proposedReconciliation.relatedPlay {
+            return "Sequence \(sequenceNumber) · Associate reconciliation with sequence "
+                + "\(relatedPlay.sequenceNumber)"
+        }
+        return "Sequence \(sequenceNumber) · Remove related-play association"
+    }
+}
+
+struct RelatedDefensivePlayRepairOption: Identifiable, Equatable, Sendable {
+    var id: UUID { recordID }
+
+    let recordID: UUID
+    let sequenceNumber: Int
+    let summary: String
+}
+
 struct CompletedPlayDeletionComponent: Identifiable, Equatable {
     var id: UUID { recordID }
 
@@ -433,6 +475,9 @@ struct GameEventCorrectionProblem: Equatable {
     let canEditOffensiveBaseRunning: Bool
     let canEditOffensivePlateAppearance: Bool
     let canDeleteOffensiveBaseRunning: Bool
+    let canRepairPitchCountReconciliation: Bool
+    let canDeletePitchCountReconciliation: Bool
+    let relatedDefensivePlays: [RelatedDefensivePlayRepairOption]
     let logicalPlayDeletion: CompletedPlayRepairDeletion?
     let offensiveBaseRunningRunners: [OffensiveBaseRunningRunner]
     let offensiveRunnerIdentities: [TrackedBatterIdentity]
@@ -445,6 +490,7 @@ struct GameEventCorrectionSession {
     let stagedOffensiveBaseRunningChanges: [OffensiveBaseRunningStagedChange]
     let stagedOffensivePlateAppearanceChanges: [OffensivePlateAppearanceStagedChange]
     let stagedBallInPlayChanges: [DefensiveBallInPlayStagedChange]
+    let stagedPitchCountReconciliationChanges: [PitchCountReconciliationStagedChange]
     let stagedLogicalPlayDeletions: [CompletedPlayStagedDeletion]
     let snapshot: LiveGameSnapshot
     let firstInvalidRecord: GameEventCorrectionProblem?
@@ -469,6 +515,9 @@ struct GameEventCorrectionSession {
                 $0.proposedPlateAppearance != $0.originalPlateAppearance
             }
             || stagedBallInPlayChanges.contains { $0.proposedPlay != $0.originalPlay }
+            || stagedPitchCountReconciliationChanges.contains {
+                $0.proposedReconciliation != $0.originalReconciliation
+            }
             || !stagedLogicalPlayDeletions.isEmpty)
             && firstInvalidRecord == nil
     }
@@ -686,6 +735,7 @@ enum GameEventCorrectionError: LocalizedError {
     case invalidCandidate
     case noStartingPitcher
     case invalidReconciliation
+    case invalidRelatedPlay
 
     var errorDescription: String? {
         switch self {
@@ -723,6 +773,8 @@ enum GameEventCorrectionError: LocalizedError {
             "This game does not have a starting pitcher to reconcile."
         case .invalidReconciliation:
             "The adjustment would produce invalid pitcher totals."
+        case .invalidRelatedPlay:
+            "Choose a readable completed defensive play from this game."
         }
     }
 }
@@ -763,12 +815,17 @@ enum GameEventCorrection {
             gameID: game.id,
             pitcherID: pitcherID,
             currentCount: snapshot.replay.state.pitchCount(for: pitcherID),
+            completedDefensivePlays: completedDefensivePlays(
+                records: records,
+                replay: snapshot.replay
+            ),
             expectedTimeline: records.map(GameEventRecordRevision.init)
         )
     }
 
     static func savePitchCountReconciliation(
         adjustment: PitchCountAdjustment,
+        relatedPlayRecordID: UUID? = nil,
         session: PitchCountReconciliationSession,
         game: Game,
         modelContext: ModelContext,
@@ -780,9 +837,18 @@ enum GameEventCorrection {
         guard game.startingPitcherID == session.pitcherID else {
             throw GameEventCorrectionError.staleTimeline
         }
+        let relatedPlay = try relatedPlayRecordID.map { recordID in
+            guard let play = session.completedDefensivePlays.first(where: {
+                $0.recordID == recordID
+            }) else {
+                throw GameEventCorrectionError.invalidRelatedPlay
+            }
+            return play.reference
+        }
         let event = PitchCountReconciliationEvent(
             pitcherID: session.pitcherID,
-            adjustment: adjustment
+            adjustment: adjustment,
+            relatedPlay: relatedPlay
         )
         guard session.currentCount.reconciling(event) != nil else {
             throw GameEventCorrectionError.invalidReconciliation
@@ -913,6 +979,7 @@ enum GameEventCorrection {
             stagedOffensiveBaseRunningChanges: [],
             stagedOffensivePlateAppearanceChanges: [],
             stagedBallInPlayChanges: [],
+            stagedPitchCountReconciliationChanges: [],
             stagedLogicalPlayDeletions: [],
             snapshot: snapshot,
             firstInvalidRecord: nil,
@@ -993,6 +1060,118 @@ enum GameEventCorrection {
         )
     }
 
+    static func stagePitchCountReconciliationAssociation(
+        recordID: UUID,
+        relatedPlayRecordID: UUID?,
+        in session: GameEventCorrectionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
+    ) throws -> GameEventCorrectionSession {
+        guard session.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        guard records.map(GameEventRecordRevision.init) == session.expectedTimeline else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        let originalSnapshot = try validatedSnapshot(
+            game: game,
+            records: records,
+            projectBattingLines: projectBattingLines
+        )
+        guard let storedRecord = records.first(where: { $0.id == recordID }),
+              case .pitchCountReconciliation(let storedReconciliation) =
+                try storedRecord.decoded().body else {
+            throw GameEventCorrectionError.invalidCandidate
+        }
+        let currentRecords = try applying(
+            session.stagedChanges,
+            offensivePitchChanges: session.stagedOffensivePitchChanges,
+            offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
+            offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
+            ballInPlayChanges: session.stagedBallInPlayChanges,
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
+            logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            to: records
+        )
+        let relatedPlay: RelatedDefensivePlayReference?
+        if let relatedPlayRecordID {
+            guard let targetRecord = currentRecords.first(where: {
+                $0.id == relatedPlayRecordID && $0.sequenceNumber < storedRecord.sequenceNumber
+            }),
+                  let targetEntry = session.snapshot.replay.entries.first(where: {
+                      $0.recordID == relatedPlayRecordID && $0.rejection == nil
+                  }),
+                  let targetBody = targetEntry.body,
+                  GameEventReplay.isCompletedDefensivePlay(
+                      targetBody,
+                      stateBefore: targetEntry.stateBefore
+                  ) else {
+                throw GameEventCorrectionError.invalidRelatedPlay
+            }
+            relatedPlay = targetRecord.relatedDefensivePlayReference
+        } else {
+            relatedPlay = nil
+        }
+        let currentReconciliation = session.stagedPitchCountReconciliationChanges
+            .first(where: { $0.recordID == recordID })?
+            .proposedReconciliation ?? storedReconciliation
+        let proposedReconciliation = PitchCountReconciliationEvent(
+            pitcherID: currentReconciliation.pitcherID,
+            adjustment: currentReconciliation.adjustment,
+            relatedPlay: relatedPlay
+        )
+        return try stagingPitchCountReconciliationChange(
+            storedRecord: storedRecord,
+            storedReconciliation: storedReconciliation,
+            proposedReconciliation: proposedReconciliation,
+            records: records,
+            originalSnapshot: originalSnapshot,
+            in: session,
+            game: game,
+            projectBattingLines: projectBattingLines
+        )
+    }
+
+    static func stagePitchCountReconciliationDeletion(
+        recordID: UUID,
+        in session: GameEventCorrectionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
+    ) throws -> GameEventCorrectionSession {
+        guard session.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        guard records.map(GameEventRecordRevision.init) == session.expectedTimeline else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        let originalSnapshot = try validatedSnapshot(
+            game: game,
+            records: records,
+            projectBattingLines: projectBattingLines
+        )
+        guard let storedRecord = records.first(where: { $0.id == recordID }),
+              case .pitchCountReconciliation(let storedReconciliation) =
+                try storedRecord.decoded().body else {
+            throw GameEventCorrectionError.invalidCandidate
+        }
+        return try stagingPitchCountReconciliationChange(
+            storedRecord: storedRecord,
+            storedReconciliation: storedReconciliation,
+            proposedReconciliation: nil,
+            records: records,
+            originalSnapshot: originalSnapshot,
+            in: session,
+            game: game,
+            projectBattingLines: projectBattingLines
+        )
+    }
+
     static func saveGameEventCorrection(
         _ session: GameEventCorrectionSession,
         game: Game,
@@ -1018,6 +1197,7 @@ enum GameEventCorrection {
             offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             ballInPlayChanges: session.stagedBallInPlayChanges,
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
             to: records
         )
@@ -1091,6 +1271,20 @@ enum GameEventCorrection {
             let encoded = try GameEventCodec.encode(.ballInPlay(change.proposedPlay))
             record.kindRawValue = encoded.kind.rawValue
             record.payload = encoded.payload
+        }
+        for change in session.stagedPitchCountReconciliationChanges {
+            guard let record = records.first(where: { $0.id == change.recordID }) else {
+                throw GameEventCorrectionError.staleTimeline
+            }
+            if let proposedReconciliation = change.proposedReconciliation {
+                let encoded = try GameEventCodec.encode(
+                    .pitchCountReconciliation(proposedReconciliation)
+                )
+                record.kindRawValue = encoded.kind.rawValue
+                record.payload = encoded.payload
+            } else {
+                correctionContext.delete(record)
+            }
         }
         let logicalPlayRecordIDs = Set(session.stagedLogicalPlayDeletions.flatMap {
             $0.recordIDs
@@ -1918,6 +2112,7 @@ enum GameEventCorrection {
             offensiveBaseRunningChanges: offensiveBaseRunningChanges,
             offensivePlateAppearanceChanges: offensivePlateAppearanceChanges,
             ballInPlayChanges: ballInPlayChanges,
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: deletions,
             to: records
         )
@@ -1937,6 +2132,7 @@ enum GameEventCorrection {
             stagedOffensiveBaseRunningChanges: offensiveBaseRunningChanges,
             stagedOffensivePlateAppearanceChanges: offensivePlateAppearanceChanges,
             stagedBallInPlayChanges: ballInPlayChanges,
+            stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             stagedLogicalPlayDeletions: deletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
@@ -2009,6 +2205,7 @@ enum GameEventCorrection {
             offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             ballInPlayChanges: [change],
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             to: session.snapshot.records
         )
         let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
@@ -2023,6 +2220,7 @@ enum GameEventCorrection {
             stagedOffensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             stagedOffensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             stagedBallInPlayChanges: [change],
+            stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
@@ -2109,6 +2307,7 @@ enum GameEventCorrection {
             offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             ballInPlayChanges: session.stagedBallInPlayChanges,
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
             to: records
         )
@@ -2150,6 +2349,7 @@ enum GameEventCorrection {
             offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             ballInPlayChanges: ballInPlayChanges,
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
             to: records
         )
@@ -2165,6 +2365,7 @@ enum GameEventCorrection {
             stagedOffensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             stagedOffensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             stagedBallInPlayChanges: ballInPlayChanges,
+            stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
@@ -2255,6 +2456,7 @@ enum GameEventCorrection {
                 offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
                 offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
                 ballInPlayChanges: session.stagedBallInPlayChanges,
+                pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
                 logicalPlayDeletions: session.stagedLogicalPlayDeletions,
                 to: records
             )
@@ -2297,6 +2499,7 @@ enum GameEventCorrection {
             offensiveBaseRunningChanges: baseRunningChanges,
             offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             ballInPlayChanges: session.stagedBallInPlayChanges,
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
             to: records
         )
@@ -2312,6 +2515,7 @@ enum GameEventCorrection {
             stagedOffensiveBaseRunningChanges: baseRunningChanges,
             stagedOffensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             stagedBallInPlayChanges: session.stagedBallInPlayChanges,
+            stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
@@ -2367,6 +2571,7 @@ enum GameEventCorrection {
             offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             ballInPlayChanges: session.stagedBallInPlayChanges,
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
             to: records
         )
@@ -2417,6 +2622,7 @@ enum GameEventCorrection {
             offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             offensivePlateAppearanceChanges: plateAppearanceChanges,
             ballInPlayChanges: session.stagedBallInPlayChanges,
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
             to: records
         )
@@ -2436,6 +2642,7 @@ enum GameEventCorrection {
             stagedOffensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             stagedOffensivePlateAppearanceChanges: plateAppearanceChanges,
             stagedBallInPlayChanges: session.stagedBallInPlayChanges,
+            stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
@@ -2482,6 +2689,7 @@ enum GameEventCorrection {
             offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             ballInPlayChanges: session.stagedBallInPlayChanges,
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
             to: records
         )
@@ -2525,6 +2733,7 @@ enum GameEventCorrection {
             offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             ballInPlayChanges: session.stagedBallInPlayChanges,
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
             to: records
         )
@@ -2540,6 +2749,7 @@ enum GameEventCorrection {
             stagedOffensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             stagedOffensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             stagedBallInPlayChanges: session.stagedBallInPlayChanges,
+            stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
@@ -2584,6 +2794,7 @@ enum GameEventCorrection {
             offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             ballInPlayChanges: session.stagedBallInPlayChanges,
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
             to: records
         )
@@ -2639,6 +2850,7 @@ enum GameEventCorrection {
             offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             ballInPlayChanges: session.stagedBallInPlayChanges,
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
             to: records
         )
@@ -2655,6 +2867,68 @@ enum GameEventCorrection {
             stagedOffensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
             stagedOffensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
             stagedBallInPlayChanges: session.stagedBallInPlayChanges,
+            stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
+            stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            snapshot: snapshot,
+            firstInvalidRecord: firstCorrectionProblem(
+                in: snapshot.replay,
+                originalReplay: originalSnapshot.replay
+            ),
+            expectedTimeline: session.expectedTimeline
+        )
+    }
+
+    private static func stagingPitchCountReconciliationChange(
+        storedRecord: GameEventRecord,
+        storedReconciliation: PitchCountReconciliationEvent,
+        proposedReconciliation: PitchCountReconciliationEvent?,
+        records: [GameEventRecord],
+        originalSnapshot: LiveGameSnapshot,
+        in session: GameEventCorrectionSession,
+        game: Game,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines
+    ) throws -> GameEventCorrectionSession {
+        var reconciliationChanges = session.stagedPitchCountReconciliationChanges.filter {
+            $0.recordID != storedRecord.id
+        }
+        if proposedReconciliation != storedReconciliation {
+            reconciliationChanges.append(PitchCountReconciliationStagedChange(
+                recordID: storedRecord.id,
+                sequenceNumber: storedRecord.sequenceNumber,
+                originalReconciliation: storedReconciliation,
+                proposedReconciliation: proposedReconciliation
+            ))
+            reconciliationChanges.sort { $0.sequenceNumber < $1.sequenceNumber }
+        }
+        let candidateRecords = try applying(
+            session.stagedChanges,
+            offensivePitchChanges: session.stagedOffensivePitchChanges,
+            offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
+            offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
+            ballInPlayChanges: session.stagedBallInPlayChanges,
+            pitchCountReconciliationChanges: reconciliationChanges,
+            logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            to: records
+        )
+        let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
+            game: game,
+            records: candidateRecords,
+            projectBattingLines: projectBattingLines,
+            validateEvent: terminalCountValidator(
+                originalReplay: originalSnapshot.replay,
+                ignoredRecordIDs: Set(
+                    session.stagedOffensivePlateAppearanceChanges.map(\.recordID)
+                )
+            )
+        )
+        return GameEventCorrectionSession(
+            gameID: game.id,
+            stagedChanges: session.stagedChanges,
+            stagedOffensivePitchChanges: session.stagedOffensivePitchChanges,
+            stagedOffensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
+            stagedOffensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
+            stagedBallInPlayChanges: session.stagedBallInPlayChanges,
+            stagedPitchCountReconciliationChanges: reconciliationChanges,
             stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
@@ -2671,6 +2945,7 @@ enum GameEventCorrection {
         offensiveBaseRunningChanges: [OffensiveBaseRunningStagedChange],
         offensivePlateAppearanceChanges: [OffensivePlateAppearanceStagedChange],
         ballInPlayChanges: [DefensiveBallInPlayStagedChange],
+        pitchCountReconciliationChanges: [PitchCountReconciliationStagedChange],
         logicalPlayDeletions: [CompletedPlayStagedDeletion] = [],
         to records: [GameEventRecord]
     ) throws -> [GameEventRecord] {
@@ -2686,6 +2961,9 @@ enum GameEventCorrection {
         )
         let ballInPlayChangesByRecordID = Dictionary(
             uniqueKeysWithValues: ballInPlayChanges.map { ($0.recordID, $0) }
+        )
+        let pitchCountReconciliationChangesByRecordID = Dictionary(
+            uniqueKeysWithValues: pitchCountReconciliationChanges.map { ($0.recordID, $0) }
         )
         let deletedLogicalPlayRecordIDs = Set(logicalPlayDeletions.flatMap {
             $0.recordIDs
@@ -2742,6 +3020,18 @@ enum GameEventCorrection {
                     )
                 }
             }
+            if let change = pitchCountReconciliationChangesByRecordID[record.id] {
+                guard let proposedReconciliation = change.proposedReconciliation else {
+                    return nil
+                }
+                return try GameEventRecord(
+                    id: record.id,
+                    gameID: record.gameID,
+                    sequenceNumber: record.sequenceNumber,
+                    timestamp: record.timestamp,
+                    body: .pitchCountReconciliation(proposedReconciliation)
+                )
+            }
             guard let change = changesByRecordID[record.id] else { return record }
             switch change.action {
             case .delete:
@@ -2786,6 +3076,9 @@ enum GameEventCorrection {
         let canEditBallInPlay: Bool
         let canEditOffensiveBaseRunning: Bool
         let canEditOffensivePlateAppearance: Bool
+        var canRepairPitchCountReconciliation = false
+        var canDeletePitchCountReconciliation = false
+        var relatedDefensivePlays: [RelatedDefensivePlayRepairOption] = []
         let canDeleteOffensiveBaseRunning = originalReplay.entries.contains(where: {
             guard $0.recordID == entry.recordID else { return false }
             if case .offensiveBaseRunning = $0.body { return true }
@@ -2942,6 +3235,43 @@ enum GameEventCorrection {
                 canEditOffensivePlateAppearance = false
             }
             offensiveRunnerIdentities = resolvedEveryRunner ? resolvedRunnerIdentities : []
+        case .pitchCountReconciliation(let reconciliation):
+            context = "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · "
+                + "Pitch reconciliation "
+                + signedPitchAdjustment(reconciliation.adjustment.total)
+            let adjustmentRemainsValid = entry.stateBefore
+                .pitchCount(for: reconciliation.pitcherID)
+                .reconciling(reconciliation) != nil
+            canRepairPitchCountReconciliation = adjustmentRemainsValid
+                && reconciliation.relatedPlay != nil
+            canDeletePitchCountReconciliation = originalReplay.entries.contains(where: {
+                guard $0.recordID == entry.recordID, $0.rejection == nil else { return false }
+                if case .pitchCountReconciliation = $0.body { return true }
+                return false
+            })
+            explanation = if canRepairPitchCountReconciliation {
+                "The saved related-play reference no longer matches a completed defensive "
+                    + "play in this timeline. Re-associate it with an eligible play or "
+                    + "explicitly remove the association."
+            } else {
+                "The reconciliation adjustment is no longer valid for the pitcher totals "
+                    + "at this chronological position."
+            }
+            canEditPitch = false
+            canEditOffensivePitch = false
+            canDeleteOffensivePitch = false
+            canDeletePitch = false
+            canEditBallInPlay = false
+            canEditOffensiveBaseRunning = false
+            canEditOffensivePlateAppearance = false
+            if canRepairPitchCountReconciliation {
+                relatedDefensivePlays = completedDefensivePlayRepairOptions(
+                    in: replay,
+                    beforeSequenceNumber: entry.sequenceNumber
+                )
+            }
+            offensiveBaseRunningRunners = []
+            offensiveRunnerIdentities = []
         default:
             context = "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · Saved event"
             explanation = "Full replay rejected this record at its original chronological position."
@@ -2968,6 +3298,9 @@ enum GameEventCorrection {
             canEditOffensiveBaseRunning: canEditOffensiveBaseRunning,
             canEditOffensivePlateAppearance: canEditOffensivePlateAppearance,
             canDeleteOffensiveBaseRunning: canDeleteOffensiveBaseRunning,
+            canRepairPitchCountReconciliation: canRepairPitchCountReconciliation,
+            canDeletePitchCountReconciliation: canDeletePitchCountReconciliation,
+            relatedDefensivePlays: relatedDefensivePlays,
             logicalPlayDeletion: logicalPlayDeletion,
             offensiveBaseRunningRunners: offensiveBaseRunningRunners,
             offensiveRunnerIdentities: offensiveRunnerIdentities
@@ -3037,6 +3370,85 @@ enum GameEventCorrection {
         case .walk: state.balls == 3
         case .strikeout: state.strikes == 2
         default: false
+        }
+    }
+
+    private static func completedDefensivePlayRepairOptions(
+        in replay: GameEventReplay.Result,
+        beforeSequenceNumber: Int
+    ) -> [RelatedDefensivePlayRepairOption] {
+        replay.entries.compactMap { entry in
+            guard entry.sequenceNumber < beforeSequenceNumber,
+                  entry.rejection == nil,
+                  let body = entry.body,
+                  GameEventReplay.isCompletedDefensivePlay(
+                      body,
+                      stateBefore: entry.stateBefore
+                  ) else {
+                return nil
+            }
+            guard let (opponentBatterSlot, result) = completedDefensivePlayLabel(body) else {
+                return nil
+            }
+            return RelatedDefensivePlayRepairOption(
+                recordID: entry.recordID,
+                sequenceNumber: entry.sequenceNumber,
+                summary: "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · "
+                    + "Opponent batter \(opponentBatterSlot) · Sequence "
+                    + "\(entry.sequenceNumber) · \(result)"
+            )
+        }
+    }
+
+    private static func completedDefensivePlays(
+        records: [GameEventRecord],
+        replay: GameEventReplay.Result
+    ) -> [CompletedDefensivePlayOption] {
+        let recordsByID = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
+        return replay.entries.compactMap { entry in
+            guard entry.rejection == nil,
+                  let body = entry.body,
+                  GameEventReplay.isCompletedDefensivePlay(
+                    body,
+                    stateBefore: entry.stateBefore
+                  ),
+                  let record = recordsByID[entry.recordID] else {
+                return nil
+            }
+            guard let (opponentBatterSlot, result) = completedDefensivePlayLabel(body) else {
+                return nil
+            }
+            return CompletedDefensivePlayOption(
+                recordID: entry.recordID,
+                sequenceNumber: entry.sequenceNumber,
+                inning: entry.stateBefore.inning,
+                half: entry.stateBefore.half,
+                opponentBatterSlot: opponentBatterSlot,
+                summary: "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · "
+                    + "Opponent batter \(opponentBatterSlot) · Sequence "
+                    + "\(entry.sequenceNumber) · \(result)",
+                reference: record.relatedDefensivePlayReference
+            )
+        }
+    }
+
+    private static func completedDefensivePlayLabel(
+        _ body: GameEventBody
+    ) -> (opponentBatterSlot: Int, result: String)? {
+        switch body {
+        case .pitch(let pitch):
+            let result = switch pitch.result {
+            case .ball: "Walk"
+            case .calledStrike, .swingingStrike: "Strikeout"
+            case .hitByPitch: "HBP"
+            case .foul, .ballInPlay: pitch.result.label
+            }
+            return (pitch.opponentBatterSlot, result)
+        case .ballInPlay(let play):
+            return (play.opponentBatterSlot, play.outcome.label)
+        case .pitchCountReconciliation, .offensivePitch,
+             .offensiveBaseRunning, .offensivePlateAppearance:
+            return nil
         }
     }
 
@@ -3118,12 +3530,10 @@ enum GameEventCorrection {
         _ result: PitchResult,
         stateBefore: GameState
     ) -> Bool {
-        switch result {
-        case .ball: stateBefore.balls == 3
-        case .calledStrike, .swingingStrike: stateBefore.strikes == 2
-        case .hitByPitch: true
-        case .foul, .ballInPlay: false
-        }
+        result.completesPlateAppearance(
+            balls: stateBefore.balls,
+            strikes: stateBefore.strikes
+        )
     }
 
     private static func offensiveLogicalPlayEntries(

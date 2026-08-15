@@ -37,8 +37,11 @@ Pitch-stat classification:
 - A reconciliation appends one authoritative event for the game's starting pitcher; it does not rewrite or resequence earlier pitches.
 - Signed total, ball, and strike adjustments may be positive or negative when the resulting totals remain non-negative and balls plus strikes do not exceed total pitches.
 - `total - balls - strikes` is the derived unclassified quantity for HBP or pitches whose result was not recorded.
+- The scorer may associate the reconciliation with one earlier readable, accepted completed defensive plate appearance from the same game. A persisted association identifies the exact record revision; replay rejects a missing, cross-game, unreadable, non-defensive, edited, or deleted target.
+- Play History groups an accepted associated reconciliation with that logical play while retaining all component sequence numbers and displaying the signed total, ball, strike, and unclassified adjustments.
 - Replay changes only the addressed pitcher's totals. Live balls/strikes, bases, outs, score, batter progression, half-inning, and batting projection remain unchanged.
-- The latest reconciliation is Undo-eligible and is removed without modifying any scoring play.
+- Editing or deleting the related play creates an explicit correction problem. Saving requires the scorer to re-associate the reconciliation with an eligible play or explicitly remove the association; if the play deletion also makes a negative signed adjustment invalid, the scorer must explicitly delete that affected reconciliation. Replay never silently detaches or guesses.
+- The latest reconciliation is Undo-eligible and is removed without modifying its related scoring play.
 
 ### Live count
 
@@ -123,6 +126,7 @@ Opponent slots rotate 1...9. Completing a PA advances the slot; 9 wraps to 1.
 ## Event invariants
 
 - A pitch-count reconciliation must target the game's starting pitcher and produce non-negative total, ball, and strike quantities with balls plus strikes no greater than total pitches.
+- A reconciliation related-play reference, when present, must exactly match an earlier accepted completed defensive play in the same game.
 - Persisted events are authoritative history.
 - Undo latest eligible action removes only the latest persisted defensive Ball, Called Strike, Swinging Strike, Foul, HBP, completed Ball In Play result, tracked-team count pitch, completed tracked-team plate appearance, tracked-team SB/CS, or pitch-count reconciliation after exact-timeline validation. Replaying the surviving timeline restores defensive count and pitcher totals; for ball four, strike three, and HBP it also restores batter slot, runners, score, outs, and half-inning together. Undoing a completed Ball In Play removes its result record only, preserves the counted In Play pitch, and restores the pre-result bases, outs, score, opponent batter slot, pitcher totals, and pending-result state. Undoing a tracked-team pitch restores the offensive count and event-time batter context without changing batting projection or pitcher totals. Undoing a completed tracked-team plate appearance restores its entire pre-play game state and removes its player attribution from the batting projection. Undoing SB/CS restores its event-time runner and removes only that attempt's base-running attribution while preserving active plate-appearance progression. Undoing a reconciliation removes only that appended adjustment event. No derived value is reverse-mutated.
 - Editing an earlier non-terminal defensive count pitch stages one supported replacement in memory, replays and reprojects the full timeline, and disables Save at the first invalid later record. A valid Save updates only that pitch payload/kind while preserving record identity, game, sequence, and timestamp; no derived value is reverse-mutated.

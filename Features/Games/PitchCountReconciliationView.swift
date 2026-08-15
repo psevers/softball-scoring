@@ -3,11 +3,23 @@ import SwiftUI
 struct PitchCountReconciliationView: View {
     let session: PitchCountReconciliationSession
     let pitcherName: String
-    let onSave: (PitchCountAdjustment) throws -> Void
+    let onSave: (PitchCountAdjustment, UUID?) throws -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var adjustment = PitchCountAdjustment()
+    @State private var relatedPlayRecordID: UUID?
     @State private var errorMessage: String?
+
+    init(
+        session: PitchCountReconciliationSession,
+        pitcherName: String,
+        onSave: @escaping (PitchCountAdjustment, UUID?) throws -> Void
+    ) {
+        self.session = session
+        self.pitcherName = pitcherName
+        self.onSave = onSave
+        _relatedPlayRecordID = State(initialValue: nil)
+    }
 
     private var reconciledCount: PitchCount? {
         session.reconciledCount(adjustment: adjustment)
@@ -19,6 +31,23 @@ struct PitchCountReconciliationView: View {
                 Section("Pitcher") {
                     LabeledContent("Player", value: pitcherName)
                     pitchCountRow("Current", count: session.currentCount)
+                }
+
+                Section {
+                    Picker("Completed play", selection: $relatedPlayRecordID) {
+                        Text("No related play").tag(UUID?.none)
+                        ForEach(session.completedDefensivePlays) { play in
+                            Text(play.summary).tag(Optional(play.recordID))
+                        }
+                    }
+                    .accessibilityIdentifier("reconciliation.relatedPlay")
+                } header: {
+                    Text("Related defensive play")
+                } footer: {
+                    Text(
+                        "Choose the completed plate appearance whose omitted pitches "
+                            + "this adjustment explains."
+                    )
                 }
 
                 Section {
@@ -111,7 +140,7 @@ struct PitchCountReconciliationView: View {
 
     private func save() {
         do {
-            try onSave(adjustment)
+            try onSave(adjustment, relatedPlayRecordID)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription

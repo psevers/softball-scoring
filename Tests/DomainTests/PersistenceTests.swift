@@ -1949,6 +1949,81 @@ extension PersistenceTests {
         #expect(reloaded.records.map(\.sequenceNumber) == [1, 2])
     }
 
+    @Test func reconciliationAssociatesWithCompletedDefensivePlayAndGroupsHistory() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let pitch = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 1,
+            body: .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        let play = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 2,
+            body: .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ))
+        )
+        context.insert(game)
+        context.insert(pitch)
+        context.insert(play)
+        try context.save()
+        let before = try LiveGameSnapshotLoader.load(game: game, modelContext: context)
+
+        let editor = try GameEventCorrection.preparePitchCountReconciliation(
+            game: game,
+            modelContext: context
+        )
+        #expect(editor.completedDefensivePlays.map(\.recordID) == [play.id])
+        #expect(editor.completedDefensivePlays.first?.sequenceNumber == 2)
+        #expect(editor.completedDefensivePlays.first?.summary.contains("Single") == true)
+
+        let adjusted = try GameEventCorrection.savePitchCountReconciliation(
+            adjustment: .init(total: 3, balls: 1, strikes: 1),
+            relatedPlayRecordID: play.id,
+            session: editor,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(adjusted.records.map(\.id).prefix(2) == [pitch.id, play.id])
+        #expect(adjusted.records.map(\.sequenceNumber) == [1, 2, 3])
+        let reconciliationRecord = try #require(adjusted.records.last)
+        let reconciliation = try reconciliationRecord.decoded()
+        guard case .pitchCountReconciliation(let event) = reconciliation.body else {
+            Issue.record("Expected the appended reconciliation event")
+            return
+        }
+        #expect(event.relatedPlay?.recordID == play.id)
+        #expect(event.relatedPlay?.sequenceNumber == play.sequenceNumber)
+
+        #expect(adjusted.replay.state.balls == before.replay.state.balls)
+        #expect(adjusted.replay.state.strikes == before.replay.state.strikes)
+        #expect(adjusted.replay.state.outs == before.replay.state.outs)
+        #expect(adjusted.replay.state.baseRunnerSlots == before.replay.state.baseRunnerSlots)
+        #expect(adjusted.replay.state.homeScore == before.replay.state.homeScore)
+        #expect(adjusted.replay.state.awayScore == before.replay.state.awayScore)
+        #expect(adjusted.battingLines == before.battingLines)
+
+        let historyEntry = try #require(adjusted.history.sections.first?.entries.first)
+        #expect(adjusted.history.sections.first?.entries.count == 1)
+        #expect(historyEntry.components.map(\.sequenceNumber) == [1, 2, 3])
+        #expect(historyEntry.detail.contains("Pitch total +3"))
+        #expect(historyEntry.detail.contains("Balls +1"))
+        #expect(historyEntry.detail.contains("Strikes +1"))
+        #expect(historyEntry.detail.contains("Unclassified +1"))
+    }
+
     @Test func reconciliationPreservesExistingBattingProjection() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext
@@ -1988,6 +2063,469 @@ extension PersistenceTests {
         #expect(adjusted.replay.state.awayScore == before.replay.state.awayScore)
         #expect(adjusted.replay.state.outs == before.replay.state.outs)
         #expect(adjusted.replay.state.trackedBaseRunnerPlayerIDs == before.replay.state.trackedBaseRunnerPlayerIDs)
+    }
+
+    @Test func reconciliationRejectsMissingWrongGameUnreadableAndNonDefensiveRelatedRecords() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let pitch = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 1,
+            body: .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        let play = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 2,
+            body: .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ))
+        )
+        let nonDefensive = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 3,
+            body: .pitchCountReconciliation(.init(
+                pitcherID: pitcherID,
+                adjustment: .init(total: 1, balls: 0, strikes: 0)
+            ))
+        )
+        let otherGame = makeGame()
+        let wrongGamePlay = try GameEventRecord(
+            gameID: otherGame.id,
+            sequenceNumber: 1,
+            body: .pitch(.init(
+                result: .hitByPitch,
+                pitcherID: try #require(otherGame.startingPitcherID),
+                opponentBatterSlot: 1
+            ))
+        )
+        let unreadable = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 4,
+            body: .pitch(.init(
+                result: .ball,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 2
+            ))
+        )
+        unreadable.payload = Data("not-json".utf8)
+        [game, otherGame].forEach(context.insert)
+        [pitch, play, nonDefensive, wrongGamePlay].forEach(context.insert)
+        try context.save()
+
+        let editor = try GameEventCorrection.preparePitchCountReconciliation(
+            game: game,
+            modelContext: context
+        )
+        #expect(editor.completedDefensivePlays.map(\.recordID) == [play.id])
+
+        for invalidRecordID in [UUID(), wrongGamePlay.id, nonDefensive.id] {
+            #expect(throws: GameEventCorrectionError.invalidRelatedPlay) {
+                _ = try GameEventCorrection.savePitchCountReconciliation(
+                    adjustment: .init(total: 1, balls: 0, strikes: 0),
+                    relatedPlayRecordID: invalidRecordID,
+                    session: editor,
+                    game: game,
+                    modelContext: context
+                )
+            }
+        }
+        context.insert(unreadable)
+        try context.save()
+        #expect(throws: GameEventCorrectionError.invalidRelatedPlay) {
+            _ = try GameEventCorrection.savePitchCountReconciliation(
+                adjustment: .init(total: 1, balls: 0, strikes: 0),
+                relatedPlayRecordID: unreadable.id,
+                session: editor,
+                game: game,
+                modelContext: context
+            )
+        }
+        let gameID = game.id
+        let stored = try context.fetch(FetchDescriptor<GameEventRecord>(
+            predicate: #Predicate { $0.gameID == gameID }
+        ))
+        let storedIDs = Set(stored.map(\.id))
+        let originalIDs = Set([pitch.id, play.id, nonDefensive.id, unreadable.id])
+        #expect(storedIDs == originalIDs)
+    }
+
+    @Test func relatedPlayEditOrDeletionExplicitlyInvalidatesReconciliationReference() throws {
+        let gameID = UUID()
+        let pitcherID = UUID()
+        let pitch = try GameEventRecord(
+            gameID: gameID,
+            sequenceNumber: 1,
+            body: .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        let play = try GameEventRecord(
+            gameID: gameID,
+            sequenceNumber: 2,
+            body: .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ))
+        )
+        let reconciliation = try GameEventRecord(
+            gameID: gameID,
+            sequenceNumber: 3,
+            body: .pitchCountReconciliation(.init(
+                pitcherID: pitcherID,
+                adjustment: .init(total: 2, balls: 1, strikes: 0),
+                relatedPlay: play.relatedDefensivePlayReference
+            ))
+        )
+
+        let baseline = GameEventReplay.replay(
+            records: [pitch, play, reconciliation],
+            homeAway: .home,
+            startingPitcherID: pitcherID
+        )
+        #expect(baseline.rejectedRecordIDs.isEmpty)
+
+        let correctedPlay = try GameEventRecord(
+            id: play.id,
+            gameID: gameID,
+            sequenceNumber: play.sequenceNumber,
+            timestamp: play.timestamp,
+            body: .ballInPlay(.init(
+                outcome: .double,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .second)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ))
+        )
+        let afterEdit = GameEventReplay.replay(
+            records: [pitch, correctedPlay, reconciliation],
+            homeAway: .home,
+            startingPitcherID: pitcherID
+        )
+        #expect(afterEdit.rejectedRecordIDs == [reconciliation.id])
+        #expect(afterEdit.entries.last?.rejection == .semanticallyRejected)
+
+        let afterDeletion = GameEventReplay.replay(
+            records: [pitch, reconciliation],
+            homeAway: .home,
+            startingPitcherID: pitcherID
+        )
+        #expect(afterDeletion.rejectedRecordIDs == [reconciliation.id])
+        #expect(afterDeletion.entries.last?.rejection == .semanticallyRejected)
+    }
+
+    @Test func invalidatedRelatedPlayCanBeExplicitlyReassociatedAndSavedAtomically() throws {
+        struct SaveFailure: Error {}
+
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let pitch = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 1,
+            body: .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        let play = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 2,
+            body: .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ))
+        )
+        let reconciliation = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 3,
+            body: .pitchCountReconciliation(.init(
+                pitcherID: pitcherID,
+                adjustment: .init(total: 2, balls: 1, strikes: 0),
+                relatedPlay: play.relatedDefensivePlayReference
+            ))
+        )
+        [pitch, play, reconciliation].forEach(context.insert)
+        try context.save()
+
+        let session = try GameEventCorrection.beginGameEventCorrection(
+            game: game,
+            modelContext: context
+        )
+        let editedPlay = BallInPlayEvent(
+            outcome: .double,
+            opponentBatterSlot: 1,
+            movements: [.init(source: .batter, destination: .second)],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )
+        let invalid = try GameEventCorrection.stageBallInPlayEdit(
+            recordID: play.id,
+            play: editedPlay,
+            in: session,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(!invalid.canSave)
+        #expect(invalid.firstInvalidRecord?.id == reconciliation.id)
+        #expect(invalid.firstInvalidRecord?.canRepairPitchCountReconciliation == true)
+        #expect(invalid.firstInvalidRecord?.relatedDefensivePlays.map(\.recordID) == [play.id])
+
+        let repaired = try GameEventCorrection.stagePitchCountReconciliationAssociation(
+            recordID: reconciliation.id,
+            relatedPlayRecordID: play.id,
+            in: invalid,
+            game: game,
+            modelContext: context
+        )
+        #expect(repaired.canSave)
+        #expect(repaired.firstInvalidRecord == nil)
+        #expect(repaired.stagedPitchCountReconciliationChanges.map(\.recordID) == [
+            reconciliation.id
+        ])
+
+        #expect(throws: SaveFailure.self) {
+            _ = try GameEventCorrection.saveGameEventCorrection(
+                repaired,
+                game: game,
+                modelContext: context,
+                save: { _ in throw SaveFailure() }
+            )
+        }
+        let unchanged = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>(
+            sortBy: [SortDescriptor(\.sequenceNumber)]
+        ))
+        #expect(try unchanged[1].decoded().body == .ballInPlay(.init(
+            outcome: .single,
+            opponentBatterSlot: 1,
+            movements: [.init(source: .batter, destination: .first)],
+            rbi: 0,
+            thirdOutRunsCounted: nil
+        )))
+        #expect(try unchanged[2].decoded().body == .pitchCountReconciliation(.init(
+            pitcherID: pitcherID,
+            adjustment: .init(total: 2, balls: 1, strikes: 0),
+            relatedPlay: unchanged[1].relatedDefensivePlayReference
+        )))
+
+        let saved = try GameEventCorrection.saveGameEventCorrection(
+            repaired,
+            game: game,
+            modelContext: context
+        )
+        #expect(saved.replay.rejectedRecordIDs.isEmpty)
+        #expect(saved.replay.state.pitchCount(for: pitcherID) == PitchCount(
+            total: 3,
+            balls: 1,
+            strikes: 1
+        ))
+        let savedReconciliation = try #require(
+            saved.records.first(where: { $0.id == reconciliation.id })
+        )
+        let savedBody = try savedReconciliation.decoded().body
+        guard case .pitchCountReconciliation(let event) = savedBody else {
+            Issue.record("Expected a pitch-count reconciliation")
+            return
+        }
+        #expect(event.relatedPlay == saved.records.first(where: {
+            $0.id == play.id
+        })?.relatedDefensivePlayReference)
+    }
+
+    @Test func deletingRelatedPlayRequiresExplicitAssociationRemoval() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let pitch = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 1,
+            body: .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        let play = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 2,
+            body: .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ))
+        )
+        let reconciliation = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 3,
+            body: .pitchCountReconciliation(.init(
+                pitcherID: pitcherID,
+                adjustment: .init(total: 2, balls: 1, strikes: 0),
+                relatedPlay: play.relatedDefensivePlayReference
+            ))
+        )
+        [pitch, play, reconciliation].forEach(context.insert)
+        try context.save()
+
+        let session = try GameEventCorrection.beginGameEventCorrection(
+            game: game,
+            modelContext: context
+        )
+        let invalid = try GameEventCorrection.stageDefensiveLogicalPlayDeletion(
+            resultRecordID: play.id,
+            in: session,
+            game: game,
+            modelContext: context
+        )
+        #expect(!invalid.canSave)
+        #expect(invalid.firstInvalidRecord?.id == reconciliation.id)
+        #expect(invalid.firstInvalidRecord?.canRepairPitchCountReconciliation == true)
+
+        let repaired = try GameEventCorrection.stagePitchCountReconciliationAssociation(
+            recordID: reconciliation.id,
+            relatedPlayRecordID: nil,
+            in: invalid,
+            game: game,
+            modelContext: context
+        )
+        #expect(repaired.canSave)
+        #expect(repaired.firstInvalidRecord == nil)
+
+        let saved = try GameEventCorrection.saveGameEventCorrection(
+            repaired,
+            game: game,
+            modelContext: context
+        )
+        #expect(saved.records.map(\.id) == [reconciliation.id])
+        #expect(saved.replay.rejectedRecordIDs.isEmpty)
+        #expect(saved.replay.state.pitchCount(for: pitcherID) == PitchCount(
+            total: 2,
+            balls: 1,
+            strikes: 0
+        ))
+        let savedBody = try #require(saved.records.first).decoded().body
+        guard case .pitchCountReconciliation(let event) = savedBody else {
+            Issue.record("Expected a pitch-count reconciliation")
+            return
+        }
+        #expect(event.relatedPlay == nil)
+    }
+
+    @Test func deletingRelatedPlayCanExplicitlyDeleteNewlyInvalidNegativeReconciliation() throws {
+        struct SaveFailure: Error {}
+
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let pitch = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 1,
+            body: .pitch(.init(
+                result: .ballInPlay,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        let play = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 2,
+            body: .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ))
+        )
+        let reconciliation = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 3,
+            body: .pitchCountReconciliation(.init(
+                pitcherID: pitcherID,
+                adjustment: .init(total: -1, balls: 0, strikes: -1),
+                relatedPlay: play.relatedDefensivePlayReference
+            ))
+        )
+        [pitch, play, reconciliation].forEach(context.insert)
+        try context.save()
+
+        let session = try GameEventCorrection.beginGameEventCorrection(
+            game: game,
+            modelContext: context
+        )
+        let invalid = try GameEventCorrection.stageDefensiveLogicalPlayDeletion(
+            resultRecordID: play.id,
+            in: session,
+            game: game,
+            modelContext: context
+        )
+        #expect(!invalid.canSave)
+        #expect(invalid.firstInvalidRecord?.id == reconciliation.id)
+        #expect(invalid.firstInvalidRecord?.canRepairPitchCountReconciliation == false)
+        #expect(invalid.firstInvalidRecord?.canDeletePitchCountReconciliation == true)
+
+        let repaired = try GameEventCorrection.stagePitchCountReconciliationDeletion(
+            recordID: reconciliation.id,
+            in: invalid,
+            game: game,
+            modelContext: context
+        )
+        #expect(repaired.canSave)
+        #expect(repaired.firstInvalidRecord == nil)
+        #expect(repaired.stagedPitchCountReconciliationChanges.map(\.recordID) == [
+            reconciliation.id
+        ])
+
+        #expect(throws: SaveFailure.self) {
+            _ = try GameEventCorrection.saveGameEventCorrection(
+                repaired,
+                game: game,
+                modelContext: context,
+                save: { _ in throw SaveFailure() }
+            )
+        }
+        let unchanged = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>())
+        #expect(Set(unchanged.map(\.id)) == Set([pitch.id, play.id, reconciliation.id]))
+
+        let saved = try GameEventCorrection.saveGameEventCorrection(
+            repaired,
+            game: game,
+            modelContext: context
+        )
+        #expect(saved.records.isEmpty)
+        #expect(saved.replay.rejectedRecordIDs.isEmpty)
+        #expect(saved.replay.state.pitchCount(for: pitcherID) == PitchCount())
+        let reloaded = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        #expect(reloaded.records.isEmpty)
+        #expect(reloaded.replay.rejectedRecordIDs.isEmpty)
+        #expect(reloaded.replay.state.pitchCount(for: pitcherID) == PitchCount())
     }
 
     @Test func latestReconciliationCanBeIdentifiedAndUndone() throws {
