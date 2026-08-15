@@ -249,11 +249,9 @@ struct PlayHistoryView: View {
                 pitcherName: players.first(where: {
                     $0.id == reconciliationSession.pitcherID
                 })?.displayName ?? "Starting Pitcher"
-            ) { totalAdjustment, ballAdjustment, strikeAdjustment in
+            ) { adjustment in
                 try session.savePitchCountReconciliation(
-                    totalAdjustment: totalAdjustment,
-                    ballAdjustment: ballAdjustment,
-                    strikeAdjustment: strikeAdjustment,
+                    adjustment: adjustment,
                     session: reconciliationSession,
                     game: game,
                     modelContext: modelContext

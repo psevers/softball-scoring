@@ -21,9 +21,7 @@ struct GameStateTests {
                 sequenceNumber: 2,
                 body: .pitchCountReconciliation(.init(
                     pitcherID: pitcherID,
-                    totalAdjustment: 3,
-                    ballAdjustment: 1,
-                    strikeAdjustment: 1
+                    adjustment: .init(total: 3, balls: 1, strikes: 1)
                 ))
             )
         ]
@@ -66,9 +64,7 @@ struct GameStateTests {
             sequenceNumber: 5,
             body: .pitchCountReconciliation(.init(
                 pitcherID: pitcherID,
-                totalAdjustment: -2,
-                ballAdjustment: -1,
-                strikeAdjustment: -1
+                adjustment: .init(total: -2, balls: -1, strikes: -1)
             ))
         ))
 
@@ -89,33 +85,23 @@ struct GameStateTests {
         let invalidEvents = [
             PitchCountReconciliationEvent(
                 pitcherID: pitcherID,
-                totalAdjustment: -1,
-                ballAdjustment: 0,
-                strikeAdjustment: 0
+                adjustment: .init(total: -1, balls: 0, strikes: 0)
             ),
             PitchCountReconciliationEvent(
                 pitcherID: pitcherID,
-                totalAdjustment: 1,
-                ballAdjustment: -1,
-                strikeAdjustment: 0
+                adjustment: .init(total: 1, balls: -1, strikes: 0)
             ),
             PitchCountReconciliationEvent(
                 pitcherID: pitcherID,
-                totalAdjustment: 1,
-                ballAdjustment: 0,
-                strikeAdjustment: -1
+                adjustment: .init(total: 1, balls: 0, strikes: -1)
             ),
             PitchCountReconciliationEvent(
                 pitcherID: pitcherID,
-                totalAdjustment: 1,
-                ballAdjustment: 1,
-                strikeAdjustment: 1
+                adjustment: .init(total: 1, balls: 1, strikes: 1)
             ),
             PitchCountReconciliationEvent(
                 pitcherID: UUID(),
-                totalAdjustment: 1,
-                ballAdjustment: 0,
-                strikeAdjustment: 0
+                adjustment: .init(total: 1, balls: 0, strikes: 0)
             )
         ]
 

@@ -65,11 +65,27 @@ struct PitchEvent: Codable, Equatable, Sendable {
     let opponentBatterSlot: Int
 }
 
+struct PitchCountAdjustment: Codable, Equatable, Sendable {
+    var total = 0
+    var balls = 0
+    var strikes = 0
+
+    var unclassified: Int {
+        total - balls - strikes
+    }
+
+    var isEmpty: Bool {
+        total == 0 && balls == 0 && strikes == 0
+    }
+}
+
 struct PitchCountReconciliationEvent: Codable, Equatable, Sendable {
     let pitcherID: UUID
-    let totalAdjustment: Int
-    let ballAdjustment: Int
-    let strikeAdjustment: Int
+    let adjustment: PitchCountAdjustment
+}
+
+func signedPitchAdjustment(_ value: Int) -> String {
+    value >= 0 ? "+\(value)" : "\(value)"
 }
 
 enum OffensivePitchResult: String, CaseIterable, Codable, Identifiable, Sendable {

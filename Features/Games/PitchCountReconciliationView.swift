@@ -3,28 +3,14 @@ import SwiftUI
 struct PitchCountReconciliationView: View {
     let session: PitchCountReconciliationSession
     let pitcherName: String
-    let onSave: (Int, Int, Int) throws -> Void
+    let onSave: (PitchCountAdjustment) throws -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var totalAdjustment = 0
-    @State private var ballAdjustment = 0
-    @State private var strikeAdjustment = 0
+    @State private var adjustment = PitchCountAdjustment()
     @State private var errorMessage: String?
 
     private var reconciledCount: PitchCount? {
-        session.reconciledCount(
-            totalAdjustment: totalAdjustment,
-            ballAdjustment: ballAdjustment,
-            strikeAdjustment: strikeAdjustment
-        )
-    }
-
-    private var unclassifiedAdjustment: Int {
-        totalAdjustment - ballAdjustment - strikeAdjustment
-    }
-
-    private var hasAdjustment: Bool {
-        totalAdjustment != 0 || ballAdjustment != 0 || strikeAdjustment != 0
+        session.reconciledCount(adjustment: adjustment)
     }
 
     var body: some View {
@@ -38,20 +24,23 @@ struct PitchCountReconciliationView: View {
                 Section {
                     adjustmentStepper(
                         "Total pitches",
-                        value: $totalAdjustment,
+                        value: $adjustment.total,
                         identifier: "reconciliation.total"
                     )
                     adjustmentStepper(
                         "Balls",
-                        value: $ballAdjustment,
+                        value: $adjustment.balls,
                         identifier: "reconciliation.balls"
                     )
                     adjustmentStepper(
                         "Strikes",
-                        value: $strikeAdjustment,
+                        value: $adjustment.strikes,
                         identifier: "reconciliation.strikes"
                     )
-                    LabeledContent("Unclassified", value: signed(unclassifiedAdjustment))
+                    LabeledContent(
+                        "Unclassified",
+                        value: signedPitchAdjustment(adjustment.unclassified)
+                    )
                         .monospacedDigit()
                         .accessibilityIdentifier("reconciliation.unclassified")
                 } header: {
@@ -83,7 +72,7 @@ struct PitchCountReconciliationView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
-                        .disabled(!hasAdjustment || reconciledCount == nil)
+                        .disabled(adjustment.isEmpty || reconciledCount == nil)
                         .accessibilityIdentifier("reconciliation.save")
                 }
             }
@@ -105,7 +94,7 @@ struct PitchCountReconciliationView: View {
         identifier: String
     ) -> some View {
         Stepper(value: value) {
-            LabeledContent(title, value: signed(value.wrappedValue))
+            LabeledContent(title, value: signedPitchAdjustment(value.wrappedValue))
                 .monospacedDigit()
         }
         .accessibilityIdentifier(identifier)
@@ -122,14 +111,10 @@ struct PitchCountReconciliationView: View {
 
     private func save() {
         do {
-            try onSave(totalAdjustment, ballAdjustment, strikeAdjustment)
+            try onSave(adjustment)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-
-    private func signed(_ value: Int) -> String {
-        value >= 0 ? "+\(value)" : "\(value)"
     }
 }

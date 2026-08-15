@@ -163,18 +163,16 @@ enum PlayHistoryProjector {
 
             case .pitchCountReconciliation(let reconciliation):
                 flushPending()
-                let unclassifiedAdjustment = reconciliation.totalAdjustment
-                    - reconciliation.ballAdjustment
-                    - reconciliation.strikeAdjustment
-                let summary = "Pitch total \(signed(reconciliation.totalAdjustment))"
-                let detail = "Balls \(signed(reconciliation.ballAdjustment)) · Strikes "
-                    + "\(signed(reconciliation.strikeAdjustment)) · Unclassified "
-                    + signed(unclassifiedAdjustment)
+                let adjustment = reconciliation.adjustment
+                let summary = "Pitch total \(signedPitchAdjustment(adjustment.total))"
+                let detail = "Balls \(signedPitchAdjustment(adjustment.balls)) · Strikes "
+                    + "\(signedPitchAdjustment(adjustment.strikes)) · Unclassified "
+                    + signedPitchAdjustment(adjustment.unclassified)
                 let accessibility = "Pitch total "
-                    + spokenSigned(reconciliation.totalAdjustment)
-                    + ". Balls \(spokenSigned(reconciliation.ballAdjustment)). Strikes "
-                    + "\(spokenSigned(reconciliation.strikeAdjustment)). Unclassified "
-                    + "\(spokenSigned(unclassifiedAdjustment))."
+                    + spokenSigned(adjustment.total)
+                    + ". Balls \(spokenSigned(adjustment.balls)). Strikes "
+                    + "\(spokenSigned(adjustment.strikes)). Unclassified "
+                    + "\(spokenSigned(adjustment.unclassified))."
                 let component = PlayHistoryComponent(
                     recordID: trace.recordID,
                     sequenceNumber: trace.sequenceNumber,
@@ -648,10 +646,6 @@ enum PlayHistoryProjector {
         detail: String
     ) -> String {
         "\(half.displayName) of inning \(inning). \(actor). \(summary). \(detail)."
-    }
-
-    private static func signed(_ value: Int) -> String {
-        value >= 0 ? "+\(value)" : "\(value)"
     }
 
     private static func spokenSigned(_ value: Int) -> String {

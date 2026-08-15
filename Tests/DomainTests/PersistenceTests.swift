@@ -1918,9 +1918,7 @@ extension PersistenceTests {
             modelContext: context
         )
         let adjusted = try GameEventCorrection.savePitchCountReconciliation(
-            totalAdjustment: 3,
-            ballAdjustment: 1,
-            strikeAdjustment: 1,
+            adjustment: .init(total: 3, balls: 1, strikes: 1),
             session: editor,
             game: game,
             modelContext: context
@@ -1978,9 +1976,7 @@ extension PersistenceTests {
         )
 
         let adjusted = try GameEventCorrection.savePitchCountReconciliation(
-            totalAdjustment: 2,
-            ballAdjustment: 1,
-            strikeAdjustment: 0,
+            adjustment: .init(total: 2, balls: 1, strikes: 0),
             session: editor,
             game: game,
             modelContext: context
@@ -2015,9 +2011,7 @@ extension PersistenceTests {
             modelContext: context
         )
         _ = try GameEventCorrection.savePitchCountReconciliation(
-            totalAdjustment: 2,
-            ballAdjustment: 0,
-            strikeAdjustment: 1,
+            adjustment: .init(total: 2, balls: 0, strikes: 1),
             session: editor,
             game: game,
             modelContext: context
@@ -2035,9 +2029,7 @@ extension PersistenceTests {
 
         #expect(candidate.action == .pitchCountReconciliation(.init(
             pitcherID: pitcherID,
-            totalAdjustment: 2,
-            ballAdjustment: 0,
-            strikeAdjustment: 1
+            adjustment: .init(total: 2, balls: 0, strikes: 1)
         )))
         #expect(candidate.confirmationTitle == "Undo latest pitch reconciliation?")
         #expect(candidate.confirmationDetail.contains("Pitch total +2"))
@@ -2062,9 +2054,7 @@ extension PersistenceTests {
 
         #expect(throws: GameEventCorrectionError.invalidReconciliation) {
             _ = try GameEventCorrection.savePitchCountReconciliation(
-                totalAdjustment: 1,
-                ballAdjustment: 1,
-                strikeAdjustment: 1,
+                adjustment: .init(total: 1, balls: 1, strikes: 1),
                 session: editor,
                 game: game,
                 modelContext: context
@@ -2085,9 +2075,7 @@ extension PersistenceTests {
 
         #expect(throws: GameEventCorrectionError.gameMismatch) {
             _ = try GameEventCorrection.savePitchCountReconciliation(
-                totalAdjustment: 1,
-                ballAdjustment: 0,
-                strikeAdjustment: 0,
+                adjustment: .init(total: 1, balls: 0, strikes: 0),
                 session: editor,
                 game: otherGame,
                 modelContext: context
@@ -2107,9 +2095,7 @@ extension PersistenceTests {
         try context.save()
         #expect(throws: GameEventCorrectionError.staleTimeline) {
             _ = try GameEventCorrection.savePitchCountReconciliation(
-                totalAdjustment: 1,
-                ballAdjustment: 0,
-                strikeAdjustment: 0,
+                adjustment: .init(total: 1, balls: 0, strikes: 0),
                 session: editor,
                 game: game,
                 modelContext: context
@@ -2132,9 +2118,7 @@ extension PersistenceTests {
 
         #expect(throws: ForcedSaveError.self) {
             _ = try GameEventCorrection.savePitchCountReconciliation(
-                totalAdjustment: 1,
-                ballAdjustment: 0,
-                strikeAdjustment: 0,
+                adjustment: .init(total: 1, balls: 0, strikes: 0),
                 session: editor,
                 game: game,
                 modelContext: context,

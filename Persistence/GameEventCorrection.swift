@@ -13,7 +13,7 @@ enum UndoLatestAction: Equatable {
         switch self {
         case .pitch(let result): result.label
         case .pitchCountReconciliation(let reconciliation):
-            "Pitch total \(signed(reconciliation.totalAdjustment))"
+            "Pitch total \(signedPitchAdjustment(reconciliation.adjustment.total))"
         case .ballInPlayResult(let outcome): "\(outcome.shortLabel) Result"
         case .offensivePitch(let result): result.label
         case .offensiveBaseRunning(let event):
@@ -97,12 +97,11 @@ struct UndoLatestActionCandidate: Identifiable {
                 + "The preceding Ball In Play pitch at sequence \(pitchSequence) will remain counted, "
                 + "and the game will return to pending outcome entry."
         case .pitchCountReconciliation(let reconciliation):
-            let unclassified = reconciliation.totalAdjustment
-                - reconciliation.ballAdjustment
-                - reconciliation.strikeAdjustment
+            let adjustment = reconciliation.adjustment
             return "Remove \(confirmationMessage) Balls "
-                + "\(signed(reconciliation.ballAdjustment)), strikes "
-                + "\(signed(reconciliation.strikeAdjustment)), unclassified \(signed(unclassified)). "
+                + "\(signedPitchAdjustment(adjustment.balls)), strikes "
+                + "\(signedPitchAdjustment(adjustment.strikes)), unclassified "
+                + "\(signedPitchAdjustment(adjustment.unclassified)). "
                 + "The related scoring plays and live count will remain unchanged."
         case .offensivePitch:
             return "Remove \(confirmationMessage) The event-time tracked batter and batting-order size "
@@ -122,10 +121,6 @@ struct UndoLatestActionCandidate: Identifiable {
     }
 }
 
-private func signed(_ value: Int) -> String {
-    value >= 0 ? "+\(value)" : "\(value)"
-}
-
 struct PitchCountReconciliationSession: Identifiable {
     var id: UUID { pitcherID }
 
@@ -135,16 +130,10 @@ struct PitchCountReconciliationSession: Identifiable {
 
     fileprivate let expectedTimeline: [GameEventRecordRevision]
 
-    func reconciledCount(
-        totalAdjustment: Int,
-        ballAdjustment: Int,
-        strikeAdjustment: Int
-    ) -> PitchCount? {
+    func reconciledCount(adjustment: PitchCountAdjustment) -> PitchCount? {
         currentCount.reconciling(PitchCountReconciliationEvent(
             pitcherID: pitcherID,
-            totalAdjustment: totalAdjustment,
-            ballAdjustment: ballAdjustment,
-            strikeAdjustment: strikeAdjustment
+            adjustment: adjustment
         ))
     }
 }
@@ -779,9 +768,7 @@ enum GameEventCorrection {
     }
 
     static func savePitchCountReconciliation(
-        totalAdjustment: Int,
-        ballAdjustment: Int,
-        strikeAdjustment: Int,
+        adjustment: PitchCountAdjustment,
         session: PitchCountReconciliationSession,
         game: Game,
         modelContext: ModelContext,
@@ -795,9 +782,7 @@ enum GameEventCorrection {
         }
         let event = PitchCountReconciliationEvent(
             pitcherID: session.pitcherID,
-            totalAdjustment: totalAdjustment,
-            ballAdjustment: ballAdjustment,
-            strikeAdjustment: strikeAdjustment
+            adjustment: adjustment
         )
         guard session.currentCount.reconciling(event) != nil else {
             throw GameEventCorrectionError.invalidReconciliation

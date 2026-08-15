@@ -23,13 +23,13 @@ struct PitchCount: Equatable, Sendable {
 
     func reconciling(_ reconciliation: PitchCountReconciliationEvent) -> PitchCount? {
         let (resultingTotal, totalOverflow) = total.addingReportingOverflow(
-            reconciliation.totalAdjustment
+            reconciliation.adjustment.total
         )
         let (resultingBalls, ballOverflow) = balls.addingReportingOverflow(
-            reconciliation.ballAdjustment
+            reconciliation.adjustment.balls
         )
         let (resultingStrikes, strikeOverflow) = strikes.addingReportingOverflow(
-            reconciliation.strikeAdjustment
+            reconciliation.adjustment.strikes
         )
         guard !totalOverflow, !ballOverflow, !strikeOverflow else { return nil }
         let reconciled = PitchCount(

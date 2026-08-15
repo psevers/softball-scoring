@@ -21,9 +21,7 @@ struct PlayHistoryTests {
                 sequenceNumber: 2,
                 body: .pitchCountReconciliation(.init(
                     pitcherID: pitcherID,
-                    totalAdjustment: 3,
-                    ballAdjustment: 1,
-                    strikeAdjustment: 1
+                    adjustment: .init(total: 3, balls: 1, strikes: 1)
                 ))
             )
         ]

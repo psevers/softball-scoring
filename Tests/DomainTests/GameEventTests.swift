@@ -6,9 +6,7 @@ struct GameEventTests {
     @Test func pitchCountReconciliationRoundTripsSignedAdjustments() throws {
         let reconciliation = PitchCountReconciliationEvent(
             pitcherID: UUID(),
-            totalAdjustment: -2,
-            ballAdjustment: -1,
-            strikeAdjustment: -1
+            adjustment: .init(total: -2, balls: -1, strikes: -1)
         )
 
         let encoded = try GameEventCodec.encode(.pitchCountReconciliation(reconciliation))
