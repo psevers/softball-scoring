@@ -45,15 +45,6 @@ struct PlayHistoryView: View {
                         undoLatestActionButton
                     }
 
-                    Button {
-                        beginPitchCountReconciliation()
-                    } label: {
-                        Label("Reconcile Pitches", systemImage: "plusminus.circle")
-                            .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("history.reconcilePitches")
-
                     historyContent
                 }
                 .padding(.horizontal, AppTheme.Spacing.md)
@@ -68,6 +59,16 @@ struct PlayHistoryView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(AppTheme.paper, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    beginPitchCountReconciliation()
+                } label: {
+                    Label("Reconcile Pitches", systemImage: "plusminus.circle")
+                }
+                .accessibilityIdentifier("history.reconcilePitches")
+            }
+        }
         .task {
             session.refresh(game: game, modelContext: modelContext)
         }
