@@ -154,6 +154,72 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(app.buttons["game.history"].isHittable)
     }
 
+    func testPitchCountReconciliationSupportsSignedAdjustmentsUndoAndRelaunch() {
+        let app = launchApp(
+            persistentStoreName: "pitch-reconciliation-\(UUID().uuidString)"
+        )
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI History Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let count = app.staticTexts["game.count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 3))
+        let unchangedCount = count.label
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.buttons["history.reconcilePitches"].waitForExistence(timeout: 3))
+        app.buttons["history.reconcilePitches"].tap()
+
+        XCTAssertTrue(app.navigationBars["Reconcile Pitch Total"].waitForExistence(timeout: 3))
+        let total = app.steppers["reconciliation.total"]
+        let balls = app.steppers["reconciliation.balls"]
+        XCTAssertTrue(total.waitForExistence(timeout: 3))
+        total.buttons["reconciliation.total-Increment"].tap()
+        total.buttons["reconciliation.total-Increment"].tap()
+        balls.buttons["reconciliation.balls-Increment"].tap()
+        let savePositive = app.buttons["reconciliation.save"]
+        XCTAssertTrue(savePositive.isEnabled)
+        savePositive.tap()
+
+        let positive = app.buttons["history.entry.4"]
+        XCTAssertTrue(positive.waitForExistence(timeout: 3))
+        XCTAssertTrue(positive.label.contains("Pitch total +2"))
+        XCTAssertTrue(positive.label.contains("Unclassified plus 1"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertEqual(count.label, unchangedCount)
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Games"].tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertEqual(count.label, unchangedCount)
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(positive.waitForExistence(timeout: 3))
+
+        app.buttons["history.undoLatestAction"].tap()
+        XCTAssertTrue(app.buttons["Undo Pitch total +2"].waitForExistence(timeout: 3))
+        app.buttons["Undo Pitch total +2"].tap()
+        XCTAssertFalse(positive.waitForExistence(timeout: 1))
+
+        app.buttons["history.reconcilePitches"].tap()
+        XCTAssertTrue(app.navigationBars["Reconcile Pitch Total"].waitForExistence(timeout: 3))
+        let negativeTotal = app.steppers["reconciliation.total"]
+        let strikes = app.steppers["reconciliation.strikes"]
+        negativeTotal.buttons["reconciliation.total-Decrement"].tap()
+        strikes.buttons["reconciliation.strikes-Decrement"].tap()
+        app.buttons["reconciliation.save"].tap()
+
+        let negative = app.buttons["history.entry.4"]
+        XCTAssertTrue(negative.waitForExistence(timeout: 3))
+        XCTAssertTrue(negative.label.contains("Pitch total -1"))
+        XCTAssertTrue(negative.label.contains("Strikes minus 1"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertEqual(count.label, unchangedCount)
+    }
+
     func testDeleteCompletedDefensiveLogicalPlayRepairsDownstreamHistoryAndPersists() {
         let app = launchApp(
             persistentStoreName: "logical-play-delete-\(UUID().uuidString)"

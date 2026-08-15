@@ -3,6 +3,7 @@ import SwiftData
 
 enum UndoLatestAction: Equatable {
     case pitch(PitchResult)
+    case pitchCountReconciliation(PitchCountReconciliationEvent)
     case ballInPlayResult(BallInPlayOutcome)
     case offensivePitch(OffensivePitchResult)
     case offensiveBaseRunning(OffensiveBaseRunningEvent)
@@ -11,6 +12,8 @@ enum UndoLatestAction: Equatable {
     var label: String {
         switch self {
         case .pitch(let result): result.label
+        case .pitchCountReconciliation(let reconciliation):
+            "Pitch total \(signed(reconciliation.totalAdjustment))"
         case .ballInPlayResult(let outcome): "\(outcome.shortLabel) Result"
         case .offensivePitch(let result): result.label
         case .offensiveBaseRunning(let event):
@@ -22,6 +25,7 @@ enum UndoLatestAction: Equatable {
     var buttonTitle: String {
         switch self {
         case .pitch, .offensivePitch: "Undo Latest Pitch"
+        case .pitchCountReconciliation: "Undo Latest Reconciliation"
         case .ballInPlayResult: "Undo Latest Result"
         case .offensiveBaseRunning(let event): "Undo Latest \(event.result.shortLabel)"
         case .offensivePlateAppearance: "Undo Latest Play"
@@ -32,6 +36,7 @@ enum UndoLatestAction: Equatable {
 enum UndoLatestActor: Equatable {
     case opponentBatter(slot: Int)
     case trackedBatter(TrackedBatterIdentity, battingOrderSize: Int)
+    case pitcher(UUID)
 }
 
 struct UndoLatestActionCandidate: Identifiable {
@@ -55,6 +60,7 @@ struct UndoLatestActionCandidate: Identifiable {
     var confirmationTitle: String {
         switch action {
         case .pitch, .offensivePitch: "Undo latest pitch?"
+        case .pitchCountReconciliation: "Undo latest pitch reconciliation?"
         case .ballInPlayResult: "Undo latest result?"
         case .offensiveBaseRunning(let event): "Undo latest \(event.result.confirmationName)?"
         case .offensivePlateAppearance: "Undo latest plate appearance?"
@@ -67,6 +73,8 @@ struct UndoLatestActionCandidate: Identifiable {
             "opponent batting slot \(slot)"
         case .trackedBatter(let batter, let battingOrderSize):
             "\(batter.displayName), batting slot \(batter.lineupSlot) of \(battingOrderSize)"
+        case .pitcher:
+            "starting pitcher"
         }
         return "\(half.displayName) of inning \(inning), \(actorDescription), "
             + "sequence \(sequenceNumber): \(action.label)."
@@ -88,6 +96,14 @@ struct UndoLatestActionCandidate: Identifiable {
             return "Remove \(confirmationMessage) Only the completed \(outcome.label) result will be removed. "
                 + "The preceding Ball In Play pitch at sequence \(pitchSequence) will remain counted, "
                 + "and the game will return to pending outcome entry."
+        case .pitchCountReconciliation(let reconciliation):
+            let unclassified = reconciliation.totalAdjustment
+                - reconciliation.ballAdjustment
+                - reconciliation.strikeAdjustment
+            return "Remove \(confirmationMessage) Balls "
+                + "\(signed(reconciliation.ballAdjustment)), strikes "
+                + "\(signed(reconciliation.strikeAdjustment)), unclassified \(signed(unclassified)). "
+                + "The related scoring plays and live count will remain unchanged."
         case .offensivePitch:
             return "Remove \(confirmationMessage) The event-time tracked batter and batting-order size "
                 + "will remain unchanged, and the offensive count will be rebuilt from the remaining event history."
@@ -103,6 +119,33 @@ struct UndoLatestActionCandidate: Identifiable {
                 + "Runs: \(plateAppearance.countedRunSources.count). RBI: \(plateAppearance.rbi). "
                 + "The game state and batting projection will be rebuilt from the remaining event history."
         }
+    }
+}
+
+private func signed(_ value: Int) -> String {
+    value >= 0 ? "+\(value)" : "\(value)"
+}
+
+struct PitchCountReconciliationSession: Identifiable {
+    var id: UUID { pitcherID }
+
+    let gameID: UUID
+    let pitcherID: UUID
+    let currentCount: PitchCount
+
+    fileprivate let expectedTimeline: [GameEventRecordRevision]
+
+    func reconciledCount(
+        totalAdjustment: Int,
+        ballAdjustment: Int,
+        strikeAdjustment: Int
+    ) -> PitchCount? {
+        currentCount.reconciling(PitchCountReconciliationEvent(
+            pitcherID: pitcherID,
+            totalAdjustment: totalAdjustment,
+            ballAdjustment: ballAdjustment,
+            strikeAdjustment: strikeAdjustment
+        ))
     }
 }
 
@@ -652,6 +695,8 @@ enum GameEventCorrectionError: LocalizedError {
     case logicalPlayNotDeletable
     case offensiveLogicalPlayNotDeletable
     case invalidCandidate
+    case noStartingPitcher
+    case invalidReconciliation
 
     var errorDescription: String? {
         switch self {
@@ -685,6 +730,10 @@ enum GameEventCorrectionError: LocalizedError {
             "This saved event is not a completed tracked-team logical play."
         case .invalidCandidate:
             "The proposed change leaves invalid game history and cannot be saved."
+        case .noStartingPitcher:
+            "This game does not have a starting pitcher to reconcile."
+        case .invalidReconciliation:
+            "The adjustment would produce invalid pitcher totals."
         }
     }
 }
@@ -710,6 +759,71 @@ private struct GameEventRecordRevision: Equatable {
 @MainActor
 enum GameEventCorrection {
     typealias Save = (ModelContext) throws -> Void
+
+    static func preparePitchCountReconciliation(
+        game: Game,
+        modelContext: ModelContext
+    ) throws -> PitchCountReconciliationSession {
+        guard let pitcherID = game.startingPitcherID else {
+            throw GameEventCorrectionError.noStartingPitcher
+        }
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        let snapshot = try validatedSnapshot(game: game, records: records)
+        return PitchCountReconciliationSession(
+            gameID: game.id,
+            pitcherID: pitcherID,
+            currentCount: snapshot.replay.state.pitchCount(for: pitcherID),
+            expectedTimeline: records.map(GameEventRecordRevision.init)
+        )
+    }
+
+    static func savePitchCountReconciliation(
+        totalAdjustment: Int,
+        ballAdjustment: Int,
+        strikeAdjustment: Int,
+        session: PitchCountReconciliationSession,
+        game: Game,
+        modelContext: ModelContext,
+        save: Save = { try $0.save() }
+    ) throws -> LiveGameSnapshot {
+        guard session.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        guard game.startingPitcherID == session.pitcherID else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        let event = PitchCountReconciliationEvent(
+            pitcherID: session.pitcherID,
+            totalAdjustment: totalAdjustment,
+            ballAdjustment: ballAdjustment,
+            strikeAdjustment: strikeAdjustment
+        )
+        guard session.currentCount.reconciling(event) != nil else {
+            throw GameEventCorrectionError.invalidReconciliation
+        }
+
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        guard records.map(GameEventRecordRevision.init) == session.expectedTimeline else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        let record = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: (records.map(\.sequenceNumber).max() ?? 0) + 1,
+            body: .pitchCountReconciliation(event)
+        )
+        let snapshot = try validatedSnapshot(game: game, records: records + [record])
+
+        correctionContext.insert(record)
+        do {
+            try save(correctionContext)
+        } catch {
+            correctionContext.rollback()
+            throw error
+        }
+        return snapshot
+    }
 
     static func prepareUndoLatestAction(
         game: Game,
@@ -737,6 +851,11 @@ enum GameEventCorrection {
                 pitch.result,
                 stateBefore: latestEntry.stateBefore
             )
+            precedingPitchSequenceNumber = nil
+        case .pitchCountReconciliation(let reconciliation):
+            action = .pitchCountReconciliation(reconciliation)
+            actor = .pitcher(reconciliation.pitcherID)
+            completedPlateAppearance = false
             precedingPitchSequenceNumber = nil
         case .ballInPlay(let play):
             guard let precedingEntry = snapshot.replay.entries.dropLast().last,
@@ -3049,7 +3168,8 @@ enum GameEventCorrection {
                 components.insert(entry, at: 0)
             case .offensiveBaseRunning:
                 continue
-            case .offensivePlateAppearance, .offensivePitch, .pitch, .ballInPlay, nil:
+            case .offensivePlateAppearance, .offensivePitch, .pitch,
+                 .pitchCountReconciliation, .ballInPlay, nil:
                 break scanEarlierEvents
             }
         }

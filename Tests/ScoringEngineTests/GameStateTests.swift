@@ -3,6 +3,138 @@ import Testing
 @testable import SoftballScoring
 
 struct GameStateTests {
+    @Test func pitchCountReconciliationChangesOnlyTargetPitcherTotals() throws {
+        let pitcherID = UUID()
+        let gameID = UUID()
+        let records = try [
+            GameEventRecord(
+                gameID: gameID,
+                sequenceNumber: 1,
+                body: .pitch(.init(
+                    result: .ball,
+                    pitcherID: pitcherID,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: gameID,
+                sequenceNumber: 2,
+                body: .pitchCountReconciliation(.init(
+                    pitcherID: pitcherID,
+                    totalAdjustment: 3,
+                    ballAdjustment: 1,
+                    strikeAdjustment: 1
+                ))
+            )
+        ]
+
+        let replay = GameEventReplay.replay(
+            records: records,
+            homeAway: .home,
+            startingPitcherID: pitcherID
+        )
+
+        #expect(replay.rejectedRecordIDs.isEmpty)
+        #expect(replay.state.pitchCount(for: pitcherID) == PitchCount(total: 4, balls: 2, strikes: 1))
+        #expect(replay.state.balls == 1)
+        #expect(replay.state.strikes == 0)
+        #expect(replay.state.outs == 0)
+        #expect(replay.state.homeScore == 0)
+        #expect(replay.state.awayScore == 0)
+        #expect(replay.state.currentOpponentBatterSlot == 1)
+        #expect(replay.state.inning == 1)
+        #expect(replay.state.half == .top)
+    }
+
+    @Test func negativePitchCountReconciliationIsAcceptedWhenResultingTotalsStayValid() throws {
+        let pitcherID = UUID()
+        let gameID = UUID()
+        let results: [PitchResult] = [.ball, .ball, .calledStrike, .foul]
+        var records = try results.enumerated().map { index, result in
+            try GameEventRecord(
+                gameID: gameID,
+                sequenceNumber: index + 1,
+                body: .pitch(.init(
+                    result: result,
+                    pitcherID: pitcherID,
+                    opponentBatterSlot: 1
+                ))
+            )
+        }
+        records.append(try GameEventRecord(
+            gameID: gameID,
+            sequenceNumber: 5,
+            body: .pitchCountReconciliation(.init(
+                pitcherID: pitcherID,
+                totalAdjustment: -2,
+                ballAdjustment: -1,
+                strikeAdjustment: -1
+            ))
+        ))
+
+        let replay = GameEventReplay.replay(
+            records: records,
+            homeAway: .home,
+            startingPitcherID: pitcherID
+        )
+
+        #expect(replay.rejectedRecordIDs.isEmpty)
+        #expect(replay.state.pitchCount(for: pitcherID) == PitchCount(total: 2, balls: 1, strikes: 1))
+        #expect(replay.state.balls == 2)
+        #expect(replay.state.strikes == 2)
+    }
+
+    @Test func replayRejectsInvalidOrUnknownPitcherReconciliations() throws {
+        let pitcherID = UUID()
+        let invalidEvents = [
+            PitchCountReconciliationEvent(
+                pitcherID: pitcherID,
+                totalAdjustment: -1,
+                ballAdjustment: 0,
+                strikeAdjustment: 0
+            ),
+            PitchCountReconciliationEvent(
+                pitcherID: pitcherID,
+                totalAdjustment: 1,
+                ballAdjustment: -1,
+                strikeAdjustment: 0
+            ),
+            PitchCountReconciliationEvent(
+                pitcherID: pitcherID,
+                totalAdjustment: 1,
+                ballAdjustment: 0,
+                strikeAdjustment: -1
+            ),
+            PitchCountReconciliationEvent(
+                pitcherID: pitcherID,
+                totalAdjustment: 1,
+                ballAdjustment: 1,
+                strikeAdjustment: 1
+            ),
+            PitchCountReconciliationEvent(
+                pitcherID: UUID(),
+                totalAdjustment: 1,
+                ballAdjustment: 0,
+                strikeAdjustment: 0
+            )
+        ]
+
+        for event in invalidEvents {
+            let record = try GameEventRecord(
+                gameID: UUID(),
+                sequenceNumber: 1,
+                body: .pitchCountReconciliation(event)
+            )
+            let replay = GameEventReplay.replay(
+                records: [record],
+                homeAway: .home,
+                startingPitcherID: pitcherID
+            )
+            #expect(replay.rejectedRecordIDs == [record.id])
+            #expect(replay.state.pitchCount(for: pitcherID) == PitchCount())
+        }
+    }
+
     private let pitcherID = UUID()
 
     @Test func initialStateStartsTopFirstWithEmptyCountAndBases() {

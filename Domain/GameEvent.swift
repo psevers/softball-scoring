@@ -3,6 +3,7 @@ import SwiftData
 
 enum GameEventKind: String, Codable, Sendable {
     case pitch
+    case pitchCountReconciliation
     case ballInPlay
     case offensivePitch
     case offensiveBaseRunning
@@ -62,6 +63,13 @@ struct PitchEvent: Codable, Equatable, Sendable {
     let result: PitchResult
     let pitcherID: UUID
     let opponentBatterSlot: Int
+}
+
+struct PitchCountReconciliationEvent: Codable, Equatable, Sendable {
+    let pitcherID: UUID
+    let totalAdjustment: Int
+    let ballAdjustment: Int
+    let strikeAdjustment: Int
 }
 
 enum OffensivePitchResult: String, CaseIterable, Codable, Identifiable, Sendable {
@@ -357,6 +365,7 @@ struct BallInPlayEvent: Codable, Equatable, Sendable {
 
 enum GameEventBody: Equatable, Sendable {
     case pitch(PitchEvent)
+    case pitchCountReconciliation(PitchCountReconciliationEvent)
     case ballInPlay(BallInPlayEvent)
     case offensivePitch(OffensivePitchEvent)
     case offensiveBaseRunning(OffensiveBaseRunningEvent)
@@ -365,6 +374,7 @@ enum GameEventBody: Equatable, Sendable {
     var kind: GameEventKind {
         switch self {
         case .pitch: .pitch
+        case .pitchCountReconciliation: .pitchCountReconciliation
         case .ballInPlay: .ballInPlay
         case .offensivePitch: .offensivePitch
         case .offensiveBaseRunning: .offensiveBaseRunning
@@ -390,6 +400,8 @@ enum GameEventCodec {
         switch body {
         case .pitch(let pitch):
             return (.pitch, try encoder.encode(pitch))
+        case .pitchCountReconciliation(let reconciliation):
+            return (.pitchCountReconciliation, try encoder.encode(reconciliation))
         case .ballInPlay(let play):
             return (.ballInPlay, try encoder.encode(play))
         case .offensivePitch(let pitch):
@@ -411,6 +423,10 @@ enum GameEventCodec {
             switch kind {
             case .pitch:
                 return .pitch(try decoder.decode(PitchEvent.self, from: payload))
+            case .pitchCountReconciliation:
+                return .pitchCountReconciliation(
+                    try decoder.decode(PitchCountReconciliationEvent.self, from: payload)
+                )
             case .ballInPlay:
                 return .ballInPlay(try decoder.decode(BallInPlayEvent.self, from: payload))
             case .offensivePitch:

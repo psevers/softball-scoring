@@ -7,6 +7,7 @@ struct PlayHistoryView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Query private var players: [Player]
     @State private var isConfirmingUndo = false
     @State private var correctionError: String?
     @State private var pitchEditSession: DefensivePitchEditSession?
@@ -22,6 +23,7 @@ struct PlayHistoryView: View {
     @State private var logicalPlayDeletionSession: DefensiveLogicalPlayDeletionSession?
     @State private var pendingOffensiveLogicalPlayDeletionSession: OffensiveLogicalPlayDeletionSession?
     @State private var offensiveLogicalPlayDeletionSession: OffensiveLogicalPlayDeletionSession?
+    @State private var pitchCountReconciliationSession: PitchCountReconciliationSession?
 
     var body: some View {
         presentedHistoryPage
@@ -42,6 +44,15 @@ struct PlayHistoryView: View {
                     if session.undoCandidate != nil {
                         undoLatestActionButton
                     }
+
+                    Button {
+                        beginPitchCountReconciliation()
+                    } label: {
+                        Label("Reconcile Pitches", systemImage: "plusminus.circle")
+                            .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("history.reconcilePitches")
 
                     historyContent
                 }
@@ -231,6 +242,23 @@ struct PlayHistoryView: View {
                 deletionSession: deletionSession,
                 liveSession: session
             )
+        }
+        .sheet(item: $pitchCountReconciliationSession) { reconciliationSession in
+            PitchCountReconciliationView(
+                session: reconciliationSession,
+                pitcherName: players.first(where: {
+                    $0.id == reconciliationSession.pitcherID
+                })?.displayName ?? "Starting Pitcher"
+            ) { totalAdjustment, ballAdjustment, strikeAdjustment in
+                try session.savePitchCountReconciliation(
+                    totalAdjustment: totalAdjustment,
+                    ballAdjustment: ballAdjustment,
+                    strikeAdjustment: strikeAdjustment,
+                    session: reconciliationSession,
+                    game: game,
+                    modelContext: modelContext
+                )
+            }
         }
     }
 
@@ -644,6 +672,19 @@ struct PlayHistoryView: View {
             pendingOffensiveLogicalPlayDeletionSession = try GameEventCorrection
                 .prepareOffensiveLogicalPlayDeletion(
                     resultRecordID: resultRecordID,
+                    game: game,
+                    modelContext: modelContext
+                )
+        } catch {
+            session.refresh(game: game, modelContext: modelContext)
+            correctionError = error.localizedDescription
+        }
+    }
+
+    private func beginPitchCountReconciliation() {
+        do {
+            pitchCountReconciliationSession = try GameEventCorrection
+                .preparePitchCountReconciliation(
                     game: game,
                     modelContext: modelContext
                 )

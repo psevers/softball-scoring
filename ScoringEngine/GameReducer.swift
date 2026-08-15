@@ -9,6 +9,10 @@ enum GameReducer {
         switch event.body {
         case .pitch(let pitch):
             applyPitch(pitch, to: &state, trackedTeamHomeAway: trackedTeamHomeAway)
+        case .pitchCountReconciliation(let reconciliation):
+            guard let count = state.pitchCount(for: reconciliation.pitcherID)
+                .reconciling(reconciliation) else { return }
+            state.pitchCountsByPitcher[reconciliation.pitcherID] = count
         case .ballInPlay(let play):
             applyBallInPlay(play, to: &state, trackedTeamHomeAway: trackedTeamHomeAway)
         case .offensivePitch(let pitch):

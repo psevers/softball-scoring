@@ -32,6 +32,14 @@ Pitch-stat classification:
 - Ball In Play → pitch strike.
 - HBP → total only; neither displayed pitch ball nor strike.
 
+### Pitch-count reconciliation
+
+- A reconciliation appends one authoritative event for the game's starting pitcher; it does not rewrite or resequence earlier pitches.
+- Signed total, ball, and strike adjustments may be positive or negative when the resulting totals remain non-negative and balls plus strikes do not exceed total pitches.
+- `total - balls - strikes` is the derived unclassified quantity for HBP or pitches whose result was not recorded.
+- Replay changes only the addressed pitcher's totals. Live balls/strikes, bases, outs, score, batter progression, half-inning, and batting projection remain unchanged.
+- The latest reconciliation is Undo-eligible and is removed without modifying any scoring play.
+
 ### Live count
 
 - Fourth ball completes BB.
@@ -114,8 +122,9 @@ Opponent slots rotate 1...9. Completing a PA advances the slot; 9 wraps to 1.
 
 ## Event invariants
 
+- A pitch-count reconciliation must target the game's starting pitcher and produce non-negative total, ball, and strike quantities with balls plus strikes no greater than total pitches.
 - Persisted events are authoritative history.
-- Undo latest eligible action removes only the latest persisted defensive Ball, Called Strike, Swinging Strike, Foul, HBP, completed Ball In Play result, tracked-team count pitch, completed tracked-team plate appearance, or tracked-team SB/CS after exact-timeline validation. Replaying the surviving timeline restores defensive count and pitcher totals; for ball four, strike three, and HBP it also restores batter slot, runners, score, outs, and half-inning together. Undoing a completed Ball In Play removes its result record only, preserves the counted In Play pitch, and restores the pre-result bases, outs, score, opponent batter slot, pitcher totals, and pending-result state. Undoing a tracked-team pitch restores the offensive count and event-time batter context without changing batting projection or pitcher totals. Undoing a completed tracked-team plate appearance restores its entire pre-play game state and removes its player attribution from the batting projection. Undoing SB/CS restores its event-time runner and removes only that attempt's base-running attribution while preserving active plate-appearance progression. No derived value is reverse-mutated.
+- Undo latest eligible action removes only the latest persisted defensive Ball, Called Strike, Swinging Strike, Foul, HBP, completed Ball In Play result, tracked-team count pitch, completed tracked-team plate appearance, tracked-team SB/CS, or pitch-count reconciliation after exact-timeline validation. Replaying the surviving timeline restores defensive count and pitcher totals; for ball four, strike three, and HBP it also restores batter slot, runners, score, outs, and half-inning together. Undoing a completed Ball In Play removes its result record only, preserves the counted In Play pitch, and restores the pre-result bases, outs, score, opponent batter slot, pitcher totals, and pending-result state. Undoing a tracked-team pitch restores the offensive count and event-time batter context without changing batting projection or pitcher totals. Undoing a completed tracked-team plate appearance restores its entire pre-play game state and removes its player attribution from the batting projection. Undoing SB/CS restores its event-time runner and removes only that attempt's base-running attribution while preserving active plate-appearance progression. Undoing a reconciliation removes only that appended adjustment event. No derived value is reverse-mutated.
 - Editing an earlier non-terminal defensive count pitch stages one supported replacement in memory, replays and reprojects the full timeline, and disables Save at the first invalid later record. A valid Save updates only that pitch payload/kind while preserving record identity, game, sequence, and timestamp; no derived value is reverse-mutated.
 - Editing an earlier tracked-team count pitch accepts only a replacement result and rebuilds the event from its persisted player identity, lineup slot, and event-time batting-order size. Replay validates the result against the count and tracked batter at that sequence, preserves every later batter transition and player-attributed batting line, and requires explicit staged repair for an invalid downstream offensive record.
 - Deleting an earlier tracked-team count pitch stages removal of only that event record. Confirmation uses its event-time player, batting slot and order size, result, and sequence. Full replay reconstructs the active count, tracked batter, and every surviving player-attributed result. A downstream walk or strikeout that originally completed a three-ball or two-strike count must still satisfy that saved count contract after correction; any invalid downstream record is never rewritten or skipped and keeps Save disabled until explicitly repaired.

@@ -64,6 +64,10 @@ The main-actor persistence boundary that freshly fetches one game's event record
 
 An in-memory candidate timeline tied to an exact durable record revision. It retains every staged edit or deletion by record identity, replays the complete candidate after each change, identifies the first invalid downstream record, and can save only when the whole timeline and batting projection are clean.
 
+## Pitch-count reconciliation
+
+An appended authoritative event that applies signed total, ball, and strike adjustments to one stable pitcher identity. The difference between the total adjustment and its ball-plus-strike adjustments is unclassified. Replay changes only that pitcher's derived totals; the live count and every non-pitch game value remain unchanged.
+
 ## Defensive pitch edit
 
 A staged replacement of one earlier non-terminal defensive Ball, Called Strike, Swinging Strike, or Foul. The edit retains the pitch's event-time inning, half, opponent batting slot, pitcher, record identity, sequence, and timestamp while replaying the complete candidate timeline before Save.

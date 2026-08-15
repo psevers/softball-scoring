@@ -3,6 +3,24 @@ import Testing
 @testable import SoftballScoring
 
 struct GameEventTests {
+    @Test func pitchCountReconciliationRoundTripsSignedAdjustments() throws {
+        let reconciliation = PitchCountReconciliationEvent(
+            pitcherID: UUID(),
+            totalAdjustment: -2,
+            ballAdjustment: -1,
+            strikeAdjustment: -1
+        )
+
+        let encoded = try GameEventCodec.encode(.pitchCountReconciliation(reconciliation))
+        let decoded = try GameEventCodec.decode(
+            kindRawValue: encoded.kind.rawValue,
+            payload: encoded.payload
+        )
+
+        #expect(encoded.kind == .pitchCountReconciliation)
+        #expect(decoded == .pitchCountReconciliation(reconciliation))
+    }
+
     @Test func offensivePlateAppearanceRoundTripsPlayerIdentity() throws {
         let batter = TrackedBatterIdentity(
             playerID: UUID(),

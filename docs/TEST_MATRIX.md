@@ -53,6 +53,16 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Ball In Play increments one pitch and enters pending-result state.
 - Another pitch while pending is rejected/ignored.
 
+## Pitch-count reconciliation
+
+- Codec round-trip retains target pitcher identity and signed total/ball/strike adjustments.
+- Positive, negative, classified, and unclassified adjustments replay deterministically without changing live count or non-pitch state.
+- Negative resulting totals, over-classification, and a non-starting pitcher identity are rejected.
+- Append uses the authoritative next sequence; wrong-game, stale-session, invalid-candidate, and save-failure paths persist nothing partially.
+- Fresh-context replay reproduces the adjusted totals and unchanged batting projection.
+- Play History explains every signed adjustment, and latest-action Undo removes only the reconciliation.
+- Focused UI coverage saves, relaunches, undoes, and replaces signed adjustments while preserving the live count.
+
 ## Read-only Play History
 
 - A fresh authoritative snapshot fetches exactly one game and supplies replay, batting projection, and history together.
