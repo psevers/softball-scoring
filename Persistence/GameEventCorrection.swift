@@ -293,19 +293,30 @@ struct OffensivePlateAppearanceStagedChange: Identifiable, Equatable {
     }
 }
 
+enum OffensiveBaseRunningStagedAction: Equatable {
+    case edit(OffensiveBaseRunningEvent)
+    case delete
+}
+
 struct OffensiveBaseRunningStagedChange: Identifiable, Equatable {
     var id: UUID { recordID }
 
     let recordID: UUID
     let sequenceNumber: Int
     let originalEvent: OffensiveBaseRunningEvent
-    let proposedEvent: OffensiveBaseRunningEvent
+    let action: OffensiveBaseRunningStagedAction
 
     var summary: String {
-        "Sequence \(sequenceNumber) · \(originalEvent.result.shortLabel) "
-            + "\(originalEvent.source.baseLabel) to \(originalEvent.destination.label) · Change to "
-            + "\(proposedEvent.result.shortLabel) \(proposedEvent.source.baseLabel) to "
-            + proposedEvent.destination.label
+        let original = "\(originalEvent.result.shortLabel) "
+            + "\(originalEvent.source.baseLabel) to \(originalEvent.destination.label)"
+        return switch action {
+        case .edit(let event):
+            "Sequence \(sequenceNumber) · \(original) · Change to "
+                + "\(event.result.shortLabel) \(event.source.baseLabel) to "
+                + event.destination.label
+        case .delete:
+            "Sequence \(sequenceNumber) · Delete \(original)"
+        }
     }
 }
 
@@ -323,7 +334,7 @@ struct DefensiveBallInPlayStagedChange: Identifiable, Equatable {
     }
 }
 
-struct DefensiveLogicalPlayDeletionComponent: Identifiable, Equatable {
+struct CompletedPlayDeletionComponent: Identifiable, Equatable {
     var id: UUID { recordID }
 
     let recordID: UUID
@@ -331,17 +342,49 @@ struct DefensiveLogicalPlayDeletionComponent: Identifiable, Equatable {
     let summary: String
 }
 
-struct DefensiveLogicalPlayStagedDeletion: Identifiable, Equatable {
+struct CompletedPlayRepairDeletion: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case defensive
+        case offensive
+    }
+
     var id: UUID { resultRecordID }
 
-    let pitchRecordID: UUID
-    let pitchSequenceNumber: Int
+    let kind: Kind
     let resultRecordID: UUID
-    let resultSequenceNumber: Int
-    let resultSummary: String
+    let context: String
+    let components: [CompletedPlayDeletionComponent]
+
+    var confirmationTitle: String { "Delete affected completed play?" }
+
+    var confirmationDetail: String {
+        let componentList = components
+            .map { "Sequence \($0.sequenceNumber): \($0.summary)" }
+            .joined(separator: "\n")
+        return "\(context). These records will be added to the staged deletion:\n"
+            + componentList
+    }
+}
+
+struct CompletedPlayStagedDeletion: Identifiable, Equatable {
+    var id: UUID { resultComponent.recordID }
+
+    let pitchComponents: [CompletedPlayDeletionComponent]
+    let resultComponent: CompletedPlayDeletionComponent
+    let resultLabel: String
+
+    var components: [CompletedPlayDeletionComponent] {
+        pitchComponents + [resultComponent]
+    }
+
+    var recordIDs: [UUID] { components.map(\.recordID) }
+    var sequenceNumbers: [Int] { components.map(\.sequenceNumber) }
+    var resultRecordID: UUID { resultComponent.recordID }
+    var resultSequenceNumber: Int { resultComponent.sequenceNumber }
 
     var summary: String {
-        "Sequences \(pitchSequenceNumber) and \(resultSequenceNumber) · Delete completed \(resultSummary)"
+        let sequences = sequenceNumbers.map(String.init).joined(separator: ", ")
+        return "Sequences \(sequences) · Delete completed \(resultLabel)"
     }
 }
 
@@ -357,6 +400,8 @@ struct GameEventCorrectionProblem: Equatable {
     let canEditBallInPlay: Bool
     let canEditOffensiveBaseRunning: Bool
     let canEditOffensivePlateAppearance: Bool
+    let canDeleteOffensiveBaseRunning: Bool
+    let logicalPlayDeletion: CompletedPlayRepairDeletion?
     let offensiveBaseRunningRunners: [OffensiveBaseRunningRunner]
     let offensiveRunnerIdentities: [TrackedBatterIdentity]
 }
@@ -368,7 +413,7 @@ struct GameEventCorrectionSession {
     let stagedOffensiveBaseRunningChanges: [OffensiveBaseRunningStagedChange]
     let stagedOffensivePlateAppearanceChanges: [OffensivePlateAppearanceStagedChange]
     let stagedBallInPlayChanges: [DefensiveBallInPlayStagedChange]
-    let stagedLogicalPlayDeletions: [DefensiveLogicalPlayStagedDeletion]
+    let stagedLogicalPlayDeletions: [CompletedPlayStagedDeletion]
     let snapshot: LiveGameSnapshot
     let firstInvalidRecord: GameEventCorrectionProblem?
 
@@ -383,7 +428,10 @@ struct GameEventCorrectionSession {
                 }
             }
             || stagedOffensiveBaseRunningChanges.contains {
-                $0.proposedEvent != $0.originalEvent
+                switch $0.action {
+                case .edit(let event): event != $0.originalEvent
+                case .delete: true
+                }
             }
             || stagedOffensivePlateAppearanceChanges.contains {
                 $0.proposedPlateAppearance != $0.originalPlateAppearance
@@ -402,10 +450,11 @@ struct DefensiveLogicalPlayDeletionSession: Identifiable {
     let inning: Int
     let half: InningHalf
     let opponentBatterSlot: Int
-    let components: [DefensiveLogicalPlayDeletionComponent]
 
-    fileprivate let stagedDeletion: DefensiveLogicalPlayStagedDeletion
+    fileprivate let stagedDeletion: CompletedPlayStagedDeletion
     fileprivate let expectedTimeline: [GameEventRecordRevision]
+
+    var components: [CompletedPlayDeletionComponent] { stagedDeletion.components }
 
     var confirmationTitle: String {
         "Delete completed play?"
@@ -418,6 +467,52 @@ struct DefensiveLogicalPlayDeletionSession: Identifiable {
         return "\(half.displayName) of inning \(inning), opponent batting slot "
             + "\(opponentBatterSlot). Both records will be removed:\n\(componentList)\n"
             + "Individual component deletion remains available separately."
+    }
+}
+
+struct OffensiveLogicalPlayDeletionSession: Identifiable {
+    var id: UUID { resultRecordID }
+
+    let resultRecordID: UUID
+    let gameID: UUID
+    let inning: Int
+    let half: InningHalf
+    let batter: TrackedBatterIdentity
+    let battingOrderSize: Int
+
+    fileprivate let stagedDeletion: CompletedPlayStagedDeletion
+    fileprivate let expectedTimeline: [GameEventRecordRevision]
+
+    var components: [CompletedPlayDeletionComponent] { stagedDeletion.components }
+
+    var confirmationTitle: String {
+        "Delete completed tracked play?"
+    }
+
+    var confirmationDetail: String {
+        let componentList = components
+            .map { "Sequence \($0.sequenceNumber): \($0.summary)" }
+            .joined(separator: "\n")
+        return "\(half.displayName) of inning \(inning), \(batter.displayName), batting slot "
+            + "\(batter.lineupSlot) of \(battingOrderSize). These records will be removed:\n"
+            + "\(componentList)\nUnrelated base-running and later records will remain."
+    }
+}
+
+struct OffensiveLogicalPlayDeletionPreview {
+    let session: OffensiveLogicalPlayDeletionSession
+    let correctionSession: GameEventCorrectionSession
+
+    var snapshot: LiveGameSnapshot {
+        correctionSession.snapshot
+    }
+
+    var firstInvalidRecord: GameEventCorrectionProblem? {
+        correctionSession.firstInvalidRecord
+    }
+
+    var canSave: Bool {
+        correctionSession.canSave
     }
 }
 
@@ -555,6 +650,7 @@ enum GameEventCorrectionError: LocalizedError {
     case pitchNotDeletable
     case ballInPlayNotEditable
     case logicalPlayNotDeletable
+    case offensiveLogicalPlayNotDeletable
     case invalidCandidate
 
     var errorDescription: String? {
@@ -585,6 +681,8 @@ enum GameEventCorrectionError: LocalizedError {
             "This saved event is not an editable defensive Ball In Play result."
         case .logicalPlayNotDeletable:
             "This saved event is not a completed defensive Ball In Play."
+        case .offensiveLogicalPlayNotDeletable:
+            "This saved event is not a completed tracked-team logical play."
         case .invalidCandidate:
             "The proposed change leaves invalid game history and cannot be saved."
         }
@@ -863,11 +961,14 @@ enum GameEventCorrection {
             guard let record = records.first(where: { $0.id == change.recordID }) else {
                 throw GameEventCorrectionError.staleTimeline
             }
-            let encoded = try GameEventCodec.encode(
-                .offensiveBaseRunning(change.proposedEvent)
-            )
-            record.kindRawValue = encoded.kind.rawValue
-            record.payload = encoded.payload
+            switch change.action {
+            case .edit(let event):
+                let encoded = try GameEventCodec.encode(.offensiveBaseRunning(event))
+                record.kindRawValue = encoded.kind.rawValue
+                record.payload = encoded.payload
+            case .delete:
+                correctionContext.delete(record)
+            }
         }
         for change in session.stagedOffensivePlateAppearanceChanges {
             guard let record = records.first(where: { $0.id == change.recordID }) else {
@@ -888,7 +989,7 @@ enum GameEventCorrection {
             record.payload = encoded.payload
         }
         let logicalPlayRecordIDs = Set(session.stagedLogicalPlayDeletions.flatMap {
-            [$0.pitchRecordID, $0.resultRecordID]
+            $0.recordIDs
         })
         for record in records where logicalPlayRecordIDs.contains(record.id) {
             correctionContext.delete(record)
@@ -1445,12 +1546,20 @@ enum GameEventCorrection {
               }) else {
             throw GameEventCorrectionError.logicalPlayNotDeletable
         }
-        let stagedDeletion = DefensiveLogicalPlayStagedDeletion(
-            pitchRecordID: pitchRecord.id,
-            pitchSequenceNumber: pitchRecord.sequenceNumber,
-            resultRecordID: resultRecord.id,
-            resultSequenceNumber: resultRecord.sequenceNumber,
-            resultSummary: play.outcome.label
+        let pitchComponent = CompletedPlayDeletionComponent(
+            recordID: pitchRecord.id,
+            sequenceNumber: pitchRecord.sequenceNumber,
+            summary: "Ball In Play pitch"
+        )
+        let resultComponent = CompletedPlayDeletionComponent(
+            recordID: resultRecord.id,
+            sequenceNumber: resultRecord.sequenceNumber,
+            summary: "\(play.outcome.label) result"
+        )
+        let stagedDeletion = CompletedPlayStagedDeletion(
+            pitchComponents: [pitchComponent],
+            resultComponent: resultComponent,
+            resultLabel: play.outcome.label
         )
         return DefensiveLogicalPlayDeletionSession(
             resultRecordID: resultRecord.id,
@@ -1458,18 +1567,6 @@ enum GameEventCorrection {
             inning: snapshot.replay.entries[resultIndex - 1].stateBefore.inning,
             half: snapshot.replay.entries[resultIndex - 1].stateBefore.half,
             opponentBatterSlot: play.opponentBatterSlot,
-            components: [
-                DefensiveLogicalPlayDeletionComponent(
-                    recordID: pitchRecord.id,
-                    sequenceNumber: pitchRecord.sequenceNumber,
-                    summary: "Ball In Play pitch"
-                ),
-                DefensiveLogicalPlayDeletionComponent(
-                    recordID: resultRecord.id,
-                    sequenceNumber: resultRecord.sequenceNumber,
-                    summary: "\(play.outcome.label) result"
-                )
-            ],
             stagedDeletion: stagedDeletion,
             expectedTimeline: records.map(GameEventRecordRevision.init)
         )
@@ -1488,35 +1585,13 @@ enum GameEventCorrection {
         guard session.expectedTimeline == deletionSession.expectedTimeline else {
             throw GameEventCorrectionError.staleTimeline
         }
-        let deletions = [deletionSession.stagedDeletion]
-        let candidateRecords = try applying(
-            session.stagedChanges,
-            offensivePitchChanges: session.stagedOffensivePitchChanges,
-            offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
-            offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
-            ballInPlayChanges: session.stagedBallInPlayChanges,
-            logicalPlayDeletions: deletions,
-            to: session.snapshot.records
-        )
-        let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
+        let correctionSession = try addingLogicalPlayDeletion(
+            deletionSession.stagedDeletion,
+            expectedTimeline: deletionSession.expectedTimeline,
+            to: session,
             game: game,
-            records: candidateRecords,
+            modelContext: modelContext,
             projectBattingLines: projectBattingLines
-        )
-        let correctionSession = GameEventCorrectionSession(
-            gameID: game.id,
-            stagedChanges: session.stagedChanges,
-            stagedOffensivePitchChanges: session.stagedOffensivePitchChanges,
-            stagedOffensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
-            stagedOffensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
-            stagedBallInPlayChanges: session.stagedBallInPlayChanges,
-            stagedLogicalPlayDeletions: deletions,
-            snapshot: snapshot,
-            firstInvalidRecord: firstCorrectionProblem(
-                in: snapshot.replay,
-                originalReplay: session.snapshot.replay
-            ),
-            expectedTimeline: session.expectedTimeline
         )
         return DefensiveLogicalPlayDeletionPreview(
             session: deletionSession,
@@ -1524,8 +1599,252 @@ enum GameEventCorrection {
         )
     }
 
+    static func stageDefensiveLogicalPlayDeletion(
+        resultRecordID: UUID,
+        in session: GameEventCorrectionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
+    ) throws -> GameEventCorrectionSession {
+        guard session.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        let deletionSession = try prepareDefensiveLogicalPlayDeletion(
+            resultRecordID: resultRecordID,
+            game: game,
+            modelContext: modelContext
+        )
+        return try addingLogicalPlayDeletion(
+            deletionSession.stagedDeletion,
+            expectedTimeline: deletionSession.expectedTimeline,
+            to: session,
+            game: game,
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines
+        )
+    }
+
     static func saveDefensiveLogicalPlayDeletion(
         _ preview: DefensiveLogicalPlayDeletionPreview,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project,
+        save: Save = { try $0.save() }
+    ) throws -> LiveGameSnapshot {
+        guard preview.session.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        guard preview.canSave else {
+            throw GameEventCorrectionError.invalidCandidate
+        }
+        return try saveGameEventCorrection(
+            preview.correctionSession,
+            game: game,
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines,
+            save: save
+        )
+    }
+
+    static func prepareOffensiveLogicalPlayDeletion(
+        resultRecordID: UUID,
+        game: Game,
+        modelContext: ModelContext
+    ) throws -> OffensiveLogicalPlayDeletionSession {
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        let snapshot = try validatedSnapshot(game: game, records: records)
+        guard let resultIndex = snapshot.replay.entries.firstIndex(where: {
+            $0.recordID == resultRecordID
+        }),
+              let resultRecord = records.first(where: { $0.id == resultRecordID }),
+              case .offensivePlateAppearance(let plateAppearance) =
+                snapshot.replay.entries[resultIndex].body,
+              snapshot.replay.entries[resultIndex].rejection == nil,
+              let homeAway = HomeAway(rawValue: game.homeAwayRawValue),
+              isCorrectableOffensivePlateAppearance(
+                plateAppearance,
+                stateBefore: snapshot.replay.entries[resultIndex].stateBefore,
+                trackedTeamHomeAway: homeAway
+              ),
+              let componentEntries = offensiveLogicalPlayEntries(
+                endingAt: resultIndex,
+                in: snapshot.replay
+              ) else {
+            throw GameEventCorrectionError.offensiveLogicalPlayNotDeletable
+        }
+
+        let recordsByID = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
+        var components: [CompletedPlayDeletionComponent] = []
+        for entry in componentEntries {
+            guard let record = recordsByID[entry.recordID], let body = entry.body else {
+                throw GameEventCorrectionError.invalidTimeline
+            }
+            let summary = switch body {
+            case .offensivePitch(let pitch): "\(pitch.result.label) pitch"
+            case .offensivePlateAppearance(let result): "\(result.result.label) result"
+            default: throw GameEventCorrectionError.invalidTimeline
+            }
+            components.append(CompletedPlayDeletionComponent(
+                recordID: record.id,
+                sequenceNumber: record.sequenceNumber,
+                summary: summary
+            ))
+        }
+        guard let firstEntry = componentEntries.first,
+              let resultComponent = components.last else {
+            throw GameEventCorrectionError.invalidTimeline
+        }
+        let stagedDeletion = CompletedPlayStagedDeletion(
+            pitchComponents: Array(components.dropLast()),
+            resultComponent: resultComponent,
+            resultLabel: plateAppearance.result.label
+        )
+        return OffensiveLogicalPlayDeletionSession(
+            resultRecordID: resultRecord.id,
+            gameID: game.id,
+            inning: firstEntry.stateBefore.inning,
+            half: firstEntry.stateBefore.half,
+            batter: plateAppearance.batter,
+            battingOrderSize: plateAppearance.battingOrderSize,
+            stagedDeletion: stagedDeletion,
+            expectedTimeline: records.map(GameEventRecordRevision.init)
+        )
+    }
+
+    static func stageOffensiveLogicalPlayDeletion(
+        _ deletionSession: OffensiveLogicalPlayDeletionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
+    ) throws -> OffensiveLogicalPlayDeletionPreview {
+        guard deletionSession.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        let session = try beginGameEventCorrection(game: game, modelContext: modelContext)
+        guard session.expectedTimeline == deletionSession.expectedTimeline else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        let correctionSession = try addingLogicalPlayDeletion(
+            deletionSession.stagedDeletion,
+            expectedTimeline: deletionSession.expectedTimeline,
+            to: session,
+            game: game,
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines
+        )
+        return OffensiveLogicalPlayDeletionPreview(
+            session: deletionSession,
+            correctionSession: correctionSession
+        )
+    }
+
+    static func stageOffensiveLogicalPlayDeletion(
+        resultRecordID: UUID,
+        in session: GameEventCorrectionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
+    ) throws -> GameEventCorrectionSession {
+        guard session.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        let deletionSession = try prepareOffensiveLogicalPlayDeletion(
+            resultRecordID: resultRecordID,
+            game: game,
+            modelContext: modelContext
+        )
+        return try addingLogicalPlayDeletion(
+            deletionSession.stagedDeletion,
+            expectedTimeline: deletionSession.expectedTimeline,
+            to: session,
+            game: game,
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines
+        )
+    }
+
+    private static func addingLogicalPlayDeletion(
+        _ stagedDeletion: CompletedPlayStagedDeletion,
+        expectedTimeline: [GameEventRecordRevision],
+        to session: GameEventCorrectionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines
+    ) throws -> GameEventCorrectionSession {
+        guard session.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        let correctionContext = freshContext(from: modelContext)
+        let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
+        guard records.map(GameEventRecordRevision.init) == session.expectedTimeline,
+              expectedTimeline == session.expectedTimeline else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        guard !session.stagedLogicalPlayDeletions.contains(where: {
+            $0.resultRecordID == stagedDeletion.resultRecordID
+        }) else {
+            throw GameEventCorrectionError.invalidCandidate
+        }
+        let originalSnapshot = try validatedSnapshot(
+            game: game,
+            records: records,
+            projectBattingLines: projectBattingLines
+        )
+        let deletedRecordIDs = Set(stagedDeletion.recordIDs)
+        let changes = session.stagedChanges.filter {
+            !deletedRecordIDs.contains($0.recordID)
+        }
+        let offensivePitchChanges = session.stagedOffensivePitchChanges.filter {
+            !deletedRecordIDs.contains($0.recordID)
+        }
+        let offensiveBaseRunningChanges = session.stagedOffensiveBaseRunningChanges.filter {
+            !deletedRecordIDs.contains($0.recordID)
+        }
+        let offensivePlateAppearanceChanges = session.stagedOffensivePlateAppearanceChanges.filter {
+            !deletedRecordIDs.contains($0.recordID)
+        }
+        let ballInPlayChanges = session.stagedBallInPlayChanges.filter {
+            !deletedRecordIDs.contains($0.recordID)
+        }
+        let deletions = session.stagedLogicalPlayDeletions + [stagedDeletion]
+        let candidateRecords = try applying(
+            changes,
+            offensivePitchChanges: offensivePitchChanges,
+            offensiveBaseRunningChanges: offensiveBaseRunningChanges,
+            offensivePlateAppearanceChanges: offensivePlateAppearanceChanges,
+            ballInPlayChanges: ballInPlayChanges,
+            logicalPlayDeletions: deletions,
+            to: records
+        )
+        let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
+            game: game,
+            records: candidateRecords,
+            projectBattingLines: projectBattingLines,
+            validateEvent: terminalCountValidator(
+                originalReplay: originalSnapshot.replay,
+                ignoredRecordIDs: Set(offensivePlateAppearanceChanges.map(\.recordID))
+            )
+        )
+        return GameEventCorrectionSession(
+            gameID: game.id,
+            stagedChanges: changes,
+            stagedOffensivePitchChanges: offensivePitchChanges,
+            stagedOffensiveBaseRunningChanges: offensiveBaseRunningChanges,
+            stagedOffensivePlateAppearanceChanges: offensivePlateAppearanceChanges,
+            stagedBallInPlayChanges: ballInPlayChanges,
+            stagedLogicalPlayDeletions: deletions,
+            snapshot: snapshot,
+            firstInvalidRecord: firstCorrectionProblem(
+                in: snapshot.replay,
+                originalReplay: originalSnapshot.replay
+            ),
+            expectedTimeline: session.expectedTimeline
+        )
+    }
+
+    static func saveOffensiveLogicalPlayDeletion(
+        _ preview: OffensiveLogicalPlayDeletionPreview,
         game: Game,
         modelContext: ModelContext,
         projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project,
@@ -1760,6 +2079,41 @@ enum GameEventCorrection {
         modelContext: ModelContext,
         projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
     ) throws -> GameEventCorrectionSession {
+        try stageOffensiveBaseRunningChange(
+            recordID: recordID,
+            action: .edit(event),
+            in: session,
+            game: game,
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines
+        )
+    }
+
+    static func stageOffensiveBaseRunningDeletion(
+        recordID: UUID,
+        in session: GameEventCorrectionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
+    ) throws -> GameEventCorrectionSession {
+        try stageOffensiveBaseRunningChange(
+            recordID: recordID,
+            action: .delete,
+            in: session,
+            game: game,
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines
+        )
+    }
+
+    private static func stageOffensiveBaseRunningChange(
+        recordID: UUID,
+        action: OffensiveBaseRunningStagedAction,
+        in session: GameEventCorrectionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines
+    ) throws -> GameEventCorrectionSession {
         guard session.gameID == game.id else {
             throw GameEventCorrectionError.gameMismatch
         }
@@ -1790,29 +2144,31 @@ enum GameEventCorrection {
             throw GameEventCorrectionError.offensiveBaseRunningNotEditable
         }
 
-        let currentRecords = try applying(
-            session.stagedChanges,
-            offensivePitchChanges: session.stagedOffensivePitchChanges,
-            offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
-            offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
-            ballInPlayChanges: session.stagedBallInPlayChanges,
-            logicalPlayDeletions: session.stagedLogicalPlayDeletions,
-            to: records
-        )
-        let currentSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
-            game: game,
-            records: currentRecords,
-            projectBattingLines: projectBattingLines
-        )
-        guard let referenceEntry = currentSnapshot.replay.entries.first(where: {
-            $0.recordID == recordID
-        }) ?? session.snapshot.replay.entries.first(where: { $0.recordID == recordID }),
-              OffensiveBaseRunningValidator.isValid(
-                event,
-                state: referenceEntry.stateBefore,
-                trackedTeamHomeAway: homeAway
-              ) else {
-            throw GameEventCorrectionError.offensiveBaseRunningNotEditable
+        if case .edit(let event) = action {
+            let currentRecords = try applying(
+                session.stagedChanges,
+                offensivePitchChanges: session.stagedOffensivePitchChanges,
+                offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
+                offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
+                ballInPlayChanges: session.stagedBallInPlayChanges,
+                logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+                to: records
+            )
+            let currentSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
+                game: game,
+                records: currentRecords,
+                projectBattingLines: projectBattingLines
+            )
+            guard let referenceEntry = currentSnapshot.replay.entries.first(where: {
+                $0.recordID == recordID
+            }) ?? session.snapshot.replay.entries.first(where: { $0.recordID == recordID }),
+                  OffensiveBaseRunningValidator.isValid(
+                    event,
+                    state: referenceEntry.stateBefore,
+                    trackedTeamHomeAway: homeAway
+                  ) else {
+                throw GameEventCorrectionError.offensiveBaseRunningNotEditable
+            }
         }
 
         let originalEvent = session.stagedOffensiveBaseRunningChanges.first(where: {
@@ -1822,7 +2178,7 @@ enum GameEventCorrection {
             recordID: record.id,
             sequenceNumber: record.sequenceNumber,
             originalEvent: originalEvent,
-            proposedEvent: event
+            action: action
         )
         var baseRunningChanges = session.stagedOffensiveBaseRunningChanges
         if let index = baseRunningChanges.firstIndex(where: { $0.recordID == recordID }) {
@@ -2211,7 +2567,7 @@ enum GameEventCorrection {
         offensiveBaseRunningChanges: [OffensiveBaseRunningStagedChange],
         offensivePlateAppearanceChanges: [OffensivePlateAppearanceStagedChange],
         ballInPlayChanges: [DefensiveBallInPlayStagedChange],
-        logicalPlayDeletions: [DefensiveLogicalPlayStagedDeletion] = [],
+        logicalPlayDeletions: [CompletedPlayStagedDeletion] = [],
         to records: [GameEventRecord]
     ) throws -> [GameEventRecord] {
         let changesByRecordID = Dictionary(uniqueKeysWithValues: changes.map { ($0.recordID, $0) })
@@ -2228,18 +2584,23 @@ enum GameEventCorrection {
             uniqueKeysWithValues: ballInPlayChanges.map { ($0.recordID, $0) }
         )
         let deletedLogicalPlayRecordIDs = Set(logicalPlayDeletions.flatMap {
-            [$0.pitchRecordID, $0.resultRecordID]
+            $0.recordIDs
         })
         return try records.compactMap { record in
             guard !deletedLogicalPlayRecordIDs.contains(record.id) else { return nil }
             if let change = offensiveBaseRunningChangesByRecordID[record.id] {
-                return try GameEventRecord(
-                    id: record.id,
-                    gameID: record.gameID,
-                    sequenceNumber: record.sequenceNumber,
-                    timestamp: record.timestamp,
-                    body: .offensiveBaseRunning(change.proposedEvent)
-                )
+                switch change.action {
+                case .edit(let event):
+                    return try GameEventRecord(
+                        id: record.id,
+                        gameID: record.gameID,
+                        sequenceNumber: record.sequenceNumber,
+                        timestamp: record.timestamp,
+                        body: .offensiveBaseRunning(event)
+                    )
+                case .delete:
+                    return nil
+                }
             }
             if let change = ballInPlayChangesByRecordID[record.id] {
                 return try GameEventRecord(
@@ -2321,6 +2682,15 @@ enum GameEventCorrection {
         let canEditBallInPlay: Bool
         let canEditOffensiveBaseRunning: Bool
         let canEditOffensivePlateAppearance: Bool
+        let canDeleteOffensiveBaseRunning = originalReplay.entries.contains(where: {
+            guard $0.recordID == entry.recordID else { return false }
+            if case .offensiveBaseRunning = $0.body { return true }
+            return false
+        })
+        let logicalPlayDeletion = completedPlayRepairDeletion(
+            containing: entry.recordID,
+            in: originalReplay
+        )
         let offensiveBaseRunningRunners: [OffensiveBaseRunningRunner]
         let offensiveRunnerIdentities: [TrackedBatterIdentity]
         switch entry.body {
@@ -2493,6 +2863,8 @@ enum GameEventCorrection {
             canEditBallInPlay: canEditBallInPlay,
             canEditOffensiveBaseRunning: canEditOffensiveBaseRunning,
             canEditOffensivePlateAppearance: canEditOffensivePlateAppearance,
+            canDeleteOffensiveBaseRunning: canDeleteOffensiveBaseRunning,
+            logicalPlayDeletion: logicalPlayDeletion,
             offensiveBaseRunningRunners: offensiveBaseRunningRunners,
             offensiveRunnerIdentities: offensiveRunnerIdentities
         )
@@ -2648,6 +3020,112 @@ enum GameEventCorrection {
         case .hitByPitch: true
         case .foul, .ballInPlay: false
         }
+    }
+
+    private static func offensiveLogicalPlayEntries(
+        endingAt resultIndex: Int,
+        in replay: GameEventReplay.Result
+    ) -> [GameEventReplay.Entry]? {
+        guard replay.entries.indices.contains(resultIndex),
+              case .offensivePlateAppearance(let plateAppearance) =
+                replay.entries[resultIndex].body else {
+            return nil
+        }
+
+        let resultEntry = replay.entries[resultIndex]
+        var components = [resultEntry]
+        var index = resultIndex
+        scanEarlierEvents: while index > replay.entries.startIndex {
+            index = replay.entries.index(before: index)
+            let entry = replay.entries[index]
+            guard entry.stateBefore.inning == resultEntry.stateBefore.inning,
+                  entry.stateBefore.half == resultEntry.stateBefore.half else {
+                break
+            }
+            switch entry.body {
+            case .offensivePitch(let pitch)
+                where pitch.batter == plateAppearance.batter
+                    && pitch.battingOrderSize == plateAppearance.battingOrderSize:
+                components.insert(entry, at: 0)
+            case .offensiveBaseRunning:
+                continue
+            case .offensivePlateAppearance, .offensivePitch, .pitch, .ballInPlay, nil:
+                break scanEarlierEvents
+            }
+        }
+        return components
+    }
+
+    private static func completedPlayRepairDeletion(
+        containing recordID: UUID,
+        in replay: GameEventReplay.Result
+    ) -> CompletedPlayRepairDeletion? {
+        for index in replay.entries.indices {
+            guard case .offensivePlateAppearance(let plateAppearance) = replay.entries[index].body
+            else { continue }
+            guard let components = offensiveLogicalPlayEntries(endingAt: index, in: replay),
+                  components.contains(where: { $0.recordID == recordID }) else {
+                continue
+            }
+            let deletionComponents = components.compactMap { entry -> CompletedPlayDeletionComponent? in
+                let summary: String
+                switch entry.body {
+                case .offensivePitch(let pitch): summary = "\(pitch.result.label) pitch"
+                case .offensivePlateAppearance(let result):
+                    summary = "\(result.result.label) result"
+                default: return nil
+                }
+                return CompletedPlayDeletionComponent(
+                    recordID: entry.recordID,
+                    sequenceNumber: entry.sequenceNumber,
+                    summary: summary
+                )
+            }
+            guard deletionComponents.count == components.count,
+                  let firstEntry = components.first else { return nil }
+            return CompletedPlayRepairDeletion(
+                kind: .offensive,
+                resultRecordID: replay.entries[index].recordID,
+                context: "\(firstEntry.stateBefore.half.displayName) "
+                    + "\(firstEntry.stateBefore.inning), \(plateAppearance.batter.displayName), "
+                    + "batting slot \(plateAppearance.batter.lineupSlot) of "
+                    + "\(plateAppearance.battingOrderSize)",
+                components: deletionComponents
+            )
+        }
+
+        for index in replay.entries.indices where index > replay.entries.startIndex {
+            guard case .ballInPlay(let play) = replay.entries[index].body,
+                  case .pitch(let pitch) = replay.entries[index - 1].body,
+                  pitch.result == .ballInPlay,
+                  pitch.opponentBatterSlot == play.opponentBatterSlot,
+                  [replay.entries[index - 1].recordID, replay.entries[index].recordID]
+                    .contains(recordID) else {
+                continue
+            }
+            let pitchEntry = replay.entries[index - 1]
+            let resultEntry = replay.entries[index]
+            return CompletedPlayRepairDeletion(
+                kind: .defensive,
+                resultRecordID: resultEntry.recordID,
+                context: "\(pitchEntry.stateBefore.half.displayName) "
+                    + "\(pitchEntry.stateBefore.inning), opponent batting slot "
+                    + "\(play.opponentBatterSlot)",
+                components: [
+                    CompletedPlayDeletionComponent(
+                        recordID: pitchEntry.recordID,
+                        sequenceNumber: pitchEntry.sequenceNumber,
+                        summary: "Ball In Play pitch"
+                    ),
+                    CompletedPlayDeletionComponent(
+                        recordID: resultEntry.recordID,
+                        sequenceNumber: resultEntry.sequenceNumber,
+                        summary: "\(play.outcome.label) result"
+                    )
+                ]
+            )
+        }
+        return nil
     }
 
     private static func offensiveBaseRunningRunners(

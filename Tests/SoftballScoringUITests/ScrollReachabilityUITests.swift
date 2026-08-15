@@ -240,6 +240,125 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["No Plays Yet"].waitForExistence(timeout: 3))
     }
 
+    func testDeleteCompletedTrackedLogicalPlayRepairsDownstreamHistoryAndPersists() {
+        let app = launchApp(
+            persistentStoreName: "tracked-logical-play-delete-\(UUID().uuidString)"
+        )
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let currentBatter = app.staticTexts["offense.currentBatter"]
+        XCTAssertTrue(currentBatter.waitForExistence(timeout: 3))
+        let ball = app.buttons["offense.pitch.ball"]
+        XCTAssertTrue(scrollFromTopUntilHittable(ball, in: app))
+        ball.tap()
+        let calledStrike = app.buttons["offense.pitch.calledStrike"]
+        XCTAssertTrue(scrollFromTopUntilHittable(calledStrike, in: app))
+        calledStrike.tap()
+        let single = app.buttons["1B"]
+        XCTAssertTrue(scrollUntilHittable(single, in: app))
+        single.tap()
+        XCTAssertTrue(app.navigationBars["Record Our Play"].waitForExistence(timeout: 3))
+        app.buttons["Record"].tap()
+        XCTAssertTrue(waitForLabel("Player 02", on: currentBatter))
+        XCTAssertTrue(scrollFromTopUntilHittable(ball, in: app))
+        ball.tap()
+        XCTAssertTrue(scrollUntilHittable(single, in: app))
+        single.tap()
+        XCTAssertTrue(app.navigationBars["Record Our Play"].waitForExistence(timeout: 3))
+        app.buttons["Record"].tap()
+        XCTAssertTrue(waitForLabel("Player 03", on: currentBatter))
+
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        app.buttons["history.entry.1"].tap()
+
+        let deletePlay = app.buttons["history.deleteTrackedCompletedPlay.3"]
+        XCTAssertTrue(deletePlay.waitForExistence(timeout: 3))
+        XCTAssertEqual(deletePlay.label, "Delete Completed Tracked Play, terminal sequence 3")
+        XCTAssertGreaterThanOrEqual(deletePlay.frame.height, 44)
+        XCTAssertTrue(app.buttons["history.deleteTrackedPitch.1"].exists)
+        deletePlay.tap()
+
+        let confirmation = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Sequence 1: Ball pitch")
+        ).firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
+        XCTAssertTrue(confirmation.label.contains("Sequence 2: Called Strike pitch"))
+        XCTAssertTrue(confirmation.label.contains("Sequence 3: Single result"))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(deletePlay.waitForExistence(timeout: 3))
+
+        deletePlay.tap()
+        XCTAssertTrue(app.buttons["Preview Deletion"].waitForExistence(timeout: 3))
+        app.buttons["Preview Deletion"].tap()
+
+        XCTAssertTrue(app.navigationBars["Delete Tracked Play"].waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            app.staticTexts["trackedLogicalPlayDelete.component.1"].label,
+            "Sequence 1 · Ball pitch"
+        )
+        let form = app.collectionViews.firstMatch
+        let resultComponent = app.staticTexts["trackedLogicalPlayDelete.component.3"]
+        XCTAssertTrue(swipeWithinUntilHittable(resultComponent, in: form))
+        XCTAssertEqual(resultComponent.label, "Sequence 3 · Single result")
+        let save = app.buttons["trackedLogicalPlayDelete.save"]
+        XCTAssertFalse(save.isEnabled)
+
+        let problem = app.buttons["correction.problem.4"]
+        XCTAssertTrue(swipeWithinUntilHittable(problem, in: form))
+        problem.tap()
+        XCTAssertTrue(app.navigationBars["Affected Event"].waitForExistence(timeout: 3))
+        let repairDeletion = app.buttons["correction.repair.deleteTrackedPlay"]
+        let affectedForm = app.collectionViews.element(boundBy: app.collectionViews.count - 1)
+        XCTAssertTrue(swipeWithinUntilHittable(repairDeletion, in: affectedForm))
+        repairDeletion.tap()
+        let repairConfirmation = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Sequence 4: Ball pitch")
+        ).firstMatch
+        XCTAssertTrue(repairConfirmation.waitForExistence(timeout: 3))
+        XCTAssertTrue(repairConfirmation.label.contains("Sequence 5: Single result"))
+        app.buttons["Stage Exact Records"].tap()
+
+        XCTAssertTrue(app.navigationBars["Delete Tracked Play"].waitForExistence(timeout: 3))
+        XCTAssertTrue(swipeWithinUntilHittable(
+            app.staticTexts["Candidate timeline replays cleanly"],
+            in: form
+        ))
+        XCTAssertTrue(app.staticTexts["correction.logicalPlayChange.3"].exists)
+        XCTAssertTrue(app.staticTexts["correction.logicalPlayChange.5"].exists)
+        XCTAssertTrue(save.isEnabled)
+        XCTAssertGreaterThanOrEqual(save.frame.height, 44)
+        save.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["No Plays Yet"].waitForExistence(timeout: 3))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertEqual(currentBatter.label, "Player 01")
+        XCTAssertEqual(app.staticTexts["game.count"].label, "Count 0 and 0")
+        XCTAssertEqual(app.staticTexts["game.count"].value as? String, "0 outs, bases empty")
+        let battingLine = app.otherElements["offense.battingLine"]
+        XCTAssertTrue(scrollUntilHittable(battingLine, in: app))
+        XCTAssertEqual(battingLine.staticTexts["scorebook.stat.pa.value"].label, "0")
+        XCTAssertEqual(battingLine.staticTexts["scorebook.stat.r.value"].label, "0")
+        XCTAssertEqual(battingLine.staticTexts["scorebook.stat.rbi.value"].label, "0")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Games"].tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertEqual(app.staticTexts["offense.currentBatter"].label, "Player 01")
+        XCTAssertEqual(app.staticTexts["game.count"].label, "Count 0 and 0")
+        XCTAssertEqual(app.staticTexts["game.count"].value as? String, "0 outs, bases empty")
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.staticTexts["No Plays Yet"].waitForExistence(timeout: 3))
+    }
+
     func testUndoBallInPlayResultRecordsReplacementAndRefreshesLiveState() {
         let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()

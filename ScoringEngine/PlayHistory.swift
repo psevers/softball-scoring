@@ -37,6 +37,12 @@ struct PlayHistoryEntry: Identifiable, Equatable, Sendable {
         }
         return components[resultIndex].recordID
     }
+
+    var deletableOffensiveLogicalPlayResultRecordID: UUID? {
+        components.last(where: {
+            $0.editableOffensivePlateAppearanceResult != nil
+        })?.recordID
+    }
 }
 
 struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
