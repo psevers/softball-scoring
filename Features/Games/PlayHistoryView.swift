@@ -11,6 +11,7 @@ struct PlayHistoryView: View {
     @State private var correctionError: String?
     @State private var pitchEditSession: DefensivePitchEditSession?
     @State private var offensivePitchEditSession: OffensivePitchEditSession?
+    @State private var offensiveBaseRunningEditSession: OffensiveBaseRunningEditSession?
     @State private var offensivePlateAppearanceEditSession: OffensivePlateAppearanceEditSession?
     @State private var ballInPlayEditSession: DefensiveBallInPlayEditSession?
     @State private var pendingPitchDeletionSession: DefensivePitchDeletionSession?
@@ -161,6 +162,13 @@ struct PlayHistoryView: View {
                 liveSession: session
             )
         }
+        .sheet(item: $offensiveBaseRunningEditSession) { editSession in
+            OffensiveBaseRunningEditView(
+                game: game,
+                editSession: editSession,
+                liveSession: session
+            )
+        }
         .sheet(item: $offensivePlateAppearanceEditSession) { editSession in
             OffensivePlateAppearanceEditView(
                 game: game,
@@ -306,6 +314,23 @@ struct PlayHistoryView: View {
                             )
                             .accessibilityIdentifier(
                                 "history.deleteTrackedPitch.\(component.sequenceNumber)"
+                            )
+                        }
+
+                        if let event = component.editableOffensiveBaseRunningEvent {
+                            Button {
+                                beginOffensiveBaseRunningEdit(recordID: component.recordID)
+                            } label: {
+                                Label("Edit Base Running", systemImage: "figure.run")
+                                    .frame(minHeight: AppTheme.TouchTarget.minimum)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel(
+                                "Edit \(entry.actor) \(event.result.shortLabel), sequence "
+                                    + "\(component.sequenceNumber)"
+                            )
+                            .accessibilityIdentifier(
+                                "history.editTrackedBaseRunning.\(component.sequenceNumber)"
                             )
                         }
 
@@ -479,6 +504,20 @@ struct PlayHistoryView: View {
                 game: game,
                 modelContext: modelContext
             )
+        } catch {
+            session.refresh(game: game, modelContext: modelContext)
+            correctionError = error.localizedDescription
+        }
+    }
+
+    private func beginOffensiveBaseRunningEdit(recordID: UUID) {
+        do {
+            offensiveBaseRunningEditSession = try GameEventCorrection
+                .prepareOffensiveBaseRunningEdit(
+                    recordID: recordID,
+                    game: game,
+                    modelContext: modelContext
+                )
         } catch {
             session.refresh(game: game, modelContext: modelContext)
             correctionError = error.localizedDescription

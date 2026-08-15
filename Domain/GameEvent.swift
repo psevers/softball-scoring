@@ -97,9 +97,11 @@ struct OffensivePitchEvent: Codable, Equatable, Sendable {
     let result: OffensivePitchResult
 }
 
-enum OffensiveBaseRunningResult: String, Codable, Sendable {
+enum OffensiveBaseRunningResult: String, CaseIterable, Codable, Identifiable, Sendable {
     case stolenBase
     case caughtStealing
+
+    var id: String { rawValue }
 
     var shortLabel: String {
         switch self {

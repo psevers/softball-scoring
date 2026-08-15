@@ -1299,6 +1299,104 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(restoredRunner, in: app))
     }
 
+    func testCorrectTrackedTeamStolenBaseToCaughtStealingPersistsReplayAndBattingLine() {
+        let app = launchApp(
+            persistentStoreName: "tracked-base-running-edit-\(UUID().uuidString)"
+        )
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let currentBatter = app.staticTexts["offense.currentBatter"]
+        let count = app.staticTexts["game.count"]
+        let single = app.buttons["1B"]
+        XCTAssertTrue(scrollUntilHittable(single, in: app))
+        single.tap()
+        XCTAssertTrue(app.navigationBars["Record Our Play"].waitForExistence(timeout: 3))
+        app.buttons["Record"].tap()
+        XCTAssertTrue(waitForLabel("Player 02", on: currentBatter))
+
+        let ball = app.buttons["offense.pitch.ball"]
+        XCTAssertTrue(scrollFromTopUntilHittable(ball, in: app))
+        ball.tap()
+        XCTAssertTrue(waitForLabel("Count 1 and 0", on: count))
+
+        let stealSecond = app.buttons["offense.baseRunning.first.stolenBase"]
+        XCTAssertTrue(scrollUntilHittable(stealSecond, in: app))
+        stealSecond.tap()
+        XCTAssertEqual(currentBatter.label, "Player 02")
+        XCTAssertEqual(count.label, "Count 1 and 0")
+        XCTAssertEqual(count.value as? String, "0 outs, on 2B")
+
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        let entry = app.buttons["history.entry.3"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 3))
+        XCTAssertTrue(entry.label.contains("Player 01"))
+        XCTAssertTrue(entry.label.contains("SB · 1B to 2B"))
+        entry.tap()
+
+        let edit = app.buttons["history.editTrackedBaseRunning.3"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 3))
+        XCTAssertGreaterThanOrEqual(edit.frame.height, 44)
+        edit.tap()
+
+        XCTAssertTrue(app.navigationBars["Edit Base Running"].waitForExistence(timeout: 3))
+        let form = app.collectionViews.firstMatch
+        let save = app.buttons["trackedBaseRunningEdit.save"]
+        let current = app.staticTexts["trackedBaseRunningEdit.current"]
+        XCTAssertTrue(current.label.contains("Player 01 · SB · 1B to 2B"))
+        XCTAssertTrue(current.label.contains("Outs 0"))
+        XCTAssertTrue(current.label.contains("Bases 2B occupied"))
+        XCTAssertTrue(current.label.contains("Batter 2 · Count 1–0"))
+        XCTAssertTrue(current.label.contains("SB 1 · CS 0"))
+        XCTAssertFalse(save.isEnabled)
+
+        let resultPicker = app.buttons["trackedBaseRunningEdit.resultPicker"]
+        XCTAssertTrue(swipeWithinUntilHittable(resultPicker, in: form, above: save))
+        resultPicker.tap()
+        XCTAssertTrue(app.buttons["CS"].waitForExistence(timeout: 3))
+        app.buttons["CS"].tap()
+        app.buttons["trackedBaseRunningEdit.preview"].tap()
+
+        let proposed = app.staticTexts["trackedBaseRunningEdit.proposed"]
+        XCTAssertTrue(swipeWithinUntilHittable(proposed, in: form, above: save))
+        XCTAssertTrue(proposed.label.contains("Player 01 · CS · 1B to Out"))
+        XCTAssertTrue(proposed.label.contains("Outs 1"))
+        XCTAssertTrue(proposed.label.contains("Bases empty"))
+        XCTAssertTrue(proposed.label.contains("Batter 2 · Count 1–0"))
+        XCTAssertTrue(proposed.label.contains("R 0 · RBI 0 · SB 0 · CS 1"))
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["history.entry.3"].label.contains("CS · 1B to Out"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertEqual(currentBatter.label, "Player 02")
+        XCTAssertEqual(count.label, "Count 1 and 0")
+        XCTAssertEqual(count.value as? String, "1 out, bases empty")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Games"].tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertEqual(currentBatter.label, "Player 02")
+        XCTAssertEqual(count.label, "Count 1 and 0")
+        XCTAssertEqual(count.value as? String, "1 out, bases empty")
+
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        app.buttons["history.entry.3"].tap()
+        app.buttons["history.editTrackedBaseRunning.3"].tap()
+        XCTAssertTrue(current.waitForExistence(timeout: 3))
+        XCTAssertTrue(current.label.contains("Player 01 · CS · 1B to Out"))
+        XCTAssertTrue(current.label.contains("SB 0 · CS 1"))
+    }
+
     func testUndoLatestPitchConfirmsCancelsAndRestoresLiveStateFromHistory() {
         let app = launchApp(atAccessibilityTextSize: true)
         app.tabBars.buttons["Games"].tap()
