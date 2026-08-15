@@ -163,6 +163,11 @@ enum GameEventReplay {
                 && !state.isAwaitingBallInPlayResult
                 && pitch.opponentBatterSlot == state.currentOpponentBatterSlot
 
+        case .pitchCountReconciliation(let reconciliation):
+            return startingPitcherID == reconciliation.pitcherID
+                && state.pitchCount(for: reconciliation.pitcherID)
+                    .reconciling(reconciliation) != nil
+
         case .ballInPlay(let play):
             return BallInPlayValidator.validate(
                 play,

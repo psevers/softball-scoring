@@ -3,6 +3,46 @@ import Testing
 @testable import SoftballScoring
 
 struct PlayHistoryTests {
+    @Test func pitchCountReconciliationExplainsEverySignedAdjustment() throws {
+        let pitcherID = UUID()
+        let gameID = UUID()
+        let records = try [
+            GameEventRecord(
+                gameID: gameID,
+                sequenceNumber: 1,
+                body: .pitch(.init(
+                    result: .ball,
+                    pitcherID: pitcherID,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: gameID,
+                sequenceNumber: 2,
+                body: .pitchCountReconciliation(.init(
+                    pitcherID: pitcherID,
+                    adjustment: .init(total: 3, balls: 1, strikes: 1)
+                ))
+            )
+        ]
+
+        let replay = GameEventReplay.replay(
+            records: records,
+            homeAway: .home,
+            startingPitcherID: pitcherID
+        )
+        let entry = try #require(
+            PlayHistoryProjector.project(replay: replay).sections.first?.entries.last
+        )
+
+        #expect(entry.actor == "Starting pitcher")
+        #expect(entry.summary == "Pitch total +3")
+        #expect(entry.detail == "Balls +1 · Strikes +1 · Unclassified +1")
+        #expect(entry.components.map(\.sequenceNumber) == [2])
+        #expect(entry.accessibilityDescription.contains("Pitch total plus 3"))
+        #expect(entry.accessibilityDescription.contains("Unclassified plus 1"))
+    }
+
     @Test func completedBallInPlayPairsPitchAndResultWhilePendingPlayStaysVisible() throws {
         let pitcherID = UUID()
         let gameID = UUID()

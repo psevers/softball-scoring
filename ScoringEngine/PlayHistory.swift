@@ -161,6 +161,45 @@ enum PlayHistoryProjector {
                     flushPending()
                 }
 
+            case .pitchCountReconciliation(let reconciliation):
+                flushPending()
+                let adjustment = reconciliation.adjustment
+                let summary = "Pitch total \(signedPitchAdjustment(adjustment.total))"
+                let detail = "Balls \(signedPitchAdjustment(adjustment.balls)) · Strikes "
+                    + "\(signedPitchAdjustment(adjustment.strikes)) · Unclassified "
+                    + signedPitchAdjustment(adjustment.unclassified)
+                let accessibility = "Pitch total "
+                    + spokenSigned(adjustment.total)
+                    + ". Balls \(spokenSigned(adjustment.balls)). Strikes "
+                    + "\(spokenSigned(adjustment.strikes)). Unclassified "
+                    + "\(spokenSigned(adjustment.unclassified))."
+                let component = PlayHistoryComponent(
+                    recordID: trace.recordID,
+                    sequenceNumber: trace.sequenceNumber,
+                    summary: summary,
+                    detail: detail,
+                    accessibilityDescription: accessibility,
+                    isPitch: false
+                )
+                append(PlayHistoryEntry(
+                    id: trace.recordID,
+                    inning: trace.stateBefore.inning,
+                    half: trace.stateBefore.half,
+                    actor: "Starting pitcher",
+                    actorContext: "Pitcher ID \(reconciliation.pitcherID.uuidString)",
+                    summary: summary,
+                    detail: detail,
+                    accessibilityDescription: accessibilityDescription(
+                        inning: trace.stateBefore.inning,
+                        half: trace.stateBefore.half,
+                        actor: "Starting pitcher",
+                        summary: summary,
+                        detail: accessibility
+                    ),
+                    isProblem: false,
+                    components: [component]
+                ))
+
             case .ballInPlay(let play):
                 let actor = "Opponent batter \(play.opponentBatterSlot)"
                 beginOrContinue(
@@ -607,5 +646,9 @@ enum PlayHistoryProjector {
         detail: String
     ) -> String {
         "\(half.displayName) of inning \(inning). \(actor). \(summary). \(detail)."
+    }
+
+    private static func spokenSigned(_ value: Int) -> String {
+        value >= 0 ? "plus \(value)" : "minus \(-value)"
     }
 }

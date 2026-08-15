@@ -136,6 +136,23 @@ final class LiveGameSession {
         loadError = nil
     }
 
+    func savePitchCountReconciliation(
+        adjustment: PitchCountAdjustment,
+        session: PitchCountReconciliationSession,
+        game: Game,
+        modelContext: ModelContext
+    ) throws {
+        guard game.id == gameID else { throw LiveGameSnapshotError.gameMismatch }
+        snapshot = try GameEventCorrection.savePitchCountReconciliation(
+            adjustment: adjustment,
+            session: session,
+            game: game,
+            modelContext: modelContext
+        )
+        undoCandidate = try availableUndoCandidate(game: game, modelContext: modelContext)
+        loadError = nil
+    }
+
     private func availableUndoCandidate(
         game: Game,
         modelContext: ModelContext

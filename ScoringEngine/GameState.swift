@@ -16,6 +16,39 @@ struct PitchCount: Equatable, Sendable {
         guard total > 0 else { return 0 }
         return Double(strikes) / Double(total)
     }
+
+    var unclassified: Int {
+        total - balls - strikes
+    }
+
+    func reconciling(_ reconciliation: PitchCountReconciliationEvent) -> PitchCount? {
+        let (resultingTotal, totalOverflow) = total.addingReportingOverflow(
+            reconciliation.adjustment.total
+        )
+        let (resultingBalls, ballOverflow) = balls.addingReportingOverflow(
+            reconciliation.adjustment.balls
+        )
+        let (resultingStrikes, strikeOverflow) = strikes.addingReportingOverflow(
+            reconciliation.adjustment.strikes
+        )
+        guard !totalOverflow, !ballOverflow, !strikeOverflow else { return nil }
+        let reconciled = PitchCount(
+            total: resultingTotal,
+            balls: resultingBalls,
+            strikes: resultingStrikes
+        )
+        let (classified, classifiedOverflow) = reconciled.balls.addingReportingOverflow(
+            reconciled.strikes
+        )
+        guard reconciled.total >= 0,
+              reconciled.balls >= 0,
+              reconciled.strikes >= 0,
+              !classifiedOverflow,
+              classified <= reconciled.total else {
+            return nil
+        }
+        return reconciled
+    }
 }
 
 struct OffensiveCountContext: Equatable, Sendable {

@@ -27,6 +27,7 @@
 		5C6DC47DFC5E6C2CB903CB57 /* SoftballScoringApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64827908EFF1612B175DFF63 /* SoftballScoringApp.swift */; };
 		5D5DF1847419ECB4CD2516D8 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94E4C17E1FA1CF2CF42B4B79 /* AppTheme.swift */; };
 		5E52E22C6826492E631FEB2B /* DefensivePitchEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C05D45B1FD6C6B754B3A35 /* DefensivePitchEditView.swift */; };
+		6124B02C99321CDE04CB094D /* UndoLatestActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDEE10430F6CBBDE3B21AE2D /* UndoLatestActionButton.swift */; };
 		7BDF7CC32EE7F8202E9D5013 /* NewGameFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF1FDE635A02CC776FDA64F /* NewGameFlowView.swift */; };
 		7C4B6039ABE7D7BF4B38ABA1 /* LiveGameSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9EBD6276B7D7EDA186AB062 /* LiveGameSnapshot.swift */; };
 		7CCF52A6864B86C4A0B77FF7 /* GameEventReplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9907A741C233CC156012EA /* GameEventReplay.swift */; };
@@ -38,12 +39,12 @@
 		959C4E996433A2B00E0AAC57 /* PatrickHand-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 95DDEC12C8C358C27EBEF6F8 /* PatrickHand-Regular.ttf */; };
 		9D2D3FD1A3D72D4B2AAA86B2 /* PlayerEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE63CB059B932F01230B42E /* PlayerEditorView.swift */; };
 		A1070E3B0BA23F9C4897DA52 /* BattingStatProjectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37B485147258262D9C8DBFBC /* BattingStatProjectorTests.swift */; };
+		A3C20B385AFD5CE673804E1B /* PitchCountReconciliationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FF3A34D13BFC3B65F922B9 /* PitchCountReconciliationView.swift */; };
 		A98FB80B73313BBF1B093AF5 /* GameEventTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB80733A9CB93CBA74705222 /* GameEventTests.swift */; };
 		ABE453CB80C1DCA37E63D13A /* DesignSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FD7C6C0E8D89B400B340FA2 /* DesignSystemTests.swift */; };
 		B3E021E955F146496FCD4CF0 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA40339A5411E14DABBF3375 /* RootTabView.swift */; };
 		BB0F6E394CF08124DBC3D81F /* GameReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1625F5735183A8DFC5C26176 /* GameReducer.swift */; };
 		C85552B60F483CECA9F041C4 /* LiveGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 893B8FDC783DEB49E7F62D2D /* LiveGameView.swift */; };
-		CCCDFFDCDC3D0EB655A4E4CE /* UndoLatestActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F51670F182E4639B6EE8316 /* UndoLatestActionButton.swift */; };
 		D1DB8735AE06CC8F85735598 /* PlayHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A8BC25834A800D37669865A /* PlayHistoryView.swift */; };
 		D4A2B55C33ADD7E3E8ADA4D0 /* SeasonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03886681FCCBD2A00ED23D0F /* SeasonTests.swift */; };
 		D58DF6361EF174D8E04E16D8 /* TeamEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CEBA89242C7B0D778E8FC08 /* TeamEditorView.swift */; };
@@ -85,10 +86,10 @@
 		00371047E6B940DBFD5F579F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		03886681FCCBD2A00ED23D0F /* SeasonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonTests.swift; sourceTree = "<group>"; };
 		08E149DDB354600810587E40 /* StatsHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsHomeView.swift; sourceTree = "<group>"; };
+		09FF3A34D13BFC3B65F922B9 /* PitchCountReconciliationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PitchCountReconciliationView.swift; sourceTree = "<group>"; };
 		0B9907A741C233CC156012EA /* GameEventReplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameEventReplay.swift; sourceTree = "<group>"; };
 		0CEB193B431F974005524AD0 /* PlayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerTests.swift; sourceTree = "<group>"; };
 		0CF1FDE635A02CC776FDA64F /* NewGameFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewGameFlowView.swift; sourceTree = "<group>"; };
-		0F51670F182E4639B6EE8316 /* UndoLatestActionButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UndoLatestActionButton.swift; sourceTree = "<group>"; };
 		1625F5735183A8DFC5C26176 /* GameReducer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameReducer.swift; sourceTree = "<group>"; };
 		1BB98861A132272374CE12C8 /* PlayHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayHistoryTests.swift; sourceTree = "<group>"; };
 		1CEBA89242C7B0D778E8FC08 /* TeamEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamEditorView.swift; sourceTree = "<group>"; };
@@ -121,6 +122,7 @@
 		C31FFAD5F1F2784B0D78FAE2 /* OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = OFL.txt; sourceTree = "<group>"; };
 		C399BB1B5B64E90B0676E645 /* GameEventRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameEventRecorder.swift; sourceTree = "<group>"; };
 		C8EA32DA2AB799F27DFB8776 /* AppModelContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelContainer.swift; sourceTree = "<group>"; };
+		CDEE10430F6CBBDE3B21AE2D /* UndoLatestActionButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UndoLatestActionButton.swift; sourceTree = "<group>"; };
 		D22DC9262C1FE13239D79BDE /* BallInPlayValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BallInPlayValidator.swift; sourceTree = "<group>"; };
 		D2B3D24798624385E1132EAD /* GameEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameEvent.swift; sourceTree = "<group>"; };
 		D790E4C14CDB14D3892C50BE /* PlayHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayHistory.swift; sourceTree = "<group>"; };
@@ -296,9 +298,10 @@
 				893B8FDC783DEB49E7F62D2D /* LiveGameView.swift */,
 				0CF1FDE635A02CC776FDA64F /* NewGameFlowView.swift */,
 				8FD3F8339D65BF903E715D59 /* OffensiveRunnerConfirmationSheet.swift */,
+				09FF3A34D13BFC3B65F922B9 /* PitchCountReconciliationView.swift */,
 				8A8BC25834A800D37669865A /* PlayHistoryView.swift */,
 				D831EE5C5C1C9EA89D6D550C /* RunnerConfirmationSheet.swift */,
-				0F51670F182E4639B6EE8316 /* UndoLatestActionButton.swift */,
+				CDEE10430F6CBBDE3B21AE2D /* UndoLatestActionButton.swift */,
 			);
 			path = Games;
 			sourceTree = "<group>";
@@ -485,6 +488,7 @@
 				C85552B60F483CECA9F041C4 /* LiveGameView.swift in Sources */,
 				7BDF7CC32EE7F8202E9D5013 /* NewGameFlowView.swift in Sources */,
 				2CAEA1B04ED7CB3783806641 /* OffensiveRunnerConfirmationSheet.swift in Sources */,
+				A3C20B385AFD5CE673804E1B /* PitchCountReconciliationView.swift in Sources */,
 				3210009141C5E754CFBB08FB /* PlayHistory.swift in Sources */,
 				D1DB8735AE06CC8F85735598 /* PlayHistoryView.swift in Sources */,
 				E1646C20332027DD952CC9CB /* Player.swift in Sources */,
@@ -501,7 +505,7 @@
 				D58DF6361EF174D8E04E16D8 /* TeamEditorView.swift in Sources */,
 				F4E49EA95C7428CE50E3D30F /* TeamHomeView.swift in Sources */,
 				EA0451336E724657B27A9DE4 /* UITestData.swift in Sources */,
-				CCCDFFDCDC3D0EB655A4E4CE /* UndoLatestActionButton.swift in Sources */,
+				6124B02C99321CDE04CB094D /* UndoLatestActionButton.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
