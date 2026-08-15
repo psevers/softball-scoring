@@ -213,12 +213,10 @@ enum GameEventReplay {
     ) -> Bool {
         switch body {
         case .pitch(let pitch):
-            switch pitch.result {
-            case .ball: stateBefore.balls == 3
-            case .calledStrike, .swingingStrike: stateBefore.strikes == 2
-            case .hitByPitch: true
-            case .foul, .ballInPlay: false
-            }
+            pitch.result.completesPlateAppearance(
+                balls: stateBefore.balls,
+                strikes: stateBefore.strikes
+            )
         case .ballInPlay:
             true
         case .pitchCountReconciliation, .offensivePitch,

@@ -1383,6 +1383,7 @@ private enum GameEventRepairAction {
     case editOffensiveBaseRunning(OffensiveBaseRunningEvent)
     case editOffensivePlateAppearance(OffensivePlateAppearanceEvent)
     case repairPitchCountReconciliation(UUID?)
+    case deletePitchCountReconciliation
 }
 
 @MainActor
@@ -1493,6 +1494,13 @@ private final class GameEventCorrectionCoordinator {
                 self.session = try GameEventCorrection.stagePitchCountReconciliationAssociation(
                     recordID: recordID,
                     relatedPlayRecordID: relatedPlayRecordID,
+                    in: session,
+                    game: game,
+                    modelContext: modelContext
+                )
+            case .deletePitchCountReconciliation:
+                self.session = try GameEventCorrection.stagePitchCountReconciliationDeletion(
+                    recordID: recordID,
                     in: session,
                     game: game,
                     modelContext: modelContext
@@ -1930,6 +1938,17 @@ private struct GameEventCorrectionProblemView: View {
                     .accessibilityIdentifier("correction.repair.reconciliation.remove")
                 }
 
+                if problem.canDeletePitchCountReconciliation {
+                    Button(role: .destructive) {
+                        stageChange(.deletePitchCountReconciliation)
+                        dismiss()
+                    } label: {
+                        Label("Delete Affected Reconciliation", systemImage: "trash")
+                            .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    }
+                    .accessibilityIdentifier("correction.repair.reconciliation.delete")
+                }
+
                 if !problem.canEditPitch
                             && !problem.canEditOffensivePitch
                             && !problem.canDeleteOffensivePitch
@@ -1939,6 +1958,7 @@ private struct GameEventCorrectionProblemView: View {
                             && !problem.canEditOffensivePlateAppearance
                             && !problem.canDeleteOffensiveBaseRunning
                             && !problem.canRepairPitchCountReconciliation
+                            && !problem.canDeletePitchCountReconciliation
                             && problem.logicalPlayDeletion == nil {
                     Text("This event does not support another change in this correction session.")
                         .foregroundStyle(AppTheme.graphite.opacity(0.68))

@@ -52,6 +52,15 @@ enum PitchResult: String, CaseIterable, Codable, Identifiable, Sendable {
         case .hitByPitch: .neither
         }
     }
+
+    func completesPlateAppearance(balls: Int, strikes: Int) -> Bool {
+        switch self {
+        case .ball: balls == 3
+        case .calledStrike, .swingingStrike: strikes == 2
+        case .hitByPitch: true
+        case .foul, .ballInPlay: false
+        }
+    }
 }
 
 enum PitchStatClassification: Sendable {

@@ -70,7 +70,7 @@ An appended authoritative event that applies signed total, ball, and strike adju
 
 ## Related-play reference
 
-A stable reconciliation link containing the completed defensive play's record ID, game ID, chronological sequence, event kind, and canonical payload-revision digest. Replay accepts the link only when it exactly matches an earlier readable, accepted completed defensive play. If that play is edited or deleted, the reconciliation becomes an explicit correction problem until the scorer re-associates it or deliberately removes the association.
+A stable reconciliation link containing the completed defensive play's record ID, game ID, chronological sequence, event kind, and canonical payload-revision digest. Replay accepts the link only when it exactly matches an earlier readable, accepted completed defensive play. If that play is edited or deleted, the reconciliation becomes an explicit correction problem until the scorer re-associates it, deliberately removes the association, or explicitly deletes a reconciliation whose signed adjustment is no longer valid for the candidate pitcher totals.
 
 ## Defensive pitch edit
 

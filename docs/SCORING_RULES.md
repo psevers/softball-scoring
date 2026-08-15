@@ -40,7 +40,7 @@ Pitch-stat classification:
 - The scorer may associate the reconciliation with one earlier readable, accepted completed defensive plate appearance from the same game. A persisted association identifies the exact record revision; replay rejects a missing, cross-game, unreadable, non-defensive, edited, or deleted target.
 - Play History groups an accepted associated reconciliation with that logical play while retaining all component sequence numbers and displaying the signed total, ball, strike, and unclassified adjustments.
 - Replay changes only the addressed pitcher's totals. Live balls/strikes, bases, outs, score, batter progression, half-inning, and batting projection remain unchanged.
-- Editing or deleting the related play creates an explicit correction problem. Saving requires the scorer to re-associate the reconciliation with an eligible play or explicitly remove the association; replay never silently detaches or guesses.
+- Editing or deleting the related play creates an explicit correction problem. Saving requires the scorer to re-associate the reconciliation with an eligible play or explicitly remove the association; if the play deletion also makes a negative signed adjustment invalid, the scorer must explicitly delete that affected reconciliation. Replay never silently detaches or guesses.
 - The latest reconciliation is Undo-eligible and is removed without modifying its related scoring play.
 
 ### Live count
