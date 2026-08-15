@@ -20,6 +20,8 @@ struct PlayHistoryView: View {
     @State private var offensivePitchDeletionSession: OffensivePitchDeletionSession?
     @State private var pendingLogicalPlayDeletionSession: DefensiveLogicalPlayDeletionSession?
     @State private var logicalPlayDeletionSession: DefensiveLogicalPlayDeletionSession?
+    @State private var pendingOffensiveLogicalPlayDeletionSession: OffensiveLogicalPlayDeletionSession?
+    @State private var offensiveLogicalPlayDeletionSession: OffensiveLogicalPlayDeletionSession?
 
     var body: some View {
         presentedHistoryPage
@@ -144,6 +146,25 @@ struct PlayHistoryView: View {
         } message: { deletionSession in
             Text(deletionSession.confirmationDetail)
         }
+        .alert(
+            pendingOffensiveLogicalPlayDeletionSession?.confirmationTitle
+                ?? "Delete completed tracked play?",
+            isPresented: Binding(
+                get: { pendingOffensiveLogicalPlayDeletionSession != nil },
+                set: { if !$0 { pendingOffensiveLogicalPlayDeletionSession = nil } }
+            ),
+            presenting: pendingOffensiveLogicalPlayDeletionSession
+        ) { deletionSession in
+            Button("Preview Deletion", role: .destructive) {
+                offensiveLogicalPlayDeletionSession = deletionSession
+                pendingOffensiveLogicalPlayDeletionSession = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingOffensiveLogicalPlayDeletionSession = nil
+            }
+        } message: { deletionSession in
+            Text(deletionSession.confirmationDetail)
+        }
     }
 
     private var presentedHistoryPage: some View {
@@ -199,6 +220,13 @@ struct PlayHistoryView: View {
         }
         .sheet(item: $logicalPlayDeletionSession) { deletionSession in
             DefensiveLogicalPlayDeletionView(
+                game: game,
+                deletionSession: deletionSession,
+                liveSession: session
+            )
+        }
+        .sheet(item: $offensiveLogicalPlayDeletionSession) { deletionSession in
+            OffensiveLogicalPlayDeletionView(
                 game: game,
                 deletionSession: deletionSession,
                 liveSession: session
@@ -400,6 +428,25 @@ struct PlayHistoryView: View {
                     )
                     .accessibilityIdentifier("history.deleteCompletedPlay.\(resultSequence)")
                 }
+
+                if let resultRecordID = entry.deletableOffensiveLogicalPlayResultRecordID,
+                   let resultSequence = entry.components.first(where: {
+                       $0.recordID == resultRecordID
+                   })?.sequenceNumber {
+                    Button(role: .destructive) {
+                        beginOffensiveLogicalPlayDeletion(resultRecordID: resultRecordID)
+                    } label: {
+                        Label("Delete Completed Play", systemImage: "trash.slash")
+                            .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel(
+                        "Delete Completed Tracked Play, terminal sequence \(resultSequence)"
+                    )
+                    .accessibilityIdentifier(
+                        "history.deleteTrackedCompletedPlay.\(resultSequence)"
+                    )
+                }
             }
             .padding(.top, AppTheme.Spacing.sm)
         } label: {
@@ -582,6 +629,20 @@ struct PlayHistoryView: View {
         do {
             pendingLogicalPlayDeletionSession = try GameEventCorrection
                 .prepareDefensiveLogicalPlayDeletion(
+                    resultRecordID: resultRecordID,
+                    game: game,
+                    modelContext: modelContext
+                )
+        } catch {
+            session.refresh(game: game, modelContext: modelContext)
+            correctionError = error.localizedDescription
+        }
+    }
+
+    private func beginOffensiveLogicalPlayDeletion(resultRecordID: UUID) {
+        do {
+            pendingOffensiveLogicalPlayDeletionSession = try GameEventCorrection
+                .prepareOffensiveLogicalPlayDeletion(
                     resultRecordID: resultRecordID,
                     game: game,
                     modelContext: modelContext

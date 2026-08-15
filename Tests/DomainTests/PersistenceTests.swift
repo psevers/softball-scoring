@@ -4574,6 +4574,301 @@ extension PersistenceTests {
         #expect(reloaded.replay.state == preview.snapshot.replay.state)
     }
 
+    @Test func completedTrackedTeamLogicalPlayDeletionRemovesItsPitchesAndResultOnly() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let firstBatter = makeTrackedBatter()
+        let secondBatter = makeTrackedBatter(
+            displayName: "Jordan Lee",
+            jerseyNumber: "12",
+            position: .centerField,
+            lineupSlot: 2
+        )
+        let timestamps = (0..<5).map {
+            Date(timeIntervalSince1970: 1_786_655_000 + Double($0 * 10))
+        }
+        let bodies: [GameEventBody] = [
+            .offensivePlateAppearance(.init(
+                batter: firstBatter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensivePitch(.init(
+                batter: secondBatter,
+                battingOrderSize: 10,
+                result: .ball
+            )),
+            .offensiveBaseRunning(.init(
+                runnerID: firstBatter.playerID,
+                source: .first,
+                destination: .second,
+                result: .stolenBase
+            )),
+            .offensivePitch(.init(
+                batter: secondBatter,
+                battingOrderSize: 10,
+                result: .calledStrike
+            )),
+            .offensivePlateAppearance(.init(
+                batter: secondBatter,
+                battingOrderSize: 10,
+                result: .double,
+                movements: [
+                    .init(source: .second, destination: .home),
+                    .init(source: .batter, destination: .second)
+                ],
+                rbi: 1,
+                countedRunSources: [.second],
+                thirdOutClassification: nil
+            ))
+        ]
+        let records = try bodies.enumerated().map { index, body in
+            try GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: index + 1,
+                timestamp: timestamps[index],
+                body: body
+            )
+        }
+        records.forEach(context.insert)
+        try context.save()
+
+        let deletion = try GameEventCorrection.prepareOffensiveLogicalPlayDeletion(
+            resultRecordID: records[4].id,
+            game: game,
+            modelContext: context
+        )
+        let preview = try GameEventCorrection.stageOffensiveLogicalPlayDeletion(
+            deletion,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(deletion.components.map(\.recordID) == [records[1].id, records[3].id, records[4].id])
+        #expect(deletion.components.map(\.sequenceNumber) == [2, 4, 5])
+        #expect(deletion.components.map(\.summary) == [
+            "Ball pitch", "Called Strike pitch", "Double result"
+        ])
+        #expect(preview.canSave)
+        #expect(preview.firstInvalidRecord == nil)
+        #expect(preview.snapshot.records.map(\.id) == [records[0].id, records[2].id])
+        #expect(preview.snapshot.replay.state.balls == 0)
+        #expect(preview.snapshot.replay.state.strikes == 0)
+        #expect(preview.snapshot.replay.state.outs == 0)
+        #expect(preview.snapshot.replay.state.awayScore == 0)
+        #expect(preview.snapshot.replay.state.currentTrackedBatterSlot == 2)
+        #expect(preview.snapshot.replay.state.secondBaseRunnerPlayerID == firstBatter.playerID)
+        #expect(preview.snapshot.battingLines[firstBatter.playerID]?.plateAppearances == 1)
+        #expect(preview.snapshot.battingLines[firstBatter.playerID]?.hits == 1)
+        #expect(preview.snapshot.battingLines[firstBatter.playerID]?.stolenBases == 1)
+        #expect(preview.snapshot.battingLines[secondBatter.playerID] == nil)
+
+        let storedBeforeSave = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>(
+            sortBy: [SortDescriptor(\GameEventRecord.sequenceNumber)]
+        ))
+        #expect(storedBeforeSave.map(\.id) == records.map(\.id))
+
+        _ = try GameEventCorrection.saveOffensiveLogicalPlayDeletion(
+            preview,
+            game: game,
+            modelContext: context
+        )
+        let reloaded = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+
+        #expect(reloaded.records.map(\.id) == [records[0].id, records[2].id])
+        #expect(reloaded.records.map(\.sequenceNumber) == [1, 3])
+        #expect(reloaded.records.map(\.timestamp) == [timestamps[0], timestamps[2]])
+        #expect(reloaded.replay.state == preview.snapshot.replay.state)
+        #expect(reloaded.battingLines == preview.snapshot.battingLines)
+    }
+
+    @Test func trackedTeamLogicalPlayDeletionStagesInvalidDownstreamPitchForRepair() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let firstBatter = makeTrackedBatter()
+        let secondBatter = makeTrackedBatter(lineupSlot: 2)
+        let bodies: [GameEventBody] = [
+            .offensivePitch(.init(
+                batter: firstBatter,
+                battingOrderSize: 10,
+                result: .ball
+            )),
+            .offensivePlateAppearance(.init(
+                batter: firstBatter,
+                battingOrderSize: 10,
+                result: .single,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                countedRunSources: [],
+                thirdOutClassification: nil
+            )),
+            .offensivePitch(.init(
+                batter: secondBatter,
+                battingOrderSize: 10,
+                result: .calledStrike
+            ))
+        ]
+        let records = try bodies.enumerated().map { index, body in
+            try GameEventRecord(gameID: game.id, sequenceNumber: index + 1, body: body)
+        }
+        records.forEach(context.insert)
+        try context.save()
+
+        let deletion = try GameEventCorrection.prepareOffensiveLogicalPlayDeletion(
+            resultRecordID: records[1].id,
+            game: game,
+            modelContext: context
+        )
+        let invalidPreview = try GameEventCorrection.stageOffensiveLogicalPlayDeletion(
+            deletion,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(!invalidPreview.canSave)
+        #expect(invalidPreview.firstInvalidRecord?.id == records[2].id)
+        #expect(invalidPreview.firstInvalidRecord?.canDeleteOffensivePitch == true)
+        #expect(throws: GameEventCorrectionError.invalidCandidate) {
+            _ = try GameEventCorrection.saveOffensiveLogicalPlayDeletion(
+                invalidPreview,
+                game: game,
+                modelContext: context
+            )
+        }
+
+        let repaired = try GameEventCorrection.stageOffensivePitchDeletion(
+            recordID: records[2].id,
+            in: invalidPreview.correctionSession,
+            game: game,
+            modelContext: context
+        )
+
+        #expect(repaired.canSave)
+        #expect(repaired.firstInvalidRecord == nil)
+        #expect(repaired.stagedLogicalPlayDeletions[0].recordIDs == [
+            records[0].id, records[1].id
+        ])
+        #expect(repaired.stagedOffensivePitchChanges.map(\.recordID) == [records[2].id])
+
+        _ = try GameEventCorrection.saveGameEventCorrection(
+            repaired,
+            game: game,
+            modelContext: context
+        )
+        let reloaded = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        #expect(reloaded.records.isEmpty)
+        #expect(reloaded.replay.state == GameState())
+        #expect(reloaded.battingLines.isEmpty)
+    }
+
+    @Test func trackedTeamLogicalPlayDeletionFailuresPreserveCompleteOriginalPlay() throws {
+        struct ProjectionFailure: Error {}
+        struct SaveFailure: Error {}
+
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeOffensiveGame()
+        let otherGame = makeOffensiveGame()
+        let batter = makeTrackedBatter()
+        let bodies: [GameEventBody] = [
+            .offensivePitch(.init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .ball
+            )),
+            .offensivePlateAppearance(.init(
+                batter: batter,
+                battingOrderSize: 10,
+                result: .homeRun,
+                movements: [.init(source: .batter, destination: .home)],
+                rbi: 1,
+                countedRunSources: [.batter],
+                thirdOutClassification: nil
+            ))
+        ]
+        let records = try bodies.enumerated().map { index, body in
+            try GameEventRecord(gameID: game.id, sequenceNumber: index + 1, body: body)
+        }
+        records.forEach(context.insert)
+        try context.save()
+
+        let deletion = try GameEventCorrection.prepareOffensiveLogicalPlayDeletion(
+            resultRecordID: records[1].id,
+            game: game,
+            modelContext: context
+        )
+        #expect(throws: GameEventCorrectionError.gameMismatch) {
+            _ = try GameEventCorrection.stageOffensiveLogicalPlayDeletion(
+                deletion,
+                game: otherGame,
+                modelContext: context
+            )
+        }
+        #expect(throws: ProjectionFailure.self) {
+            _ = try GameEventCorrection.stageOffensiveLogicalPlayDeletion(
+                deletion,
+                game: game,
+                modelContext: context,
+                projectBattingLines: { _ in throw ProjectionFailure() }
+            )
+        }
+
+        let preview = try GameEventCorrection.stageOffensiveLogicalPlayDeletion(
+            deletion,
+            game: game,
+            modelContext: context
+        )
+        #expect(throws: SaveFailure.self) {
+            _ = try GameEventCorrection.saveOffensiveLogicalPlayDeletion(
+                preview,
+                game: game,
+                modelContext: context,
+                save: { _ in throw SaveFailure() }
+            )
+        }
+        var stored = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>(
+            sortBy: [SortDescriptor(\GameEventRecord.sequenceNumber)]
+        ))
+        #expect(stored.map(\.id) == records.map(\.id))
+        #expect(try stored.map { try $0.decoded().body } == bodies)
+
+        let newer = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 3,
+            body: .offensivePitch(.init(
+                batter: makeTrackedBatter(lineupSlot: 2),
+                battingOrderSize: 10,
+                result: .calledStrike
+            ))
+        )
+        context.insert(newer)
+        try context.save()
+
+        #expect(throws: GameEventCorrectionError.staleTimeline) {
+            _ = try GameEventCorrection.saveOffensiveLogicalPlayDeletion(
+                preview,
+                game: game,
+                modelContext: context
+            )
+        }
+        stored = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>(
+            sortBy: [SortDescriptor(\GameEventRecord.sequenceNumber)]
+        ))
+        #expect(stored.map(\.id) == records.map(\.id) + [newer.id])
+    }
+
     @Test func logicalPlayDeletionStagesFirstInvalidDownstreamRecordForAtomicRepair() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext
@@ -4642,8 +4937,9 @@ extension PersistenceTests {
 
         #expect(repaired.canSave)
         #expect(repaired.firstInvalidRecord == nil)
-        #expect(repaired.stagedLogicalPlayDeletions[0].pitchRecordID == records[1].id)
-        #expect(repaired.stagedLogicalPlayDeletions[0].resultRecordID == records[2].id)
+        #expect(repaired.stagedLogicalPlayDeletions[0].recordIDs == [
+            records[1].id, records[2].id
+        ])
         #expect(repaired.stagedChanges.map(\.recordID) == [records[3].id])
 
         _ = try GameEventCorrection.saveGameEventCorrection(
