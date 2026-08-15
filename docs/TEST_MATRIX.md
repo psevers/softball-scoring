@@ -145,6 +145,14 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - A rejected downstream tracked-team plate appearance identifies its exact sequence and supports a second scorer-confirmed replacement in the same session; Save remains disabled until the full timeline is clean, then both records persist atomically.
 - Wrong-game, stale-session, projection, save, and cancellation paths preserve the durable timeline. Fresh-context and standard/Accessibility XL UI relaunch coverage verify representative hit-to-error-to-out correction, a scoring-double correction, and a third-out correction with current/proposed score and batting attribution, 44-point controls, next batter, bases, outs, half-inning, and History.
 
+## Tracked-team SB/CS correction
+
+- Play History exposes Edit Base Running only for accepted tracked-team SB/CS records and displays event-time runner identity, lineup slot/order size, source/destination, active batter/count, sequence, replay state, and R/RBI/SB/CS attribution.
+- SB↔CS replacement and selection of a different event-time eligible runner preserve the exact record envelope and replay every later event.
+- A steal of home reprojects team score plus runner R/SB with zero RBI. A third-out CS transitions the half while preserving the next tracked batter.
+- Wrong runner, wrong source/destination, wrong half, stale timeline, projection failure, and save failure reject or roll back atomically. A rejected downstream SB/CS requires an explicit second staged replacement before Save.
+- Focused standard-size UI coverage changes SB to CS, verifies outs, bases, active batter/count, History, and runner SB/CS attribution, then terminates and relaunches to verify the same durable result.
+
 ## Completed defensive logical-play deletion
 
 - Play History exposes Delete Completed Play only for an accepted paired defensive In Play pitch and Ball In Play result while retaining individual component actions.

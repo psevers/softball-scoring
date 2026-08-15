@@ -131,6 +131,10 @@ struct PlayHistoryTests {
         #expect(history.sections[0].entries[0].actorContext == "Batting 1 of 10 · #8 · SS")
         #expect(history.sections[0].entries[1].summary == "SB · 1B to 2B")
         #expect(history.sections[0].entries[1].accessibilityDescription.contains("Historic Batter"))
+        let editableEvent = history.sections[0].entries[1]
+            .components[0].editableOffensiveBaseRunningEvent
+        #expect(editableEvent?.runnerID == playerID)
+        #expect(editableEvent?.result == .stolenBase)
     }
 
     @Test func baseRunningDoesNotUseIdentityFromALaterEvent() {

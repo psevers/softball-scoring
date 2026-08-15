@@ -95,6 +95,20 @@ rebuild from persisted batter context → replay/project every later offensive e
 Cancel unchanged, stage any rejected downstream repair, or atomically Save → relaunch same batter/count
 ```
 
+## Edit an earlier tracked-team SB/CS — Slice 6
+
+```text
+Live Game → Play History → expand SB/CS entry → Edit Base Running
+  ↓
+review event-time runner/source, batting slot/order size, active batter/count, sequence, and batting line
+  ↓
+select an event-time eligible runner and SB or CS → preview legal destination/out
+  ↓
+full replay rebuilds bases, outs, score, half-inning, and R/SB/CS while preserving count/batter and zero RBI
+  ↓
+Cancel unchanged, explicitly repair any rejected downstream SB/CS, or atomically Save → relaunch same result
+```
+
 ## Delete an earlier defensive pitch — Slice 6
 
 ```text

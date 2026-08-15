@@ -458,6 +458,254 @@ struct OffensivePlateAppearanceEditView: View {
     }
 }
 
+struct OffensiveBaseRunningEditView: View {
+    let game: Game
+    let editSession: OffensiveBaseRunningEditSession
+    let liveSession: LiveGameSession
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @State private var selectedRunnerID: UUID
+    @State private var selectedResult: OffensiveBaseRunningResult
+    @State private var proposedEvent: OffensiveBaseRunningEvent?
+    @State private var correction = GameEventCorrectionCoordinator()
+
+    init(
+        game: Game,
+        editSession: OffensiveBaseRunningEditSession,
+        liveSession: LiveGameSession
+    ) {
+        self.game = game
+        self.editSession = editSession
+        self.liveSession = liveSession
+        _selectedRunnerID = State(initialValue: editSession.runner.playerID)
+        _selectedResult = State(initialValue: editSession.originalEvent.result)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Form {
+                    Section("Base-running attempt") {
+                        Text(
+                            "\(editSession.half.displayName) \(editSession.inning) · Sequence "
+                                + "\(editSession.sequenceNumber)"
+                        )
+                        .font(.body.monospacedDigit())
+                        Text(
+                            "Active batter slot \(editSession.stateBefore.currentTrackedBatterSlot) · "
+                                + "Count \(editSession.stateBefore.balls)–"
+                                + "\(editSession.stateBefore.strikes) · Outs "
+                                + "\(editSession.stateBefore.outs)"
+                        )
+                        .font(.body.monospacedDigit())
+                        Text(
+                            "Current: \(editSession.runner.displayName) · "
+                                + eventSummary(editSession.originalEvent) + " · "
+                                + stateSummary(editSession.originalStateAfter) + " · "
+                                + battingLineSummary(
+                                    editSession.originalBattingLines[
+                                        editSession.runner.playerID,
+                                        default: BattingLine()
+                                    ]
+                                )
+                        )
+                        .accessibilityIdentifier("trackedBaseRunningEdit.current")
+                    }
+
+                    Section("Correct attempt") {
+                        Picker("Runner", selection: $selectedRunnerID) {
+                            ForEach(editSession.eligibleRunners) { runner in
+                                Text(
+                                    "\(runner.identity.displayName) · "
+                                        + "slot \(runner.identity.lineupSlot) of "
+                                        + "\(runner.battingOrderSize) · "
+                                        + runner.source.baseLabel
+                                )
+                                .tag(runner.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("trackedBaseRunningEdit.runnerPicker")
+
+                        Picker("Result", selection: $selectedResult) {
+                            ForEach(OffensiveBaseRunningResult.allCases) { result in
+                                Text(result.shortLabel).tag(result)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("trackedBaseRunningEdit.resultPicker")
+
+                        Button("Preview Correction") { stage() }
+                            .frame(minHeight: AppTheme.TouchTarget.minimum)
+                            .accessibilityIdentifier("trackedBaseRunningEdit.preview")
+                    }
+
+                    if let proposedEvent, let correctionSession = correction.session {
+                        let runner = selectedRunner
+                        GameEventCorrectionSections(
+                            correctionSession: correctionSession,
+                            homeAway: HomeAway(rawValue: game.homeAwayRawValue),
+                            proposedSummary: "Proposed: \(runner?.identity.displayName ?? "Runner") · "
+                                + eventSummary(proposedEvent) + " · "
+                                + stateSummary(proposedState(in: correctionSession)) + " · "
+                                + battingLineSummary(
+                                    correctionSession.snapshot.battingLines[
+                                        proposedEvent.runnerID,
+                                        default: BattingLine()
+                                    ]
+                                ),
+                            proposedIdentifier: "trackedBaseRunningEdit.proposed",
+                            stageChange: { problem, action in
+                                correction.stageRepair(
+                                    recordID: problem.id,
+                                    action: action,
+                                    game: game,
+                                    modelContext: modelContext
+                                )
+                            }
+                        )
+                    }
+                }
+                .onChange(of: selectedRunnerID) { _, _ in clearPreview() }
+                .onChange(of: selectedResult) { _, _ in clearPreview() }
+
+                Divider()
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    Button("Cancel") { dismiss() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("trackedBaseRunningEdit.cancel")
+
+                    Button("Save") { save() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .disabled(correction.session?.canSave != true)
+                        .accessibilityIdentifier("trackedBaseRunningEdit.save")
+                }
+                .padding(.horizontal, AppTheme.Spacing.md)
+                .padding(.vertical, AppTheme.Spacing.sm)
+                .background(.bar)
+            }
+            .navigationTitle("Edit Base Running")
+            .navigationBarTitleDisplayMode(.inline)
+            .alert("Base-Running Edit Failed", isPresented: Binding(
+                get: { correction.errorMessage != nil },
+                set: { if !$0 { correction.errorMessage = nil } }
+            )) {
+                if correction.requiresReopen {
+                    Button("Return to Play History") {
+                        correction.errorMessage = nil
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("trackedBaseRunningEdit.reopen")
+                } else {
+                    Button("OK", role: .cancel) { correction.errorMessage = nil }
+                }
+            } message: {
+                Text(
+                    correction.errorMessage
+                        ?? "The proposed base-running attempt could not be replayed safely."
+                )
+            }
+        }
+    }
+
+    private var selectedRunner: OffensiveBaseRunningRunner? {
+        editSession.eligibleRunners.first(where: { $0.id == selectedRunnerID })
+    }
+
+    private func stage() {
+        guard let selectedRunner,
+              let destination = baseRunningDestination(
+                  source: selectedRunner.source,
+                  result: selectedResult
+              ) else {
+            correction.errorMessage = "The selected runner cannot make that base-running attempt."
+            return
+        }
+        let event = OffensiveBaseRunningEvent(
+            runnerID: selectedRunner.id,
+            source: selectedRunner.source,
+            destination: destination,
+            result: selectedResult
+        )
+        do {
+            correction.session = try GameEventCorrection.stageOffensiveBaseRunningEdit(
+                event,
+                in: editSession,
+                game: game,
+                modelContext: modelContext
+            )
+            proposedEvent = event
+        } catch {
+            correction.session = nil
+            correction.present(error)
+        }
+    }
+
+    private func clearPreview() {
+        proposedEvent = nil
+        correction.session = nil
+    }
+
+    private func save() {
+        if correction.save(
+            liveSession: liveSession,
+            game: game,
+            modelContext: modelContext
+        ) {
+            dismiss()
+        }
+    }
+
+    private func proposedState(in correctionSession: GameEventCorrectionSession) -> GameState {
+        correctionSession.snapshot.replay.entries.first(where: {
+            $0.recordID == editSession.recordID
+        })?.stateAfter ?? correctionSession.snapshot.replay.state
+    }
+
+    private func eventSummary(_ event: OffensiveBaseRunningEvent) -> String {
+        "\(event.result.shortLabel) · \(event.source.baseLabel) to \(event.destination.label)"
+    }
+
+    private func stateSummary(_ state: GameState) -> String {
+        let bases = [
+            state.firstBaseRunnerPlayerID.map { _ in "1B occupied" },
+            state.secondBaseRunnerPlayerID.map { _ in "2B occupied" },
+            state.thirdBaseRunnerPlayerID.map { _ in "3B occupied" }
+        ].compactMap { $0 }.joined(separator: ", ")
+        let homeAway = HomeAway(rawValue: game.homeAwayRawValue)
+        let trackedScore = homeAway == .home ? state.homeScore : state.awayScore
+        return "Score \(trackedScore) · Outs \(state.outs) · "
+            + "Bases \(bases.isEmpty ? "empty" : bases) · "
+            + "Batter \(state.currentTrackedBatterSlot) · "
+            + "Count \(state.balls)–\(state.strikes)"
+    }
+
+    private func battingLineSummary(_ line: BattingLine) -> String {
+        "R \(line.runs) · RBI \(line.runsBattedIn) · "
+            + "SB \(line.stolenBases) · CS \(line.caughtStealing)"
+    }
+}
+
+private func baseRunningDestination(
+    source: RunnerSource,
+    result: OffensiveBaseRunningResult
+) -> RunnerDestination? {
+    if result == .caughtStealing { return .out }
+    return switch source {
+    case .first: .second
+    case .second: .third
+    case .third: .home
+    case .batter: nil
+    }
+}
+
 struct DefensivePitchEditView: View {
     private static let supportedResults: [PitchResult] = [
         .ball, .calledStrike, .swingingStrike, .foul
@@ -1072,6 +1320,7 @@ private enum GameEventRepairAction {
     case deleteOffensivePitch
     case delete
     case editBallInPlay(BallInPlayEvent)
+    case editOffensiveBaseRunning(OffensiveBaseRunningEvent)
     case editOffensivePlateAppearance(OffensivePlateAppearanceEvent)
 }
 
@@ -1135,6 +1384,14 @@ private final class GameEventCorrectionCoordinator {
                 self.session = try GameEventCorrection.stageBallInPlayEdit(
                     recordID: recordID,
                     play: play,
+                    in: session,
+                    game: game,
+                    modelContext: modelContext
+                )
+            case .editOffensiveBaseRunning(let event):
+                self.session = try GameEventCorrection.stageOffensiveBaseRunningEdit(
+                    recordID: recordID,
+                    event: event,
                     in: session,
                     game: game,
                     modelContext: modelContext
@@ -1228,10 +1485,17 @@ private struct GameEventCorrectionSections: View {
                         } else {
                             nil
                         }
+                    let affectedBaseRunning: OffensiveBaseRunningEvent? =
+                        if case .offensiveBaseRunning(let event) = affectedEntry?.body {
+                            event
+                        } else {
+                            nil
+                        }
                     GameEventCorrectionProblemView(
                         problem: invalid,
                         historyEntry: correctionSession.historyEntry(for: invalid.id),
                         affectedPlay: affectedPlay,
+                        affectedBaseRunning: affectedBaseRunning,
                         affectedPlateAppearance: affectedPlateAppearance,
                         affectedState: affectedEntry?.stateBefore,
                         homeAway: homeAway,
@@ -1280,6 +1544,11 @@ private struct GameEventCorrectionSections: View {
                     .font(.body.monospacedDigit())
                     .accessibilityIdentifier("correction.change.\(change.sequenceNumber)")
             }
+            ForEach(correctionSession.stagedOffensiveBaseRunningChanges) { change in
+                Text(change.summary)
+                    .font(.body.monospacedDigit())
+                    .accessibilityIdentifier("correction.change.\(change.sequenceNumber)")
+            }
             if !correctionSession.stagedOffensivePlateAppearanceChanges.isEmpty {
                 ForEach(correctionSession.stagedOffensivePlateAppearanceChanges) { change in
                     Text(change.summary)
@@ -1313,6 +1582,7 @@ private struct GameEventCorrectionProblemView: View {
     let problem: GameEventCorrectionProblem
     let historyEntry: PlayHistoryEntry?
     let affectedPlay: BallInPlayEvent?
+    let affectedBaseRunning: OffensiveBaseRunningEvent?
     let affectedPlateAppearance: OffensivePlateAppearanceEvent?
     let affectedState: GameState?
     let homeAway: HomeAway?
@@ -1321,6 +1591,9 @@ private struct GameEventCorrectionProblemView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedOutcome: BallInPlayOutcome
     @State private var selectedPlateAppearanceResult: OffensivePlateAppearanceResult
+    @State private var selectedBaseRunningRunnerID: UUID
+    @State private var selectedBaseRunningResult: OffensiveBaseRunningResult
+    @State private var baseRunningRepairError: String?
     @State private var isConfirmingRunners = false
     @State private var isConfirmingPlateAppearanceRunners = false
 
@@ -1328,6 +1601,7 @@ private struct GameEventCorrectionProblemView: View {
         problem: GameEventCorrectionProblem,
         historyEntry: PlayHistoryEntry?,
         affectedPlay: BallInPlayEvent?,
+        affectedBaseRunning: OffensiveBaseRunningEvent?,
         affectedPlateAppearance: OffensivePlateAppearanceEvent?,
         affectedState: GameState?,
         homeAway: HomeAway?,
@@ -1336,6 +1610,7 @@ private struct GameEventCorrectionProblemView: View {
         self.problem = problem
         self.historyEntry = historyEntry
         self.affectedPlay = affectedPlay
+        self.affectedBaseRunning = affectedBaseRunning
         self.affectedPlateAppearance = affectedPlateAppearance
         self.affectedState = affectedState
         self.homeAway = homeAway
@@ -1343,6 +1618,17 @@ private struct GameEventCorrectionProblemView: View {
         _selectedOutcome = State(initialValue: affectedPlay?.outcome ?? .single)
         _selectedPlateAppearanceResult = State(
             initialValue: affectedPlateAppearance?.result ?? .single
+        )
+        _selectedBaseRunningRunnerID = State(
+            initialValue: problem.offensiveBaseRunningRunners.first(where: {
+                $0.id == affectedBaseRunning?.runnerID
+            })?.id
+                ?? problem.offensiveBaseRunningRunners.first?.id
+                ?? affectedBaseRunning?.runnerID
+                ?? UUID()
+        )
+        _selectedBaseRunningResult = State(
+            initialValue: affectedBaseRunning?.result ?? .stolenBase
         )
     }
 
@@ -1458,11 +1744,47 @@ private struct GameEventCorrectionProblemView: View {
                     }
                     .frame(minHeight: AppTheme.TouchTarget.minimum)
                     .accessibilityIdentifier("correction.repair.trackedPlay")
-                } else if !problem.canEditPitch
+                }
+
+                if problem.canEditOffensiveBaseRunning,
+                   !problem.offensiveBaseRunningRunners.isEmpty {
+                    Picker("Correct runner", selection: $selectedBaseRunningRunnerID) {
+                        ForEach(problem.offensiveBaseRunningRunners) { runner in
+                            Text(
+                                "\(runner.identity.displayName) · "
+                                    + "slot \(runner.identity.lineupSlot) · "
+                                    + runner.source.baseLabel
+                            )
+                            .tag(runner.id)
+                        }
+                    }
+
+                    Picker("Correct base-running result", selection: $selectedBaseRunningResult) {
+                        ForEach(OffensiveBaseRunningResult.allCases) { result in
+                            Text(result.shortLabel).tag(result)
+                        }
+                    }
+
+                    Button("Stage Base-Running Repair") {
+                        stageBaseRunningRepair()
+                    }
+                    .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    .accessibilityIdentifier("correction.repair.trackedBaseRunning")
+
+                    if let baseRunningRepairError {
+                        Text(baseRunningRepairError)
+                            .foregroundStyle(AppTheme.destructive)
+                            .accessibilityIdentifier("correction.repair.trackedBaseRunningError")
+                    }
+                }
+
+                if !problem.canEditPitch
                             && !problem.canEditOffensivePitch
                             && !problem.canDeleteOffensivePitch
                             && !problem.canDeletePitch
-                            && !problem.canEditBallInPlay {
+                            && !problem.canEditBallInPlay
+                            && !problem.canEditOffensiveBaseRunning
+                            && !problem.canEditOffensivePlateAppearance {
                     Text("This event does not support another change in this correction session.")
                         .foregroundStyle(AppTheme.graphite.opacity(0.68))
                 }
@@ -1529,5 +1851,29 @@ private struct GameEventCorrectionProblemView: View {
 
     private var correctionOutcomes: [BallInPlayOutcome] {
         affectedState.map(BallInPlayValidator.correctionOutcomes(for:)) ?? []
+    }
+
+    private func stageBaseRunningRepair() {
+        guard let runner = problem.offensiveBaseRunningRunners.first(where: {
+            $0.id == selectedBaseRunningRunnerID
+        }) else {
+            baseRunningRepairError = "Choose a runner who occupied a base at this event."
+            return
+        }
+        guard let destination = baseRunningDestination(
+            source: runner.source,
+            result: selectedBaseRunningResult
+        ) else {
+            baseRunningRepairError = "The selected runner cannot make that base-running attempt."
+            return
+        }
+        baseRunningRepairError = nil
+        stageChange(.editOffensiveBaseRunning(.init(
+            runnerID: runner.id,
+            source: runner.source,
+            destination: destination,
+            result: selectedBaseRunningResult
+        )))
+        dismiss()
     }
 }

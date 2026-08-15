@@ -60,6 +60,8 @@ A completed defensive Ball In Play correction replaces only the result record pa
 
 A completed tracked-team plate-appearance correction replaces only its event payload while preserving the record envelope. Existing runner destinations, `countedRunSources`, RBI, and `thirdOutClassification` fields encode the corrected score, explicit out/run sources, and exact event-time player attribution. Force/batter-runner third outs carry no counted run sources; timing plays carry only the legal sources that touched home before the out. Replay and batting projection derive the inning transition, next tracked batter, every affected runner run, and batter RBI; no durable schema change is required.
 
+A tracked-team base-running correction replaces only the existing `OffensiveBaseRunningEvent` payload while preserving record ID, game ID, sequence, timestamp, and kind. The replacement carries the selected event-time `runnerID`, source, legal SB destination or CS out, and result. Event-time runner identity and order size are derived from accepted history for display and validation rather than added to the durable payload. Replay derives bases, outs, score, half-inning, active batter/count, and the batting projector derives R/SB/CS with no RBI; no schema migration is required.
+
 ### PitchEvent payload
 
 - `result`

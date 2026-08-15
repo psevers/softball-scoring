@@ -51,6 +51,7 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
     let defensivePitchResult: PitchResult?
     let editableDefensivePitchResult: PitchResult?
     let editableOffensivePitchResult: OffensivePitchResult?
+    let editableOffensiveBaseRunningEvent: OffensiveBaseRunningEvent?
     let editableOffensivePlateAppearanceResult: OffensivePlateAppearanceResult?
     let editableDefensiveBallInPlayOutcome: BallInPlayOutcome?
 
@@ -64,6 +65,7 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
         defensivePitchResult: PitchResult? = nil,
         editableDefensivePitchResult: PitchResult? = nil,
         editableOffensivePitchResult: OffensivePitchResult? = nil,
+        editableOffensiveBaseRunningEvent: OffensiveBaseRunningEvent? = nil,
         editableOffensivePlateAppearanceResult: OffensivePlateAppearanceResult? = nil,
         editableDefensiveBallInPlayOutcome: BallInPlayOutcome? = nil
     ) {
@@ -76,6 +78,7 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
         self.defensivePitchResult = defensivePitchResult
         self.editableDefensivePitchResult = editableDefensivePitchResult
         self.editableOffensivePitchResult = editableOffensivePitchResult
+        self.editableOffensiveBaseRunningEvent = editableOffensiveBaseRunningEvent
         self.editableOffensivePlateAppearanceResult = editableOffensivePlateAppearanceResult
         self.editableDefensiveBallInPlayOutcome = editableDefensiveBallInPlayOutcome
     }
@@ -219,7 +222,8 @@ enum PlayHistoryProjector {
                     summary: summary,
                     detail: event.result == .stolenBase ? "Runner advanced" : "Runner out",
                     accessibilityDescription: summary,
-                    isPitch: false
+                    isPitch: false,
+                    editableOffensiveBaseRunningEvent: event
                 )
                 append(entry(
                     id: trace.recordID,
