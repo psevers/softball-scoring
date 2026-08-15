@@ -4,9 +4,17 @@ import Testing
 
 struct GameEventTests {
     @Test func pitchCountReconciliationRoundTripsSignedAdjustments() throws {
+        let relatedPlay = RelatedDefensivePlayReference(
+            recordID: UUID(),
+            gameID: UUID(),
+            sequenceNumber: 12,
+            kindRawValue: GameEventKind.ballInPlay.rawValue,
+            revisionDigest: Data([1, 2, 3, 4])
+        )
         let reconciliation = PitchCountReconciliationEvent(
             pitcherID: UUID(),
-            adjustment: .init(total: -2, balls: -1, strikes: -1)
+            adjustment: .init(total: -2, balls: -1, strikes: -1),
+            relatedPlay: relatedPlay
         )
 
         let encoded = try GameEventCodec.encode(.pitchCountReconciliation(reconciliation))
@@ -17,6 +25,30 @@ struct GameEventTests {
 
         #expect(encoded.kind == .pitchCountReconciliation)
         #expect(decoded == .pitchCountReconciliation(reconciliation))
+    }
+
+    @Test func legacyPitchCountReconciliationDecodesWithoutRelatedPlay() throws {
+        struct LegacyReconciliation: Encodable {
+            let pitcherID: UUID
+            let adjustment: PitchCountAdjustment
+        }
+        let pitcherID = UUID()
+        let adjustment = PitchCountAdjustment(total: 2, balls: 1, strikes: 0)
+        let payload = try JSONEncoder().encode(LegacyReconciliation(
+            pitcherID: pitcherID,
+            adjustment: adjustment
+        ))
+
+        let decoded = try GameEventCodec.decode(
+            kindRawValue: GameEventKind.pitchCountReconciliation.rawValue,
+            payload: payload
+        )
+
+        #expect(decoded == .pitchCountReconciliation(.init(
+            pitcherID: pitcherID,
+            adjustment: adjustment,
+            relatedPlay: nil
+        )))
     }
 
     @Test func offensivePlateAppearanceRoundTripsPlayerIdentity() throws {

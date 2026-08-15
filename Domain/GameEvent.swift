@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftData
 
@@ -79,9 +80,28 @@ struct PitchCountAdjustment: Codable, Equatable, Sendable {
     }
 }
 
+struct RelatedDefensivePlayReference: Codable, Equatable, Sendable {
+    let recordID: UUID
+    let gameID: UUID
+    let sequenceNumber: Int
+    let kindRawValue: String
+    let revisionDigest: Data
+}
+
 struct PitchCountReconciliationEvent: Codable, Equatable, Sendable {
     let pitcherID: UUID
     let adjustment: PitchCountAdjustment
+    let relatedPlay: RelatedDefensivePlayReference?
+
+    init(
+        pitcherID: UUID,
+        adjustment: PitchCountAdjustment,
+        relatedPlay: RelatedDefensivePlayReference? = nil
+    ) {
+        self.pitcherID = pitcherID
+        self.adjustment = adjustment
+        self.relatedPlay = relatedPlay
+    }
 }
 
 func signedPitchAdjustment(_ value: Int) -> String {
@@ -490,6 +510,27 @@ final class GameEventRecord {
             sequenceNumber: sequenceNumber,
             timestamp: timestamp,
             body: try GameEventCodec.decode(kindRawValue: kindRawValue, payload: payload)
+        )
+    }
+
+    var relatedDefensivePlayReference: RelatedDefensivePlayReference {
+        var revision = Data(kindRawValue.utf8)
+        revision.append(0)
+        if let object = try? JSONSerialization.jsonObject(with: payload),
+           let canonicalPayload = try? JSONSerialization.data(
+               withJSONObject: object,
+               options: [.sortedKeys]
+           ) {
+            revision.append(canonicalPayload)
+        } else {
+            revision.append(payload)
+        }
+        return RelatedDefensivePlayReference(
+            recordID: id,
+            gameID: gameID,
+            sequenceNumber: sequenceNumber,
+            kindRawValue: kindRawValue,
+            revisionDigest: Data(SHA256.hash(data: revision))
         )
     }
 }

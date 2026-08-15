@@ -66,7 +66,11 @@ An in-memory candidate timeline tied to an exact durable record revision. It ret
 
 ## Pitch-count reconciliation
 
-An appended authoritative event that applies signed total, ball, and strike adjustments to one stable pitcher identity. The difference between the total adjustment and its ball-plus-strike adjustments is unclassified. Replay changes only that pitcher's derived totals; the live count and every non-pitch game value remain unchanged.
+An appended authoritative event that applies signed total, ball, and strike adjustments to one stable pitcher identity. The difference between the total adjustment and its ball-plus-strike adjustments is unclassified. It may carry a related-play reference to one earlier completed defensive plate appearance in the same game. Replay changes only that pitcher's derived totals; the live count and every non-pitch game value remain unchanged.
+
+## Related-play reference
+
+A stable reconciliation link containing the completed defensive play's record ID, game ID, chronological sequence, event kind, and canonical payload-revision digest. Replay accepts the link only when it exactly matches an earlier readable, accepted completed defensive play. If that play is edited or deleted, the reconciliation becomes an explicit correction problem until the scorer re-associates it or deliberately removes the association.
 
 ## Defensive pitch edit
 

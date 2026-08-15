@@ -176,6 +176,14 @@ final class ScrollReachabilityUITests: XCTestCase {
         let total = app.steppers["reconciliation.total"]
         let balls = app.steppers["reconciliation.balls"]
         XCTAssertTrue(total.waitForExistence(timeout: 3))
+        let relatedPlay = app.buttons["reconciliation.relatedPlay"]
+        XCTAssertTrue(relatedPlay.waitForExistence(timeout: 3))
+        relatedPlay.tap()
+        let completedPlayOption = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Sequence 2")
+        ).firstMatch
+        XCTAssertTrue(completedPlayOption.waitForExistence(timeout: 3))
+        completedPlayOption.tap()
         total.buttons["reconciliation.total-Increment"].tap()
         total.buttons["reconciliation.total-Increment"].tap()
         balls.buttons["reconciliation.balls-Increment"].tap()
@@ -183,9 +191,9 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(savePositive.isEnabled)
         savePositive.tap()
 
-        let positive = app.buttons["history.entry.4"]
+        let positive = app.buttons["history.entry.1"]
         XCTAssertTrue(positive.waitForExistence(timeout: 3))
-        XCTAssertTrue(positive.label.contains("Pitch total +2"))
+        XCTAssertTrue(positive.label.contains("Pitch total plus 2"))
         XCTAssertTrue(positive.label.contains("Unclassified plus 1"))
         app.navigationBars["Play History"].buttons.firstMatch.tap()
         XCTAssertEqual(count.label, unchangedCount)
@@ -202,7 +210,8 @@ final class ScrollReachabilityUITests: XCTestCase {
         app.buttons["history.undoLatestAction"].tap()
         XCTAssertTrue(app.buttons["Undo Pitch total +2"].waitForExistence(timeout: 3))
         app.buttons["Undo Pitch total +2"].tap()
-        XCTAssertFalse(positive.waitForExistence(timeout: 1))
+        XCTAssertTrue(positive.waitForExistence(timeout: 3))
+        XCTAssertFalse(positive.label.contains("Pitch total plus 2"))
 
         app.buttons["history.reconcilePitches"].tap()
         XCTAssertTrue(app.navigationBars["Reconcile Pitch Total"].waitForExistence(timeout: 3))

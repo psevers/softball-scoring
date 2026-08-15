@@ -181,6 +181,17 @@ enum PlayHistoryProjector {
                     accessibilityDescription: accessibility,
                     isPitch: false
                 )
+                if let relatedPlay = reconciliation.relatedPlay,
+                   attach(
+                    component,
+                    summary: summary,
+                    detail: detail,
+                    accessibility: accessibility,
+                    toEntryContaining: relatedPlay.recordID,
+                    sections: &sections
+                ) {
+                    continue
+                }
                 append(PlayHistoryEntry(
                     id: trace.recordID,
                     inning: trace.stateBefore.inning,
@@ -286,6 +297,36 @@ enum PlayHistoryProjector {
             sections[index].entries.sort { firstSequence(in: $0) < firstSequence(in: $1) }
         }
         return PlayHistory(sections: sections)
+    }
+
+    private static func attach(
+        _ component: PlayHistoryComponent,
+        summary: String,
+        detail: String,
+        accessibility: String,
+        toEntryContaining recordID: UUID,
+        sections: inout [PlayHistorySection]
+    ) -> Bool {
+        for sectionIndex in sections.indices {
+            guard let entryIndex = sections[sectionIndex].entries.firstIndex(where: { entry in
+                entry.components.contains { $0.recordID == recordID }
+            }) else { continue }
+            let entry = sections[sectionIndex].entries[entryIndex]
+            sections[sectionIndex].entries[entryIndex] = PlayHistoryEntry(
+                id: entry.id,
+                inning: entry.inning,
+                half: entry.half,
+                actor: entry.actor,
+                actorContext: entry.actorContext,
+                summary: entry.summary,
+                detail: "\(entry.detail) · \(summary) · \(detail)",
+                accessibilityDescription: "\(entry.accessibilityDescription) \(accessibility)",
+                isProblem: entry.isProblem,
+                components: entry.components + [component]
+            )
+            return true
+        }
+        return false
     }
 
     private static func beginOrContinue(
