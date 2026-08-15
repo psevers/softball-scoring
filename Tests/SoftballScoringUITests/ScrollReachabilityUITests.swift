@@ -1818,14 +1818,15 @@ final class ScrollReachabilityUITests: XCTestCase {
         repairDeletion.tap()
 
         XCTAssertTrue(app.navigationBars["Delete Pitch"].waitForExistence(timeout: 3))
+        let repairedForm = app.collectionViews.firstMatch
         XCTAssertTrue(swipeWithinUntilHittable(
             app.staticTexts["Candidate timeline replays cleanly"],
-            in: form
+            in: repairedForm
         ))
         XCTAssertTrue(app.staticTexts["correction.change.1"].exists)
         XCTAssertTrue(swipeWithinUntilHittable(
             app.staticTexts["correction.change.5"],
-            in: form
+            in: repairedForm
         ))
         let save = app.buttons["pitchDelete.save"]
         XCTAssertTrue(save.isEnabled)
