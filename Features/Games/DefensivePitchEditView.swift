@@ -247,7 +247,8 @@ struct OffensivePlateAppearanceEditView: View {
                         Text(
                             "Current: \(summary(editSession.originalPlateAppearance)) · "
                                 + stateSummary(editSession.originalStateAfter) + " · "
-                                + battingLineSummary(editSession.originalBattingLine)
+                                + battingLineSummary(editSession.originalBattingLine) + " · "
+                                + battingAttributionSummary(editSession.originalBattingLines)
                         )
                             .accessibilityIdentifier("trackedPlayEdit.current")
                     }
@@ -284,7 +285,8 @@ struct OffensivePlateAppearanceEditView: View {
                                 + battingLineSummary(correctionSession.snapshot.battingLines[
                                     editSession.batter.playerID,
                                     default: BattingLine()
-                                ]),
+                                ]) + " · "
+                                + battingAttributionSummary(correctionSession.snapshot.battingLines),
                             proposedIdentifier: "trackedPlayEdit.proposed",
                             stageChange: { problem, action in
                                 correction.stageRepair(
@@ -334,7 +336,8 @@ struct OffensivePlateAppearanceEditView: View {
                     batter: editSession.batter,
                     battingOrderSize: editSession.battingOrderSize,
                     initialDraft: initialDraft,
-                    allowsScoring: false,
+                    allowsScoring: true,
+                    allowsHalfInningEndingPlay: false,
                     title: "Confirm Correction",
                     confirmationTitle: "Preview",
                     onCancel: { isConfirmingRunners = false },
@@ -368,8 +371,8 @@ struct OffensivePlateAppearanceEditView: View {
         return OffensivePlateAppearanceDraft(
             result: selectedResult,
             movements: source.movements,
-            rbi: 0,
-            countedRunSources: [],
+            rbi: source.rbi,
+            countedRunSources: source.countedRunSources,
             thirdOutClassification: nil
         )
     }
@@ -413,7 +416,11 @@ struct OffensivePlateAppearanceEditView: View {
         let movements = plateAppearance.movements
             .map { "\($0.source.baseLabel) to \($0.destination.label)" }
             .joined(separator: "; ")
-        return "\(plateAppearance.result.label) · \(movements)"
+        let runs = plateAppearance.countedRunSources.count
+        let scoring = runs > 0
+            ? " · \(runs) \(runs == 1 ? "run" : "runs") · \(plateAppearance.rbi) RBI"
+            : ""
+        return "\(plateAppearance.result.label) · \(movements)\(scoring)"
     }
 
     private func stateSummary(_ state: GameState) -> String {
@@ -432,6 +439,18 @@ struct OffensivePlateAppearanceEditView: View {
 
     private func battingLineSummary(_ line: BattingLine) -> String {
         "Batting PA \(line.plateAppearances) · AB \(line.atBats) · H \(line.hits)"
+    }
+
+    private func battingAttributionSummary(_ lines: [UUID: BattingLine]) -> String {
+        let participants = Dictionary(
+            editSession.runnerIdentities.values.map { ($0.playerID, $0) },
+            uniquingKeysWith: { first, _ in first }
+        ).values.sorted { $0.lineupSlot < $1.lineupSlot }
+        let summaries = participants.map { identity in
+            let line = lines[identity.playerID, default: BattingLine()]
+            return "\(identity.displayName) R \(line.runs) RBI \(line.runsBattedIn)"
+        }
+        return "Attribution \(summaries.joined(separator: "; "))"
     }
 }
 
@@ -1478,11 +1497,12 @@ private struct GameEventCorrectionProblemView: View {
                     initialDraft: OffensivePlateAppearanceDraft(
                         result: selectedPlateAppearanceResult,
                         movements: affectedPlateAppearance.movements,
-                        rbi: 0,
-                        countedRunSources: [],
+                        rbi: affectedPlateAppearance.rbi,
+                        countedRunSources: affectedPlateAppearance.countedRunSources,
                         thirdOutClassification: nil
                     ),
-                    allowsScoring: false,
+                    allowsScoring: true,
+                    allowsHalfInningEndingPlay: false,
                     title: "Repair Affected Tracked Play",
                     confirmationTitle: "Stage Repair",
                     onCancel: { isConfirmingPlateAppearanceRunners = false },

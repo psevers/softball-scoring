@@ -868,7 +868,7 @@ struct GameStateTests {
         #expect(suggestion.rbi == 0)
     }
 
-    @Test func correctionResultsOmitShapesWithoutANonScoringNonThirdOutAssignment() {
+    @Test func correctionResultsIncludeScoringShapesButOmitThirdOutOnlyShapes() {
         var emptyBases = GameState()
         let emptyResults = OffensivePlateAppearanceValidator.correctionResults(for: emptyBases)
         #expect(!emptyResults.contains(.sacrificeBunt))
@@ -878,14 +878,85 @@ struct GameStateTests {
         emptyBases.secondBaseRunnerPlayerID = UUID()
         emptyBases.thirdBaseRunnerPlayerID = UUID()
         let loadedResults = OffensivePlateAppearanceValidator.correctionResults(for: emptyBases)
-        #expect(!loadedResults.contains(.walk))
-        #expect(!loadedResults.contains(.hitByPitch))
+        #expect(loadedResults.contains(.walk))
+        #expect(loadedResults.contains(.hitByPitch))
+        #expect(loadedResults.contains(.sacrificeFly))
 
         emptyBases.outs = 2
         let twoOutLoadedResults = OffensivePlateAppearanceValidator.correctionResults(for: emptyBases)
-        #expect(!twoOutLoadedResults.contains(.single))
-        #expect(!twoOutLoadedResults.contains(.double))
-        #expect(!twoOutLoadedResults.contains(.triple))
+        #expect(twoOutLoadedResults.contains(.single))
+        #expect(twoOutLoadedResults.contains(.double))
+        #expect(twoOutLoadedResults.contains(.triple))
+        #expect(!twoOutLoadedResults.contains(.sacrificeFly))
+    }
+
+    @Test func offensiveValidatorIdentifiesRunRBIAndMovementProblems() {
+        let lineup = trackedLineup(count: 2)
+        var state = GameState()
+        state.firstBaseRunnerPlayerID = lineup[0].playerID
+        state.currentTrackedBatterSlot = 2
+
+        func plateAppearance(
+            movements: [RunnerMovementEvent],
+            rbi: Int,
+            countedRunSources: [RunnerSource]
+        ) -> OffensivePlateAppearanceEvent {
+            OffensivePlateAppearanceEvent(
+                batter: lineup[1],
+                battingOrderSize: lineup.count,
+                result: .double,
+                movements: movements,
+                rbi: rbi,
+                countedRunSources: countedRunSources,
+                thirdOutClassification: nil
+            )
+        }
+
+        let scoringMovements: [RunnerMovementEvent] = [
+            .init(source: .batter, destination: .second),
+            .init(source: .first, destination: .home)
+        ]
+        #expect(OffensivePlateAppearanceValidator.validate(
+            plateAppearance(movements: scoringMovements, rbi: 0, countedRunSources: []),
+            state: state,
+            trackedTeamHomeAway: .away
+        ) == .invalidRunSources)
+        #expect(OffensivePlateAppearanceValidator.validate(
+            plateAppearance(movements: scoringMovements, rbi: 2, countedRunSources: [.first]),
+            state: state,
+            trackedTeamHomeAway: .away
+        ) == .invalidRBI)
+        #expect(OffensivePlateAppearanceValidator.validate(
+            plateAppearance(
+                movements: [
+                    .init(source: .batter, destination: .second),
+                    .init(source: .first, destination: .second)
+                ],
+                rbi: 0,
+                countedRunSources: []
+            ),
+            state: state,
+            trackedTeamHomeAway: .away
+        ) == .baseCollision(.second))
+
+        state.outs = 2
+        let halfInningEndingPlay = plateAppearance(
+            movements: [
+                .init(source: .batter, destination: .second),
+                .init(source: .first, destination: .out)
+            ],
+            rbi: 0,
+            countedRunSources: []
+        )
+        #expect(OffensivePlateAppearanceValidator.validate(
+            halfInningEndingPlay,
+            state: state,
+            trackedTeamHomeAway: .away
+        ) == nil)
+        #expect(OffensivePlateAppearanceValidator.correctionScopeError(
+            halfInningEndingPlay,
+            stateBefore: state
+        ) == .endsHalfInning)
     }
 
     @Test func offensiveValidatorRejectsSacrificeBuntWithMultipleOutsOnPlay() {
