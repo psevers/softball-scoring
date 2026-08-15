@@ -1210,107 +1210,25 @@ struct DefensiveLogicalPlayDeletionView: View {
     let deletionSession: DefensiveLogicalPlayDeletionSession
     let liveSession: LiveGameSession
 
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    @State private var correction = GameEventCorrectionCoordinator()
-
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                Form {
-                    Section("Completed play records") {
-                        Text(
-                            "\(deletionSession.half.displayName) \(deletionSession.inning) · "
-                                + "Opponent batter \(deletionSession.opponentBatterSlot)"
-                        )
-                        .font(.body.monospacedDigit())
-                        ForEach(deletionSession.components) { component in
-                            Text("Sequence \(component.sequenceNumber) · \(component.summary)")
-                                .font(.body.monospacedDigit())
-                                .accessibilityIdentifier(
-                                    "logicalPlayDelete.component.\(component.sequenceNumber)"
-                                )
-                        }
-                    }
-
-                    if let correctionSession = correction.session {
-                        GameEventCorrectionSections(
-                            correctionSession: correctionSession,
-                            homeAway: HomeAway(rawValue: game.homeAwayRawValue),
-                            stageChange: { problem, action in
-                                correction.stageRepair(
-                                    recordID: problem.id,
-                                    action: action,
-                                    game: game,
-                                    modelContext: modelContext
-                                )
-                            }
-                        )
-                    } else if correction.errorMessage == nil {
-                        Section("Candidate replay") {
-                            ProgressView("Replaying complete history…")
-                        }
-                    }
-                }
-
-                Divider()
-                HStack(spacing: AppTheme.Spacing.sm) {
-                    Button("Cancel") { dismiss() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
-                        .accessibilityIdentifier("logicalPlayDelete.cancel")
-
-                    Button("Save") { save() }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
-                        .disabled(correction.session?.canSave != true)
-                        .accessibilityIdentifier("logicalPlayDelete.save")
-                }
-                .padding(.horizontal, AppTheme.Spacing.md)
-                .padding(.vertical, AppTheme.Spacing.sm)
-                .background(.bar)
-            }
-            .navigationTitle("Delete Completed Play")
-            .navigationBarTitleDisplayMode(.inline)
-            .task { stage() }
-            .alert("Play Deletion Failed", isPresented: Binding(
-                get: { correction.errorMessage != nil },
-                set: { if !$0 { correction.errorMessage = nil } }
-            )) {
-                Button("OK", role: .cancel) { correction.errorMessage = nil }
-            } message: {
-                Text(
-                    correction.errorMessage
-                        ?? "The completed play deletion could not be replayed safely."
-                )
-            }
-        }
-    }
-
-    private func stage() {
-        guard correction.session == nil else { return }
-        do {
-            let preview = try GameEventCorrection.stageDefensiveLogicalPlayDeletion(
-                deletionSession,
-                game: game,
-                modelContext: modelContext
-            )
-            correction.session = preview.correctionSession
-        } catch {
-            correction.errorMessage = error.localizedDescription
-        }
-    }
-
-    private func save() {
-        if correction.save(
-            liveSession: liveSession,
+        CompletedLogicalPlayDeletionView(
             game: game,
-            modelContext: modelContext
-        ) {
-            dismiss()
-        }
+            liveSession: liveSession,
+            sectionTitle: "Completed play records",
+            context: "\(deletionSession.half.displayName) \(deletionSession.inning) · "
+                + "Opponent batter \(deletionSession.opponentBatterSlot)",
+            components: deletionSession.components,
+            navigationTitle: "Delete Completed Play",
+            identifierPrefix: "logicalPlayDelete",
+            failureMessage: "The completed play deletion could not be replayed safely.",
+            stageCorrection: { game, modelContext in
+                try GameEventCorrection.stageDefensiveLogicalPlayDeletion(
+                    deletionSession,
+                    game: game,
+                    modelContext: modelContext
+                ).correctionSession
+            }
+        )
     }
 }
 
@@ -1319,6 +1237,40 @@ struct OffensiveLogicalPlayDeletionView: View {
     let deletionSession: OffensiveLogicalPlayDeletionSession
     let liveSession: LiveGameSession
 
+    var body: some View {
+        CompletedLogicalPlayDeletionView(
+            game: game,
+            liveSession: liveSession,
+            sectionTitle: "Completed tracked play records",
+            context: "\(deletionSession.half.displayName) \(deletionSession.inning) · "
+                + "\(deletionSession.batter.displayName) · Batting slot "
+                + "\(deletionSession.batter.lineupSlot) of \(deletionSession.battingOrderSize)",
+            components: deletionSession.components,
+            navigationTitle: "Delete Tracked Play",
+            identifierPrefix: "trackedLogicalPlayDelete",
+            failureMessage: "The tracked-team play deletion could not be replayed safely.",
+            stageCorrection: { game, modelContext in
+                try GameEventCorrection.stageOffensiveLogicalPlayDeletion(
+                    deletionSession,
+                    game: game,
+                    modelContext: modelContext
+                ).correctionSession
+            }
+        )
+    }
+}
+
+private struct CompletedLogicalPlayDeletionView: View {
+    let game: Game
+    let liveSession: LiveGameSession
+    let sectionTitle: String
+    let context: String
+    let components: [CompletedPlayDeletionComponent]
+    let navigationTitle: String
+    let identifierPrefix: String
+    let failureMessage: String
+    let stageCorrection: (Game, ModelContext) throws -> GameEventCorrectionSession
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var correction = GameEventCorrectionCoordinator()
@@ -1327,19 +1279,14 @@ struct OffensiveLogicalPlayDeletionView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 Form {
-                    Section("Completed tracked play records") {
-                        Text(
-                            "\(deletionSession.half.displayName) \(deletionSession.inning) · "
-                                + "\(deletionSession.batter.displayName) · Batting slot "
-                                + "\(deletionSession.batter.lineupSlot) of "
-                                + "\(deletionSession.battingOrderSize)"
-                        )
-                        .font(.body.monospacedDigit())
-                        ForEach(deletionSession.components) { component in
+                    Section(sectionTitle) {
+                        Text(context)
+                            .font(.body.monospacedDigit())
+                        ForEach(components) { component in
                             Text("Sequence \(component.sequenceNumber) · \(component.summary)")
                                 .font(.body.monospacedDigit())
                                 .accessibilityIdentifier(
-                                    "trackedLogicalPlayDelete.component.\(component.sequenceNumber)"
+                                    "\(identifierPrefix).component.\(component.sequenceNumber)"
                                 )
                         }
                     }
@@ -1370,20 +1317,20 @@ struct OffensiveLogicalPlayDeletionView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.large)
                         .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
-                        .accessibilityIdentifier("trackedLogicalPlayDelete.cancel")
+                        .accessibilityIdentifier("\(identifierPrefix).cancel")
 
                     Button("Save") { save() }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
                         .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
                         .disabled(correction.session?.canSave != true)
-                        .accessibilityIdentifier("trackedLogicalPlayDelete.save")
+                        .accessibilityIdentifier("\(identifierPrefix).save")
                 }
                 .padding(.horizontal, AppTheme.Spacing.md)
                 .padding(.vertical, AppTheme.Spacing.sm)
                 .background(.bar)
             }
-            .navigationTitle("Delete Tracked Play")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .task { stage() }
             .alert("Play Deletion Failed", isPresented: Binding(
@@ -1395,15 +1342,12 @@ struct OffensiveLogicalPlayDeletionView: View {
                         correction.errorMessage = nil
                         dismiss()
                     }
-                    .accessibilityIdentifier("trackedLogicalPlayDelete.reopen")
+                    .accessibilityIdentifier("\(identifierPrefix).reopen")
                 } else {
                     Button("OK", role: .cancel) { correction.errorMessage = nil }
                 }
             } message: {
-                Text(
-                    correction.errorMessage
-                        ?? "The tracked-team play deletion could not be replayed safely."
-                )
+                Text(correction.errorMessage ?? failureMessage)
             }
         }
     }
@@ -1411,12 +1355,7 @@ struct OffensiveLogicalPlayDeletionView: View {
     private func stage() {
         guard correction.session == nil else { return }
         do {
-            let preview = try GameEventCorrection.stageOffensiveLogicalPlayDeletion(
-                deletionSession,
-                game: game,
-                modelContext: modelContext
-            )
-            correction.session = preview.correctionSession
+            correction.session = try stageCorrection(game, modelContext)
         } catch {
             correction.present(error)
         }
@@ -1437,6 +1376,8 @@ private enum GameEventRepairAction {
     case edit(PitchResult)
     case editOffensivePitch(OffensivePitchResult)
     case deleteOffensivePitch
+    case deleteOffensiveBaseRunning
+    case deleteLogicalPlay(CompletedPlayRepairDeletion.Kind, UUID)
     case delete
     case editBallInPlay(BallInPlayEvent)
     case editOffensiveBaseRunning(OffensiveBaseRunningEvent)
@@ -1492,6 +1433,30 @@ private final class GameEventCorrectionCoordinator {
                     game: game,
                     modelContext: modelContext
                 )
+            case .deleteOffensiveBaseRunning:
+                self.session = try GameEventCorrection.stageOffensiveBaseRunningDeletion(
+                    recordID: recordID,
+                    in: session,
+                    game: game,
+                    modelContext: modelContext
+                )
+            case .deleteLogicalPlay(let kind, let resultRecordID):
+                switch kind {
+                case .defensive:
+                    self.session = try GameEventCorrection.stageDefensiveLogicalPlayDeletion(
+                        resultRecordID: resultRecordID,
+                        in: session,
+                        game: game,
+                        modelContext: modelContext
+                    )
+                case .offensive:
+                    self.session = try GameEventCorrection.stageOffensiveLogicalPlayDeletion(
+                        resultRecordID: resultRecordID,
+                        in: session,
+                        game: game,
+                        modelContext: modelContext
+                    )
+                }
             case .delete:
                 self.session = try GameEventCorrection.stagePitchDeletion(
                     recordID: recordID,
@@ -1715,6 +1680,7 @@ private struct GameEventCorrectionProblemView: View {
     @State private var baseRunningRepairError: String?
     @State private var isConfirmingRunners = false
     @State private var isConfirmingPlateAppearanceRunners = false
+    @State private var pendingLogicalPlayDeletion: CompletedPlayRepairDeletion?
 
     init(
         problem: GameEventCorrectionProblem,
@@ -1828,6 +1794,20 @@ private struct GameEventCorrectionProblemView: View {
                     .accessibilityIdentifier("correction.repair.deleteTracked")
                 }
 
+                if let logicalPlayDeletion = problem.logicalPlayDeletion {
+                    Button(role: .destructive) {
+                        pendingLogicalPlayDeletion = logicalPlayDeletion
+                    } label: {
+                        Label("Delete Affected Completed Play", systemImage: "trash.slash")
+                            .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    }
+                    .accessibilityIdentifier(
+                        logicalPlayDeletion.kind == .offensive
+                            ? "correction.repair.deleteTrackedPlay"
+                            : "correction.repair.deleteDefensivePlay"
+                    )
+                }
+
                 if problem.canEditBallInPlay,
                    affectedPlay != nil,
                    affectedState != nil,
@@ -1897,13 +1877,26 @@ private struct GameEventCorrectionProblemView: View {
                     }
                 }
 
+                if problem.canDeleteOffensiveBaseRunning {
+                    Button(role: .destructive) {
+                        stageChange(.deleteOffensiveBaseRunning)
+                        dismiss()
+                    } label: {
+                        Label("Delete Affected Base-Running Event", systemImage: "trash")
+                            .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    }
+                    .accessibilityIdentifier("correction.repair.deleteTrackedBaseRunning")
+                }
+
                 if !problem.canEditPitch
                             && !problem.canEditOffensivePitch
                             && !problem.canDeleteOffensivePitch
                             && !problem.canDeletePitch
                             && !problem.canEditBallInPlay
                             && !problem.canEditOffensiveBaseRunning
-                            && !problem.canEditOffensivePlateAppearance {
+                            && !problem.canEditOffensivePlateAppearance
+                            && !problem.canDeleteOffensiveBaseRunning
+                            && problem.logicalPlayDeletion == nil {
                     Text("This event does not support another change in this correction session.")
                         .foregroundStyle(AppTheme.graphite.opacity(0.68))
                 }
@@ -1911,6 +1904,20 @@ private struct GameEventCorrectionProblemView: View {
         }
         .navigationTitle("Affected Event")
         .navigationBarTitleDisplayMode(.inline)
+        .alert(item: $pendingLogicalPlayDeletion) { deletion in
+            Alert(
+                title: Text(deletion.confirmationTitle),
+                message: Text(deletion.confirmationDetail),
+                primaryButton: .destructive(Text("Stage Exact Records")) {
+                    stageChange(.deleteLogicalPlay(deletion.kind, deletion.resultRecordID))
+                    pendingLogicalPlayDeletion = nil
+                    dismiss()
+                },
+                secondaryButton: .cancel {
+                    pendingLogicalPlayDeletion = nil
+                }
+            )
+        }
         .sheet(isPresented: $isConfirmingRunners) {
             if let affectedPlay, let affectedState, let homeAway {
                 RunnerConfirmationSheet(

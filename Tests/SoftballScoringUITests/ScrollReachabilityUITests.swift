@@ -267,6 +267,11 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(waitForLabel("Player 02", on: currentBatter))
         XCTAssertTrue(scrollFromTopUntilHittable(ball, in: app))
         ball.tap()
+        XCTAssertTrue(scrollUntilHittable(single, in: app))
+        single.tap()
+        XCTAssertTrue(app.navigationBars["Record Our Play"].waitForExistence(timeout: 3))
+        app.buttons["Record"].tap()
+        XCTAssertTrue(waitForLabel("Player 03", on: currentBatter))
 
         app.buttons["game.history"].tap()
         XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
@@ -308,10 +313,16 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(swipeWithinUntilHittable(problem, in: form))
         problem.tap()
         XCTAssertTrue(app.navigationBars["Affected Event"].waitForExistence(timeout: 3))
-        let repairDeletion = app.buttons["correction.repair.deleteTracked"]
+        let repairDeletion = app.buttons["correction.repair.deleteTrackedPlay"]
         let affectedForm = app.collectionViews.element(boundBy: app.collectionViews.count - 1)
         XCTAssertTrue(swipeWithinUntilHittable(repairDeletion, in: affectedForm))
         repairDeletion.tap()
+        let repairConfirmation = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Sequence 4: Ball pitch")
+        ).firstMatch
+        XCTAssertTrue(repairConfirmation.waitForExistence(timeout: 3))
+        XCTAssertTrue(repairConfirmation.label.contains("Sequence 5: Single result"))
+        app.buttons["Stage Exact Records"].tap()
 
         XCTAssertTrue(app.navigationBars["Delete Tracked Play"].waitForExistence(timeout: 3))
         XCTAssertTrue(swipeWithinUntilHittable(
@@ -319,7 +330,7 @@ final class ScrollReachabilityUITests: XCTestCase {
             in: form
         ))
         XCTAssertTrue(app.staticTexts["correction.logicalPlayChange.3"].exists)
-        XCTAssertTrue(app.staticTexts["correction.change.4"].exists)
+        XCTAssertTrue(app.staticTexts["correction.logicalPlayChange.5"].exists)
         XCTAssertTrue(save.isEnabled)
         XCTAssertGreaterThanOrEqual(save.frame.height, 44)
         save.tap()

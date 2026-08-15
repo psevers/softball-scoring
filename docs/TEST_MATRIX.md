@@ -159,8 +159,10 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Confirmation and the staged preview list every component pitch and the terminal result with exact sequences and concise summaries.
 - Candidate replay removes exactly those record IDs, preserves unrelated interleaved SB/CS and later events, and rebuilds count, bases, score, outs, current tracked batter, and batting projection without the deleted result, runs, or RBI.
 - A rejected downstream event disables Save and identifies the first repairable record; adding its explicit repair rebuilds the complete candidate without cascade deletion or resequencing survivors.
+- When the first affected record belongs to another completed tracked-team play, the scorer can stage deletion of that entire downstream logical play rather than attempting an identity-changing edit; both exact component groups then save atomically.
+- A downstream SB/CS whose runner no longer exists supports explicit staged deletion. Defensive logical plays made invalid by deleting a tracked-team third out support the same exact-component confirmation and additive logical deletion.
 - Wrong-game, invalid-candidate, stale-history, failed-save, and cancellation paths preserve every original component. Fresh-context and cold-store reload preserve survivor IDs, timestamps, sequences, and gaps.
-- Focused UI coverage cancels once, previews a multi-pitch completed play, repairs the first downstream tracked pitch, saves atomically, and verifies live state, batting attribution, and empty authoritative History after relaunch.
+- Focused UI coverage cancels once, previews a multi-pitch completed play, stages deletion of the affected downstream completed tracked play, saves atomically, and verifies live state, batting attribution, and empty authoritative History after relaunch.
 
 ## Completed defensive logical-play deletion
 
