@@ -136,12 +136,14 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 
 ## Completed tracked-team plate-appearance correction
 
-- Play History exposes Edit Play for accepted non-third-out tracked-team plate appearances, including scoring plays, and opens with event-time player, lineup slot/order size, component history, current result, runner map, score, runs, RBI, and affected batting lines.
+- Play History exposes Edit Play for accepted tracked-team plate appearances, including scoring, multi-out, and third-out plays, and opens with event-time player, lineup slot/order size, component history, current result, runner map, score, runs, RBI, third-out classification, and affected batting lines.
 - Loaded-hit, extra-base-hit, home-run, error-without-RBI, sacrifice-fly, bases-loaded-walk, and bases-loaded-HBP replacements replay through the ordinary offensive validator and reproject PA/AB/R/H/2B/3B/HR/RBI/BB/HBP/SO/sacrifice attribution.
 - Moving a runner from Home to a base or Out removes the run, team score, and runner attribution while replaying bases, outs, current tracked batter, and later history.
-- Wrong player identity, missing/duplicate/unexpected runners, backward movement, passing, collisions, excess outs, illegal sacrifice, invalid run sources, excess RBI, outcome mismatch, and half-inning-ending proposals cannot produce a saveable candidate; the UI identifies the exact problem while Save remains disabled.
+- A representative double play retains two explicit out sources. A third-out edit distinguishes force/batter-runner from timing classification: force counts zero runs, while timing requires the exact legal counted-run sources and applies them before the replayed half-inning transition.
+- Third-out replay clears count, bases, and outs while preserving the correct next tracked batter and event-time PA/AB/result, run, and RBI attribution for the following offensive half.
+- Wrong player identity, missing/duplicate/unexpected runners, backward movement, passing, collisions, excess outs, illegal sacrifice, invalid run sources, excess RBI, outcome mismatch, and ambiguous or contradictory third-out proposals cannot produce a saveable candidate; the UI identifies the exact problem while Save remains disabled.
 - A rejected downstream tracked-team plate appearance identifies its exact sequence and supports a second scorer-confirmed replacement in the same session; Save remains disabled until the full timeline is clean, then both records persist atomically.
-- Wrong-game, stale-session, projection, save, and cancellation paths preserve the durable timeline. Fresh-context and standard/Accessibility XL UI relaunch coverage verify representative hit-to-error-to-out correction plus a scoring-double correction, current/proposed score and batting attribution, 44-point controls, next batter, bases, outs, and History.
+- Wrong-game, stale-session, projection, save, and cancellation paths preserve the durable timeline. Fresh-context and standard/Accessibility XL UI relaunch coverage verify representative hit-to-error-to-out correction, a scoring-double correction, and a third-out correction with current/proposed score and batting attribution, 44-point controls, next batter, bases, outs, half-inning, and History.
 
 ## Completed defensive logical-play deletion
 

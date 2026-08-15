@@ -868,7 +868,7 @@ struct GameStateTests {
         #expect(suggestion.rbi == 0)
     }
 
-    @Test func correctionResultsIncludeScoringShapesButOmitThirdOutOnlyShapes() {
+    @Test func correctionResultsIncludeScoringAndLegalThirdOutShapes() {
         var emptyBases = GameState()
         let emptyResults = OffensivePlateAppearanceValidator.correctionResults(for: emptyBases)
         #expect(!emptyResults.contains(.sacrificeBunt))
@@ -881,6 +881,10 @@ struct GameStateTests {
         #expect(loadedResults.contains(.walk))
         #expect(loadedResults.contains(.hitByPitch))
         #expect(loadedResults.contains(.sacrificeFly))
+
+        emptyBases.outs = 1
+        let oneOutLoadedResults = OffensivePlateAppearanceValidator.correctionResults(for: emptyBases)
+        #expect(oneOutLoadedResults.contains(.doublePlay))
 
         emptyBases.outs = 2
         let twoOutLoadedResults = OffensivePlateAppearanceValidator.correctionResults(for: emptyBases)
@@ -953,10 +957,10 @@ struct GameStateTests {
             state: state,
             trackedTeamHomeAway: .away
         ) == nil)
-        #expect(OffensivePlateAppearanceValidator.correctionScopeError(
+        #expect(OffensivePlateAppearanceValidator.supportsCorrection(
             halfInningEndingPlay,
             stateBefore: state
-        ) == .endsHalfInning)
+        ))
     }
 
     @Test func offensiveValidatorRejectsSacrificeBuntWithMultipleOutsOnPlay() {

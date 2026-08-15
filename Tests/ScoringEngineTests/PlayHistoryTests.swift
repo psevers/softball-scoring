@@ -400,7 +400,7 @@ struct PlayHistoryTests {
         #expect(entry.components.map(\.editableOffensivePitchResult) == OffensivePitchResult.allCases)
     }
 
-    @Test func nonThirdOutTrackedPlateAppearancesExposeTheirEditResult() throws {
+    @Test func trackedPlateAppearancesIncludingThirdOutExposeTheirEditResult() throws {
         let batter = TrackedBatterIdentity(
             playerID: UUID(),
             lineupSlot: 1,
@@ -452,7 +452,10 @@ struct PlayHistoryTests {
         ))
         let components = history.sections.flatMap(\.entries).flatMap(\.components)
 
-        #expect(components.map(\.editableOffensivePlateAppearanceResult) == [.single, .homeRun, nil])
+        #expect(
+            components.map(\.editableOffensivePlateAppearanceResult)
+                == [.single, .homeRun, .groundOut]
+        )
     }
 
     @Test func correctionEligibilityIncludesMultiOutAndThirdOutPlays() {
