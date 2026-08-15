@@ -123,6 +123,22 @@ first invalid downstream event disables Save and offers explicit repair
 Cancel unchanged, or atomically Save → preserve sequence gap → relaunch same corrected batter/count
 ```
 
+## Edit a completed tracked-team play — Slice 6
+
+```text
+Live Game → Play History → expand tracked plate appearance → Edit Play
+  ↓
+choose corrected result and confirm the event-time batter plus every occupied runner destination
+  ↓
+if the play creates the third out with a home touch, classify force/batter-runner or timing
+  ↓
+confirm exact counted-run sources and RBI
+  ↓
+preview score before the transition, cleared count/bases/outs, next tracked batter, and batting lines
+  ↓
+Cancel unchanged, or atomically Save → relaunch same inning and player attribution
+```
+
 ## Edit a completed defensive play — Slice 6
 
 ```text

@@ -8,7 +8,6 @@ struct OffensiveRunnerConfirmationSheet: View {
     let batter: TrackedBatterIdentity?
     let battingOrderSize: Int?
     let allowsScoring: Bool
-    let allowsHalfInningEndingPlay: Bool
     let title: String
     let confirmationTitle: String
     let onCancel: () -> Void
@@ -38,7 +37,6 @@ struct OffensiveRunnerConfirmationSheet: View {
             battingOrderSize: nil,
             seedDraft: nil,
             allowsScoring: true,
-            allowsHalfInningEndingPlay: true,
             title: "Record Our Play",
             confirmationTitle: "Record",
             onCancel: onCancel,
@@ -55,7 +53,6 @@ struct OffensiveRunnerConfirmationSheet: View {
         battingOrderSize: Int,
         initialDraft: OffensivePlateAppearanceDraft,
         allowsScoring: Bool,
-        allowsHalfInningEndingPlay: Bool,
         title: String,
         confirmationTitle: String,
         onCancel: @escaping () -> Void,
@@ -70,7 +67,6 @@ struct OffensiveRunnerConfirmationSheet: View {
             battingOrderSize: battingOrderSize,
             seedDraft: initialDraft,
             allowsScoring: allowsScoring,
-            allowsHalfInningEndingPlay: allowsHalfInningEndingPlay,
             title: title,
             confirmationTitle: confirmationTitle,
             onCancel: onCancel,
@@ -87,7 +83,6 @@ struct OffensiveRunnerConfirmationSheet: View {
         battingOrderSize: Int?,
         seedDraft: OffensivePlateAppearanceDraft?,
         allowsScoring: Bool,
-        allowsHalfInningEndingPlay: Bool,
         title: String,
         confirmationTitle: String,
         onCancel: @escaping () -> Void,
@@ -100,7 +95,6 @@ struct OffensiveRunnerConfirmationSheet: View {
         self.batter = batter
         self.battingOrderSize = battingOrderSize
         self.allowsScoring = allowsScoring
-        self.allowsHalfInningEndingPlay = allowsHalfInningEndingPlay
         self.title = title
         self.confirmationTitle = confirmationTitle
         self.onCancel = onCancel
@@ -244,8 +238,13 @@ struct OffensiveRunnerConfirmationSheet: View {
             }
             .onChange(of: destinations) { _, _ in
                 validationError = nil
-                countedRunSources.formIntersection(homeSources)
-                if !needsThirdOutDecision { countedRunSources = Set(homeSources) }
+                if !needsThirdOutDecision {
+                    countedRunSources = Set(homeSources)
+                } else if thirdOutClassification == .forceOrBatterRunner {
+                    countedRunSources = []
+                } else {
+                    countedRunSources.formIntersection(homeSources)
+                }
                 rbi = min(rbi, sourcesThatCount.count)
             }
             .onChange(of: thirdOutClassification) { _, classification in
@@ -268,6 +267,7 @@ struct OffensiveRunnerConfirmationSheet: View {
                 Text("Timing Play").tag(ThirdOutClassification.timingPlay)
             }
             .pickerStyle(.segmented)
+            .accessibilityIdentifier("runner.thirdOutClassification")
 
             if thirdOutClassification == .timingPlay {
                 ForEach(homeSources, id: \.self) { source in
@@ -382,12 +382,6 @@ struct OffensiveRunnerConfirmationSheet: View {
             trackedTeamHomeAway: homeAway
         ) {
             validationError = error
-        } else if !allowsHalfInningEndingPlay,
-                  let scopeError = OffensivePlateAppearanceValidator.correctionScopeError(
-                    event,
-                    stateBefore: state
-                  ) {
-            validationError = scopeError
         } else {
             onRecord(draft)
         }
@@ -419,8 +413,6 @@ struct OffensiveRunnerConfirmationSheet: View {
             "RBI must be between zero and the legally counted runs on this play."
         case .invalidThirdOutClassification:
             "Classify a run with the third out before choosing which home touches count."
-        case .endsHalfInning:
-            "This correction cannot make the third out; use the half-inning correction workflow."
         case .outcomeMismatch:
             "The batter result does not match the selected runner destinations."
         }

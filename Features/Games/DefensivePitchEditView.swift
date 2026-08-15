@@ -337,7 +337,6 @@ struct OffensivePlateAppearanceEditView: View {
                     battingOrderSize: editSession.battingOrderSize,
                     initialDraft: initialDraft,
                     allowsScoring: true,
-                    allowsHalfInningEndingPlay: false,
                     title: "Confirm Correction",
                     confirmationTitle: "Preview",
                     onCancel: { isConfirmingRunners = false },
@@ -373,7 +372,7 @@ struct OffensivePlateAppearanceEditView: View {
             movements: source.movements,
             rbi: source.rbi,
             countedRunSources: source.countedRunSources,
-            thirdOutClassification: nil
+            thirdOutClassification: source.thirdOutClassification
         )
     }
 
@@ -420,7 +419,12 @@ struct OffensivePlateAppearanceEditView: View {
         let scoring = runs > 0
             ? " · \(runs) \(runs == 1 ? "run" : "runs") · \(plateAppearance.rbi) RBI"
             : ""
-        return "\(plateAppearance.result.label) · \(movements)\(scoring)"
+        let thirdOut = switch plateAppearance.thirdOutClassification {
+        case .forceOrBatterRunner: " · Force / batter-runner third out"
+        case .timingPlay: " · Timing play third out"
+        case nil: ""
+        }
+        return "\(plateAppearance.result.label) · \(movements)\(scoring)\(thirdOut)"
     }
 
     private func stateSummary(_ state: GameState) -> String {
@@ -1499,10 +1503,9 @@ private struct GameEventCorrectionProblemView: View {
                         movements: affectedPlateAppearance.movements,
                         rbi: affectedPlateAppearance.rbi,
                         countedRunSources: affectedPlateAppearance.countedRunSources,
-                        thirdOutClassification: nil
+                        thirdOutClassification: affectedPlateAppearance.thirdOutClassification
                     ),
                     allowsScoring: true,
-                    allowsHalfInningEndingPlay: false,
                     title: "Repair Affected Tracked Play",
                     confirmationTitle: "Stage Repair",
                     onCancel: { isConfirmingPlateAppearanceRunners = false },

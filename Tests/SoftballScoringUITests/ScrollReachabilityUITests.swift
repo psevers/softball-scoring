@@ -553,7 +553,31 @@ final class ScrollReachabilityUITests: XCTestCase {
         confirmRunners.tap()
 
         XCTAssertTrue(app.navigationBars["Confirm Correction"].waitForExistence(timeout: 3))
+        let batterDestination = app.buttons["runner.destination.batter"]
+        XCTAssertTrue(batterDestination.waitForExistence(timeout: 3))
+        batterDestination.tap()
+        app.buttons["1B"].tap()
+        batterDestination.tap()
+        app.buttons["Out"].tap()
         let thirdOutClassification = app.segmentedControls["runner.thirdOutClassification"]
+        XCTAssertTrue(scrollUntilHittable(thirdOutClassification, in: app))
+        XCTAssertTrue(scrollUntilHittable(app.buttons["Preview"], in: app))
+        app.buttons["Preview"].tap()
+
+        let proposed = app.staticTexts["playEdit.proposed"]
+        for _ in 0..<4 where !proposed.exists {
+            editForm.swipeUp()
+        }
+        XCTAssertTrue(proposed.exists)
+        XCTAssertTrue(proposed.label.contains("Force / batter-runner third out"))
+        XCTAssertFalse(proposed.label.contains("1 run"))
+
+        for _ in 0..<4 where !confirmRunners.isHittable {
+            editForm.swipeDown()
+        }
+        XCTAssertTrue(confirmRunners.isHittable)
+        confirmRunners.tap()
+        XCTAssertTrue(app.navigationBars["Confirm Correction"].waitForExistence(timeout: 3))
         XCTAssertTrue(scrollUntilHittable(thirdOutClassification, in: app))
         thirdOutClassification.buttons["Timing Play"].tap()
         let runsCounted = app.steppers["runner.runsCounted"]
@@ -564,7 +588,6 @@ final class ScrollReachabilityUITests: XCTestCase {
         app.buttons["runner.rbi-Increment"].tap()
         app.buttons["Preview"].tap()
 
-        let proposed = app.staticTexts["playEdit.proposed"]
         for _ in 0..<4 where !proposed.exists {
             editForm.swipeUp()
         }
@@ -684,8 +707,9 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["game.count"].value as? String, "0 outs, on 2B, 3B")
     }
 
-    func testTrackedTeamPlateAppearanceCorrectionIdentifiesThirdOutScope() {
+    func testTrackedTeamThirdOutCorrectionPersistsInningAndBattingProjection() {
         let app = launchApp(
+            atAccessibilityTextSize: true,
             persistentStoreName: "tracked-play-third-out-scope-\(UUID().uuidString)"
         )
         app.tabBars.buttons["Games"].tap()
@@ -721,6 +745,11 @@ final class ScrollReachabilityUITests: XCTestCase {
         let form = app.collectionViews.firstMatch
         let save = app.buttons["trackedPlayEdit.save"]
         XCTAssertFalse(save.isEnabled)
+        let resultPicker = app.buttons["trackedPlayEdit.resultPicker"]
+        XCTAssertTrue(swipeWithinUntilHittable(resultPicker, in: form, above: save))
+        resultPicker.tap()
+        app.buttons["Ground Out"].tap()
+        XCTAssertTrue(waitForValue("Ground Out", on: resultPicker))
         let confirm = app.buttons["trackedPlayEdit.confirmRunners"]
         XCTAssertTrue(swipeWithinUntilHittable(confirm, in: form, above: save))
         confirm.tap()
@@ -731,14 +760,46 @@ final class ScrollReachabilityUITests: XCTestCase {
         batterDestination.tap()
         app.buttons["Out"].tap()
         app.buttons["Preview"].tap()
-        let scopeMessage = app.staticTexts[
-            "This correction cannot make the third out; use the half-inning correction workflow."
-        ]
-        XCTAssertTrue(scrollUntilHittable(scopeMessage, in: app))
-        XCTAssertTrue(app.navigationBars["Confirm Correction"].exists)
-        app.navigationBars["Confirm Correction"].buttons["Cancel"].tap()
-        XCTAssertTrue(app.navigationBars["Edit Tracked Play"].waitForExistence(timeout: 3))
-        XCTAssertFalse(save.isEnabled)
+
+        let proposed = app.staticTexts["trackedPlayEdit.proposed"]
+        XCTAssertTrue(swipeWithinUntilHittable(proposed, in: form, above: save))
+        XCTAssertTrue(proposed.label.contains("Ground Out · Batter to Out"))
+        XCTAssertTrue(proposed.label.contains("Bottom 1"))
+        XCTAssertTrue(proposed.label.contains("Outs 0 · Bases empty · Tracked batter 4"))
+        XCTAssertTrue(proposed.label.contains("Batting PA 1 · AB 1 · H 0"))
+        XCTAssertTrue(proposed.label.contains("Player 03 R 0 RBI 0"))
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["history.entry.3"].label.contains("GO · Batter to Out"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        let score = app.staticTexts["game.score"]
+        let count = app.staticTexts["game.count"]
+        XCTAssertEqual(score.label, "Bottom of inning 1. Us 0, UI Opponent 0")
+        XCTAssertEqual(count.value as? String, "0 outs, bases empty")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Games"].tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertEqual(score.label, "Bottom of inning 1. Us 0, UI Opponent 0")
+        XCTAssertEqual(count.value as? String, "0 outs, bases empty")
+
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        app.buttons["history.entry.3"].tap()
+        let persistedEdit = app.buttons["history.editTrackedPlay.3"]
+        XCTAssertTrue(persistedEdit.waitForExistence(timeout: 3))
+        persistedEdit.tap()
+        let current = app.staticTexts["trackedPlayEdit.current"]
+        XCTAssertTrue(current.waitForExistence(timeout: 3))
+        XCTAssertTrue(current.label.contains("Ground Out · Batter to Out"))
+        XCTAssertTrue(current.label.contains("Bottom 1"))
+        XCTAssertTrue(current.label.contains("Tracked batter 4"))
+        XCTAssertTrue(current.label.contains("Batting PA 1 · AB 1 · H 0"))
+        XCTAssertTrue(current.label.contains("Player 03 R 0 RBI 0"))
     }
 
     private func exerciseTrackedTeamPlateAppearanceEdit(atAccessibilityTextSize: Bool) {
