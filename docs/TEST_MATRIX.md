@@ -6,7 +6,7 @@
 checkout it generates the Xcode project, creates and boots a fresh compatible iPhone simulator,
 builds the complete scheme for testing, runs every `DomainTests` and `ScoringEngineTests` test
 (including persistence and replay coverage), and runs the deterministic
-`testUndoLatestPitchConfirmsCancelsAndRestoresLiveStateFromHistory` launch/recovery smoke test.
+`testSliceSixRecoveryJourneySurvivesColdRelaunch` complete recovery journey.
 
 `iOS Exhaustive UI Evidence / Exhaustive UI Evidence` is the post-merge UI matrix. It runs on every
 push to `main` and by manual dispatch, builds against a newly created simulator, and runs the entire
@@ -23,6 +23,17 @@ resulting `main` push.
 
 Both jobs append their status and elapsed duration in seconds to the GitHub Actions job summary on
 every run, including failed runs. These per-run measurements are the CI-time regression record.
+
+## Complete Slice 6 recovery journey
+
+- One isolated persistent store records mixed defensive and tracked-team history, including grouped top/bottom Play History and a completed tracked-team result.
+- Undo removes the latest eligible play and verifies replayed score, count, batter progression, and batting attribution.
+- An earlier pitch deletion deliberately rejects a downstream record; Save remains disabled until the exact affected record is explicitly repaired, then one atomic save produces a clean timeline.
+- A completed defensive play correction and an associated signed pitch-count reconciliation preserve the live non-pitch state while updating the completed play and pitcher totals.
+- A tracked-team SB-to-CS correction rebuilds bases, outs, active batter/count, and SB/CS attribution.
+- A locked timeline with more than one problem requires each exact repair, saves once, resumes scoring, and allocates the next authoritative event.
+- The app terminates and relaunches at Accessibility XL; every corrected game reproduces its History, score, bases, outs, batter progression, pitch totals, batting projection, and unlocked state.
+- Standard and Accessibility XL checkpoints retain the light-paper appearance, readable labels, VoiceOver-accessible summaries, and at least 44-point History and correction targets.
 
 ## Scorebook visual foundation
 

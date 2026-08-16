@@ -4,7 +4,7 @@ Local-first iOS fastpitch softball scorekeeping app for one team.
 
 ## Current milestone
 
-Implementation and macOS/Xcode validation are complete through **Vertical Slice 4: Ball In Play + explicit runner scoring**.
+Implementation and macOS/Xcode validation are complete through **Vertical Slice 6: Recovery / trust**.
 
 ## Stack
 
@@ -27,11 +27,11 @@ In Simulator, scroll an iPhone list by clicking inside the device screen and dra
 
 ## Current user flow
 
-Open **Team** to configure the roster and season, create an innings-based or time-limited game under **Games**, build a variable batting order with nine defenders, then use the live scorebook to record defensive pitches and explicit ball-in-play runner outcomes.
+Open **Team** to configure the roster and season, create an innings-based or time-limited game under **Games**, build a variable batting order with nine defenders, then use the live scorebook to record both teams, inspect Play History, undo the latest eligible action, and explicitly correct or repair earlier history.
 
 ## Next slice
 
-Slice 5: tracked-team offensive scoring and player attribution. See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md).
+Slice 7: pitching changes and per-appearance pitching lines. See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md).
 
 ## Development policy
 

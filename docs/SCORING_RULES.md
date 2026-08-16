@@ -149,6 +149,7 @@ Opponent slots rotate 1...9. Completing a PA advances the slot; 9 wraps to 1.
 - A pending Ball In Play result blocks further pitch events.
 - Every runner present at play start must appear exactly once in the play payload.
 - Unreadable/invalid history pauses new scoring instead of silently mutating around corruption. History remains reachable, and deleting one explicitly confirmed unknown-kind or malformed-payload record resumes scoring only when the resulting authoritative timeline is completely valid.
+- A successful correction or locked-history repair is complete only when a fresh store replays the same accepted timeline, score, bases, outs, count, batter progression, pitcher totals, batting projection, and History. Process relaunch must not depend on in-memory correction state, silently skip a surviving record, or leave scoring locked after a clean atomic save.
 
 ## Known MVP scoring gaps
 

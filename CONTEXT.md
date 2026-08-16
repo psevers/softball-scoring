@@ -68,6 +68,10 @@ An in-memory candidate timeline tied to an exact durable record revision. It may
 
 An explicit correction session for one or more existing Play History problems. Known decodable events use their supported event editor or deletion control; unknown kinds, malformed payloads, and invalid or duplicate sequence records allow deletion of only the exact problem record. Each staged repair preserves durable history until one clean atomic save, without rewriting, reordering, renumbering, detaching, or cascade-deleting survivors.
 
+## Recovery journey
+
+The deterministic end-to-end proof that a mixed defensive and tracked-team timeline can be inspected, undone, corrected, reconciled, repaired from multiple locked-history problems, resumed, and reproduced identically after the app process terminates and relaunches. It crosses the same authoritative replay, batting-projection, correction, and persistence boundaries used during live scoring; it is not a separate recovery implementation.
+
 ## Unreadable record deletion
 
 A deletion-only recovery for one Play History problem entry whose event kind is unknown or whose payload cannot decode. Confirmation identifies the exact record and explicitly refuses to guess or edit its missing meaning. Staging removes only that record from an in-memory candidate; a valid atomic save preserves every survivor envelope and sequence gap, while any remaining replay or projection rejection keeps Save unavailable.

@@ -190,3 +190,23 @@ first invalid downstream record disables Save and opens staged repair
   ↓
 Cancel unchanged, or Save one atomic pair deletion → preserve survivor envelopes and gaps
 ```
+
+## Complete recovery journey — Slice 6
+
+```text
+Record mixed defensive + tracked-team history → inspect grouped Play History
+  ↓
+Undo latest eligible play → replay score, count, bases, outs, batter, and batting line
+  ↓
+stage an earlier invalidating correction → explicitly repair the downstream problem → atomic Save
+  ↓
+edit a completed defensive play → reconcile its pitcher total without changing the live count
+  ↓
+edit tracked-team SB/CS → replay bases, outs, batter, count, and attribution
+  ↓
+open locked History with multiple problems → repair each exact record → one atomic Save
+  ↓
+resume scoring → terminate the app → relaunch at Accessibility XL
+  ↓
+verify identical durable History, score, bases, outs, batter, pitch totals, batting projection, and unlocked scoring
+```
