@@ -194,6 +194,47 @@ enum UITestData {
             ))
         ))
 
+        let lockedHistoryGame = Game(
+            seasonID: season.id,
+            opponentName: "UI Locked History Opponent",
+            gameDate: Date(timeIntervalSince1970: 1_786_368_400),
+            homeAway: .home,
+            status: .inProgress,
+            startingPitcherID: activePlayers[0].id,
+            startedAt: Date(timeIntervalSince1970: 1_786_368_400)
+        )
+        context.insert(lockedHistoryGame)
+        for (index, player) in activePlayers.enumerated() {
+            context.insert(LineupEntry(
+                playerID: player.id,
+                battingOrder: index + 1,
+                startingPosition: positions[index],
+                gameID: lockedHistoryGame.id
+            ))
+        }
+        context.insert(try GameEventRecord(
+            gameID: lockedHistoryGame.id,
+            sequenceNumber: 1,
+            timestamp: Date(timeIntervalSince1970: 1_786_368_500),
+            body: .pitch(.init(
+                result: .ball,
+                pitcherID: activePlayers[0].id,
+                opponentBatterSlot: 1
+            ))
+        ))
+        let unknownRecord = try GameEventRecord(
+            gameID: lockedHistoryGame.id,
+            sequenceNumber: 2,
+            timestamp: Date(timeIntervalSince1970: 1_786_368_600),
+            body: .pitch(.init(
+                result: .foul,
+                pitcherID: activePlayers[0].id,
+                opponentBatterSlot: 1
+            ))
+        )
+        unknownRecord.kindRawValue = "future-event"
+        context.insert(unknownRecord)
+
         let ballInPlayUndoGame = Game(
             seasonID: season.id,
             opponentName: "UI Ball In Play Undo Opponent",

@@ -119,6 +119,15 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Fresh-context and cold-store reload reproduce corrected count, pitcher totals, later game state, and History.
 - Accessibility XXXL UI coverage verifies exact confirmation, Cancel, replay preview, Save, refreshed live state, and reopen persistence.
 
+## Unreadable problem-record deletion
+
+- Locked Play History remains reachable and offers deletion only for unknown-kind and malformed-payload problem records; invalid-sequence and semantically rejected records do not expose this recovery action.
+- Confirmation identifies the exact record sequence, stable ID, saved kind, and problem summary and states that missing event meaning will not be guessed or edited.
+- Cancel and staging preserve the durable timeline. The candidate removes exactly one record in memory and passes full decode, semantic validation, replay, History, and batting projection before Save becomes available.
+- A remaining rejected record is surfaced first and disables Save. Wrong-game, stale-timeline, projection-failure, and save-failure paths preserve every original record.
+- Valid Save atomically removes only the confirmed record; every survivor retains its ID, sequence, timestamp, and sequence gap. Fresh-context replay matches the preview, and the next write uses a non-colliding authoritative sequence.
+- Focused UI coverage cancels once, previews and saves the exact deletion, verifies that valid history survives and scoring unlocks, records the next pitch, then terminates and relaunches to reproduce the repaired state.
+
 ## Multiple staged corrections
 
 - An invalidating first edit or deletion exposes the first rejected record with stable sequence, decoded event context, and the count/batter state reached by full replay.

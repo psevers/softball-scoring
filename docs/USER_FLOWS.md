@@ -39,7 +39,11 @@ Terminal transitions:
 
 ## Corrupt history
 
-Replay finds invalid event → display warning → block new scoring → show an explicit problem entry in Play History → preserve history for correction/recovery.
+Replay finds invalid event → display warning → block new scoring → keep Play History reachable → show an explicit problem entry.
+
+Unknown kind or malformed payload → expand exact problem record → Delete Unreadable Event → confirm sequence/ID/kind and deletion-only intent → stage without persistence → full replay/projection preview → remaining invalid record keeps Save disabled, or atomic exact deletion → refresh History → resume scoring → relaunch same repaired state.
+
+Invalid sequence or semantic rejection → preserve the record; only a separately supported explicit correction may change it. Never guess missing meaning or silently skip it.
 
 ## Play History — Slice 6
 

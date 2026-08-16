@@ -174,6 +174,7 @@ struct PlayHistoryTests {
         #expect(entries[0].components.map(\.sequenceNumber) == [1, 3])
         #expect(entries[1].isProblem)
         #expect(entries[1].components.map(\.sequenceNumber) == [2])
+        #expect(entries[1].components.allSatisfy { $0.allowsUnreadableDeletion })
     }
 
     @Test func trackedHistoryUsesEventTimeIdentityAndKeepsBaseRunningSeparate() throws {
@@ -370,6 +371,11 @@ struct PlayHistoryTests {
         ])
         #expect(history.sections[0].entries.allSatisfy { $0.isProblem })
         #expect(history.sections[0].entries.map(\.components).allSatisfy { $0.count == 1 })
+        #expect(history.sections[0].entries.map { $0.components[0].allowsUnreadableDeletion } == [
+            true,
+            false,
+            true
+        ])
     }
 
     @Test func historyGroupsEntriesByEventTimeHalfInning() throws {
