@@ -2,7 +2,7 @@
 
 ## Window
 
-Window 1 continuation — **Slice 5.5 scorebook visual alignment remains complete and approved. Slice 6 Play History, latest eligible-action Undo, earlier defensive and tracked-team pitch correction and deletion, tracked-team SB/CS correction, completed tracked-team and defensive play correction through multi-out and classified third-out plays, logical-play deletion, atomic multi-change downstream repair, starting-pitcher total reconciliation with defensive-play association, unreadable recovery, and chained rejected-history repair are implemented through ticket #45.**
+Window 1 continuation — **Slice 5.5 scorebook visual alignment remains complete and approved. Slice 6 Recovery / trust is complete through ticket #25, including Play History, latest eligible-action Undo, defensive and tracked-team correction/deletion, SB/CS correction, completed-play correction, logical-play deletion, atomic downstream repair, pitcher-total reconciliation, unreadable/chained-history repair, and deterministic cold-relaunch proof.**
 
 ## Canonical repo
 
@@ -142,7 +142,7 @@ Result: **PASS**.
 
 ## Adversarial review
 
-See `docs/reviews/SLICE4_ADVERSARIAL_REVIEW.md` and `docs/reviews/SLICE5_ADVERSARIAL_REVIEW.md`.
+See `docs/reviews/SLICE4_ADVERSARIAL_REVIEW.md`, `docs/reviews/SLICE5_ADVERSARIAL_REVIEW.md`, and `docs/reviews/SLICE6_ADVERSARIAL_REVIEW.md`.
 
 No unresolved P0/P1 findings. Important fixes discovered during review include:
 
@@ -159,22 +159,23 @@ No unresolved P0/P1 findings. Important fixes discovered during review include:
 
 ## Required before publication
 
-Keep ticket #10 local until explicitly authorized to push. Before merge, publish the validated branch, open a draft PR, require green GitHub CI, and complete the PR adversarial checklist. Product-owner visual approval is already recorded.
+Keep ticket #25 local until explicitly authorized to push. Before merge, publish the validated branch, open a draft PR, require green PR Fast Verification, request and link a successful manual exhaustive UI run, and complete the PR adversarial checklist.
 
 ## Accepted limitations / backlog
 
 - Standalone WP/PB/manual basepath events are still required for MVP.
-- Remaining non-pitch correction workflows are Slice 6.
 - Current pitcher remains fixed to starting pitcher until Slice 7.
 - Opponent hitters are numbered slots.
 - Runner suggestions for FC/SAC are conservative and intentionally editable rather than pretending to infer fielding context.
 - No dedicated triple-play result yet.
 - A time-limit expiration is informational until game-ending rules are implemented; the scorekeeper finalizes play manually.
-- Slice 6 should extract the offensive scoring surface/view model from `LiveGameView` while adding history/undo, reducing its mixed UI/replay/persistence responsibilities.
+- `LiveGameView` remains a broad composition root for scoring UI; further extraction is maintenance work rather than a missing Slice 6 recovery behavior.
+- `GameEventCorrectionSession` should eventually replace its parallel staged-mutation arrays and duplicated preview/save interpreters with one typed mutation collection shared by both paths.
+- `DefensivePitchEditView.swift` should eventually be split by correction workflow family around its existing coordinator and section seams.
 
 ## Current vertical slice
 
-**Slice 6 — Reconcile historical pitcher totals, ticket #23.**
+**Slice 6 — Complete recovery through relaunch, ticket #25.**
 
 The live game and Play History now share one fresh game-scoped snapshot containing replay,
 accepted-event batting projection, and a history trace. History groups event-time half-innings and
@@ -207,7 +208,7 @@ Those same tracked-team pitch components now expose a separate Delete action. Co
 Completed tracked-team plate appearances now expose Edit Play in History whether or not they scored or ended the half-inning. The editor names the event-time player and batting-order context, shows current and proposed score plus all affected run/RBI batting lines, and uses native result, runner-destination, RBI, and third-out classification controls at standard and Accessibility XL sizes. The scorer can replace walks, HBP, strikeouts, hits, home runs, errors, fielder's choices, ordinary outs, sacrifices, and double plays while confirming every event-time runner and out exactly once. Force/batter-runner third outs count zero runs; timing plays require the exact legal counted-run sources. Candidate replay preserves the record envelope; applies score before the half-inning transition; clears count, bases, and outs; preserves the next tracked batter; recalculates PA/AB/R/H/2B/3B/HR/RBI/BB/HBP/SO/sacrifice attribution; and offers a later rejected plate appearance as a second staged repair. Movement, run-source, RBI, and ambiguous third-out validation identify the exact problem while Save remains disabled. Stale, invalid, projection, and save failures are atomic; focused Accessibility XL UI coverage saves a tracked-team third-out correction and verifies the inning plus batting projection after relaunch.
 Completed tracked-team plate-appearance groups now also expose Delete Completed Play on their terminal result while retaining individual pitch and Edit Play controls. Confirmation and preview list every count pitch plus the terminal result by exact sequence and summary. Staging removes only those record IDs, preserves unrelated interleaved SB/CS records, and fully replays count, bases, score, outs, current tracked batter, and batting attribution without the deleted result, runs, or RBI. The first rejected downstream record disables Save until an explicit repair joins the same session. Affected SB/CS can be explicitly deleted; affected completed tracked-team or defensive plays receive their own exact-component confirmation before joining the batch as another logical deletion. Clean Save is atomic and preserves every survivor envelope and sequence gap; cancel, wrong-game, invalid-candidate, stale-history, projection, and failed-save paths retain the complete original play. Focused persistence and UI relaunch coverage verify the same corrected state and projection after reopening the store.
 Tracked-team SB and CS records now expose Edit Base Running in History. The editor names the event-time runner, source, lineup slot/order size, active batter/count, sequence, current and proposed state, and R/RBI/SB/CS line; it can change SB to CS or CS to SB and select another event-time eligible runner. Ordinary validation rejects the wrong runner, base, destination, half, or illegal attempt. Full replay preserves the active plate appearance, credits a steal of home with score/run/SB and zero RBI, carries the next tracked batter through a third-out CS transition, and exposes rejected downstream SB/CS for explicit staged repair. Save preserves the record envelope and is stale-safe, atomic, and rollback-safe; focused UI coverage verifies state and batting attribution again after process relaunch.
-Every defensive pitch component now also exposes an explicit Delete action with exact record confirmation. Confirming stages removal in memory, replays and projects the entire candidate timeline, identifies the first invalid downstream record, and keeps Save unavailable until the candidate is valid. A valid Save atomically removes only that record; survivors retain IDs, sequence numbers, and timestamps, the deleted sequence remains a gap, and the next scorer write uses the maximum authoritative surviving sequence plus one. Wrong-game, stale, rejected-candidate, projection, and save failures preserve the original timeline. Fresh-context, cold-store, and Accessibility XXXL workflow tests reproduce the corrected count, pitcher totals, History, and live state. Remaining non-pitch correction workflows stay in later Slice 6 tickets.
+Every defensive pitch component now also exposes an explicit Delete action with exact record confirmation. Confirming stages removal in memory, replays and projects the entire candidate timeline, identifies the first invalid downstream record, and keeps Save unavailable until the candidate is valid. A valid save atomically removes only that record; survivors retain IDs, sequence numbers, and timestamps, the deleted sequence remains a gap, and the next scorer write uses the maximum authoritative surviving sequence plus one. Wrong-game, stale, rejected-candidate, projection, and save failures preserve the original timeline. Fresh-context, cold-store, and Accessibility XXXL workflow tests reproduce the corrected count, pitcher totals, History, and live state.
 
 Completed defensive Ball In Play results expose Edit Play beside their paired counted In Play pitch, including double plays and plays that create the third out. The scorer chooses a corrected hit, home run, error, fielder's choice, ordinary out, sacrifice, or double play and reconfirms every event-time runner destination. For a non-third-out play every apparent home touch counts. When the play creates the third out with a home touch, the scorer classifies the decisive out as force/batter-runner or timing, explicitly chooses the legal counted-run quantity, and assigns RBI no greater than those runs. Candidate replay applies the score before the half-inning transition, clears bases/count/outs, preserves the next opponent and tracked batter state, and revalidates every later event before Save. Any later eligible play result can join the same staged correction when replay rejects it. Every replacement preserves its result record envelope and counted pitch; contradictory classification, illegal run quantity, RBI, movement, downstream replay, stale history, or save failure leaves durable history unchanged. Focused Accessibility XXXL coverage saves a force-to-timing double-play correction and verifies the replayed inning again after relaunch.
 
@@ -220,6 +221,8 @@ Play History now opens a native pitch-total reconciliation editor for the curren
 Locked Play History now exposes Delete Unreadable Event only for a problem record with an unknown kind or malformed payload. Exact sequence, stable record ID, saved kind, and problem summary remain visible while confirmation states that the missing meaning will not be guessed or edited. Cancel and staging leave durable history untouched. Candidate decode, semantic validation, replay, and batting projection must all succeed; the first remaining invalid record keeps Save disabled. A clean atomic save removes only the confirmed record, preserves every survivor envelope and sequence gap, refreshes History and live scoring, and lets the next write allocate from authoritative surviving history. Wrong-game, stale-timeline, projection, and save failures preserve the original records. Focused in-memory, fresh-context, simulator, and process-relaunch coverage verifies cancellation, unlock, resumed scoring, non-colliding append, and persistence.
 
 Locked Play History now also opens one chained repair session across duplicate or invalid sequences, unknown kinds, malformed payloads, semantic replay rejections, and event-addressable batting-projection failures. The first remaining problem alone drives the next supported action: known decodable events use their existing editor or deletion control, while sequence and codec problems permit exact-record deletion without inventing meaning. Each explicit repair rebuilds the complete in-memory candidate and keeps Save disabled until decode, semantic validation, replay, History, and batting projection are all clean. One atomic save commits the batch; stale or failed saves preserve every original record. Survivors retain IDs, timestamps, event bodies, order, and sequence gaps, scoring resumes at the next authoritative non-colliding sequence, and fresh-context plus process-relaunch coverage reproduces the same unlocked timeline and state.
+
+The final Slice 6 recovery journey now proves the complete composition in one isolated persistent store: mixed defensive/tracked history and grouped Play History, latest-action Undo, an invalidating earlier correction with explicit downstream repair, completed defensive-play correction plus related pitch reconciliation, tracked SB/CS correction, and a locked timeline with multiple explicit repairs and one atomic save. Scoring resumes before process termination. Accessibility XL relaunch reproduces the corrected History, score, bases, outs, batter/count progression, pitcher totals, batting projection, and unlocked state without a test-only recovery path or silent partial repair. The required pull-request fast lane runs this journey after the full domain/scoring suites; the exhaustive UI lane retains every predecessor workflow.
 
 ## Do not redo
 

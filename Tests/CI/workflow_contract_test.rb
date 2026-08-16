@@ -7,7 +7,8 @@ class WorkflowContractTest < Minitest::Test
   EXHAUSTIVE_WORKFLOW = File.join(ROOT, ".github/workflows/ios-exhaustive.yml")
   PREPARE_IOS_ACTION = File.join(ROOT, ".github/actions/prepare-ios/action.yml")
   REPORT_DURATION_ACTION = File.join(ROOT, ".github/actions/report-ci-duration/action.yml")
-  RECOVERY_SMOKE = "SoftballScoringUITests/ScrollReachabilityUITests/testUndoLatestPitchConfirmsCancelsAndRestoresLiveStateFromHistory"
+  UI_TESTS = File.join(ROOT, "Tests/SoftballScoringUITests/ScrollReachabilityUITests.swift")
+  RECOVERY_SMOKE = "SoftballScoringUITests/ScrollReachabilityUITests/testSliceSixRecoveryJourneySurvivesColdRelaunch"
 
   def test_pull_requests_run_the_stable_fast_verification_contract
     workflow = load_workflow(FAST_WORKFLOW)
@@ -25,6 +26,7 @@ class WorkflowContractTest < Minitest::Test
     assert_includes commands, "-only-testing:DomainTests"
     assert_includes commands, "-only-testing:ScoringEngineTests"
     assert_includes commands, "-only-testing:#{RECOVERY_SMOKE}"
+    assert_includes File.read(UI_TESTS), "func #{RECOVERY_SMOKE.split('/').last}()"
     assert_fresh_serial_simulator(job)
     assert_failures_surface(job)
     assert_duration_is_recorded(job)

@@ -7,6 +7,9 @@
 - Slice 2 — New game + lineup + starting pitcher + resume.
 - Slice 3 — Defensive pitch-by-pitch scoring / event reducer.
 - Slice 4 — Ball In Play + runner confirmation + runs + outs.
+- Slice 5 — Full tracked-team offensive scoring and player attribution.
+- Slice 5.5 — Approved scorebook visual alignment and evidence matrix.
+- Slice 6 — Play History, Undo, correction, pitch reconciliation, locked-history repair, and cold-relaunch proof.
 
 ## Field-feedback fixes after Slice 4
 
@@ -15,23 +18,6 @@
 - Innings-based or 30–90 minute wheel-selected game setup, persisted format display, and informational countdown.
 
 ## Next
-
-### Slice 5 — Full offensive scoring
-
-- Current tracked-team batter from lineup.
-- Player-attributed PA results.
-- Offensive runner IDs use player IDs rather than opponent slots.
-- Batting stat projection inputs.
-- Batting-order rollover.
-- Quick PA scoring when pitch-level tracking is unavailable/not desired.
-
-### Slice 6 — Recovery / trust
-
-- Undo latest event.
-- Play history.
-- Edit/delete prior play and full replay.
-- Manual pitch-count correction.
-- Reconcile a quick-scored PA with pitch total.
 
 ### Slice 7 — Pitching changes
 
@@ -62,13 +48,17 @@
 
 Must be scheduled before declaring game-complete MVP:
 
-- Stolen base.
-- Caught stealing.
 - Wild pitch.
 - Passed ball.
 - Manual advance / score / out on basepaths.
 - Dropped third strike.
-- Quick-scoring pitch-count reconciliation.
+
+## Maintenance follow-up awaiting issue publication
+
+- Replace `GameEventCorrectionSession`'s parallel staged-mutation arrays and duplicated preview/save interpreters with one typed mutation collection consumed by both paths.
+- Split the multi-workflow `DefensivePitchEditView.swift` correction UI by workflow family around its existing coordinator and section seams.
+
+These P3 review findings are non-blocking for Slice 6. Publish them as GitHub issues before merge once external publication is explicitly authorized.
 
 ## Post-MVP / field-evidence candidates
 

@@ -2,6 +2,27 @@ import XCTest
 
 @MainActor
 final class ScrollReachabilityUITests: XCTestCase {
+    private struct RecoveryJourneyExpectations {
+        let timelinesByGame: [String: [String]]
+    }
+
+    func testSliceSixRecoveryJourneySurvivesColdRelaunch() {
+        let app = launchApp(
+            persistentStoreName: "slice-six-recovery-journey-\(UUID().uuidString)"
+        )
+        app.tabBars.buttons["Games"].tap()
+
+        recordMixedHistoryAndUndoLatestPlay(in: app)
+        stageAndRepairInvalidDownstreamHistory(in: app)
+        correctDefensivePlayAndReconcilePitchTotal(in: app)
+        correctTrackedBaseRunning(in: app)
+        repairLockedHistoryAndResumeScoring(in: app)
+        let expectations = captureRecoveryJourneyExpectations(in: app)
+
+        relaunchAtAccessibilityXL(app)
+        verifyRecoveryJourneyAfterColdRelaunch(expectations, in: app)
+    }
+
     func testSliceFiveFiveStandardEvidenceSurfacesRemainReachable() {
         captureSliceFiveFiveEvidence(atAccessibilityTextSize: false)
     }
@@ -2340,6 +2361,486 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["stats.empty.page"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["No Stats Yet"].isHittable)
         captureScreenshot(named: "stats-empty", from: app)
+    }
+
+    private func recordMixedHistoryAndUndoLatestPlay(in app: XCUIApplication) {
+        openGame(named: "UI Defense Opponent", in: app)
+
+        for _ in 0..<9 {
+            let calledStrike = app.buttons["Called Strike"]
+            XCTAssertTrue(scrollUntilHittable(calledStrike, in: app))
+            calledStrike.tap()
+        }
+        let currentBatter = app.staticTexts["offense.currentBatter"]
+        XCTAssertTrue(currentBatter.waitForExistence(timeout: 3))
+        XCTAssertEqual(currentBatter.label, "Player 01")
+
+        let homeRun = app.buttons["Home Run"]
+        XCTAssertTrue(scrollUntilHittable(homeRun, in: app))
+        homeRun.tap()
+        XCTAssertTrue(waitForLabel("Player 02", on: currentBatter))
+        XCTAssertTrue(app.staticTexts["UI Defense Opponent, 0"].exists)
+        XCTAssertTrue(app.staticTexts["Us, 1"].exists)
+
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["TOP 1"].exists)
+        XCTAssertTrue(app.staticTexts["BOTTOM 1"].exists)
+
+        let defensivePlay = app.buttons["history.entry.1"]
+        XCTAssertTrue(defensivePlay.waitForExistence(timeout: 3))
+        XCTAssertTrue(defensivePlay.label.contains("Top of inning 1"))
+        XCTAssertTrue(defensivePlay.label.contains("Opponent batter 1"))
+        XCTAssertTrue(defensivePlay.label.contains("K · Batter out"))
+        XCTAssertGreaterThanOrEqual(defensivePlay.frame.height, 44)
+
+        let trackedPlay = app.buttons["history.entry.10"]
+        XCTAssertTrue(trackedPlay.waitForExistence(timeout: 3))
+        XCTAssertTrue(trackedPlay.label.contains("Bottom of inning 1"))
+        XCTAssertTrue(trackedPlay.label.contains("Player 01"))
+        XCTAssertTrue(trackedPlay.label.contains("HR · Batter to Home"))
+        XCTAssertGreaterThanOrEqual(trackedPlay.frame.height, 44)
+        captureScreenshot(named: "slice6-standard-mixed-history", from: app)
+
+        let undo = app.buttons["history.undoLatestAction"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 3))
+        XCTAssertEqual(undo.label, "Undo Latest Play")
+        XCTAssertGreaterThanOrEqual(undo.frame.height, 44)
+        undo.tap()
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(
+                format: "label CONTAINS %@",
+                "Bottom of inning 1, Player 01, batting slot 1 of 14, sequence 10: Home Run"
+            )
+        ).firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Undo Home Run"].waitForExistence(timeout: 3))
+        app.buttons["Undo Home Run"].tap()
+
+        XCTAssertFalse(app.buttons["history.entry.10"].exists)
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertTrue(currentBatter.waitForExistence(timeout: 3))
+        XCTAssertEqual(currentBatter.label, "Player 01")
+        XCTAssertTrue(app.staticTexts["UI Defense Opponent, 0"].exists)
+        XCTAssertTrue(app.staticTexts["Us, 0"].exists)
+        XCTAssertEqual(app.staticTexts["game.count"].value as? String, "0 outs, bases empty")
+        let battingLine = app.otherElements["offense.battingLine"]
+        XCTAssertTrue(scrollUntilHittable(battingLine, in: app))
+        XCTAssertEqual(battingLine.staticTexts["scorebook.stat.pa.value"].label, "0")
+        XCTAssertEqual(battingLine.staticTexts["scorebook.stat.hr.value"].label, "0")
+        returnToGames(from: "UI Defense Opponent", in: app)
+    }
+
+    private func stageAndRepairInvalidDownstreamHistory(in app: XCUIApplication) {
+        openGame(named: "UI Multi Correction Opponent", in: app)
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        app.buttons["history.entry.1"].tap()
+        app.buttons["history.deletePitch.1"].tap()
+        XCTAssertTrue(app.buttons["Preview Deletion"].waitForExistence(timeout: 3))
+        app.buttons["Preview Deletion"].tap()
+
+        XCTAssertTrue(app.navigationBars["Delete Pitch"].waitForExistence(timeout: 3))
+        let form = app.collectionViews.firstMatch
+        let problem = app.buttons["correction.problem.5"]
+        XCTAssertTrue(swipeWithinUntilHittable(problem, in: form))
+        let save = app.buttons["pitchDelete.save"]
+        XCTAssertFalse(save.isEnabled)
+        XCTAssertTrue(problem.label.contains("Opponent batter 2"))
+        problem.tap()
+
+        XCTAssertTrue(app.navigationBars["Affected Event"].waitForExistence(timeout: 3))
+        let affectedForm = app.collectionViews.element(boundBy: app.collectionViews.count - 1)
+        let deleteAffectedPitch = app.buttons["correction.repair.delete"]
+        XCTAssertTrue(swipeWithinUntilHittable(deleteAffectedPitch, in: affectedForm))
+        XCTAssertGreaterThanOrEqual(deleteAffectedPitch.frame.height, 44)
+        deleteAffectedPitch.tap()
+
+        XCTAssertTrue(app.navigationBars["Delete Pitch"].waitForExistence(timeout: 3))
+        let repairedForm = app.collectionViews.firstMatch
+        XCTAssertTrue(swipeWithinUntilHittable(
+            app.staticTexts["Candidate timeline replays cleanly"],
+            in: repairedForm
+        ))
+        XCTAssertTrue(app.staticTexts["correction.change.1"].exists)
+        XCTAssertTrue(swipeWithinUntilHittable(
+            app.staticTexts["correction.change.5"],
+            in: repairedForm
+        ))
+        XCTAssertTrue(save.isEnabled)
+        XCTAssertGreaterThanOrEqual(save.frame.height, 44)
+        save.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertEqual(app.staticTexts["game.count"].label, "Count 3 and 0")
+        XCTAssertTrue(app.staticTexts["Pitcher · 3 pitches · Opponent batter 1"].exists)
+        returnToGames(from: "UI Multi Correction Opponent", in: app)
+    }
+
+    private func correctDefensivePlayAndReconcilePitchTotal(in app: XCUIApplication) {
+        openGame(named: "UI Ball In Play Undo Opponent", in: app)
+        let count = app.staticTexts["game.count"]
+        XCTAssertEqual(count.value as? String, "0 outs, on 1B")
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        app.buttons["history.entry.1"].tap()
+        let editPlay = app.buttons["history.editPlay.2"]
+        XCTAssertTrue(editPlay.waitForExistence(timeout: 3))
+        XCTAssertEqual(editPlay.label, "Edit Single result, sequence 2")
+        editPlay.tap()
+
+        XCTAssertTrue(app.navigationBars["Edit Play"].waitForExistence(timeout: 3))
+        let form = app.collectionViews.firstMatch
+        let save = app.buttons["playEdit.save"]
+        let outcome = app.buttons["playEdit.outcomePicker"]
+        XCTAssertTrue(swipeWithinUntilHittable(outcome, in: form, above: save))
+        outcome.tap()
+        app.buttons["Reached on Error"].tap()
+        let confirmRunners = app.buttons["playEdit.confirmRunners"]
+        XCTAssertTrue(swipeWithinUntilHittable(confirmRunners, in: form, above: save))
+        confirmRunners.tap()
+        XCTAssertTrue(app.navigationBars["Confirm Correction"].waitForExistence(timeout: 3))
+        app.buttons["Preview"].tap()
+
+        let proposed = app.staticTexts["playEdit.proposed"]
+        XCTAssertTrue(swipeWithinUntilHittable(proposed, in: form, above: save))
+        XCTAssertTrue(proposed.label.contains("Proposed: Reached on Error · Batter to 1B"))
+        XCTAssertTrue(proposed.label.contains("Score 0–0"))
+        XCTAssertTrue(proposed.label.contains("Outs 0 · Bases 1B 1 · Opponent batter 2"))
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        let correctedPlay = app.buttons["history.entry.1"]
+        XCTAssertTrue(correctedPlay.label.contains("E · Batter to 1B"))
+        app.buttons["history.reconcilePitches"].tap()
+
+        XCTAssertTrue(app.navigationBars["Reconcile Pitch Total"].waitForExistence(timeout: 3))
+        let total = app.steppers["reconciliation.total"]
+        let balls = app.steppers["reconciliation.balls"]
+        let relatedPlay = app.buttons["reconciliation.relatedPlay"]
+        XCTAssertTrue(total.waitForExistence(timeout: 3))
+        relatedPlay.tap()
+        let correctedPlayOption = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Sequence 2")
+        ).firstMatch
+        XCTAssertTrue(correctedPlayOption.waitForExistence(timeout: 3))
+        correctedPlayOption.tap()
+        total.buttons["reconciliation.total-Increment"].tap()
+        total.buttons["reconciliation.total-Increment"].tap()
+        balls.buttons["reconciliation.balls-Increment"].tap()
+        let saveReconciliation = app.buttons["reconciliation.save"]
+        XCTAssertTrue(saveReconciliation.isEnabled)
+        saveReconciliation.tap()
+
+        XCTAssertTrue(correctedPlay.waitForExistence(timeout: 3))
+        XCTAssertTrue(correctedPlay.label.contains("E · Batter to 1B"))
+        XCTAssertTrue(correctedPlay.label.contains("Pitch total plus 2"))
+        XCTAssertTrue(correctedPlay.label.contains("Unclassified plus 1"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertEqual(count.value as? String, "0 outs, on 1B")
+        XCTAssertTrue(app.staticTexts["Pitcher · 3 pitches · Opponent batter 2"].exists)
+        returnToGames(from: "UI Ball In Play Undo Opponent", in: app)
+    }
+
+    private func correctTrackedBaseRunning(in app: XCUIApplication) {
+        openGame(named: "UI Opponent", in: app)
+        let currentBatter = app.staticTexts["offense.currentBatter"]
+        let count = app.staticTexts["game.count"]
+        let single = app.buttons["1B"]
+        XCTAssertTrue(scrollUntilHittable(single, in: app))
+        single.tap()
+        XCTAssertTrue(app.navigationBars["Record Our Play"].waitForExistence(timeout: 3))
+        app.buttons["Record"].tap()
+
+        let ball = app.buttons["offense.pitch.ball"]
+        XCTAssertTrue(scrollFromTopUntilHittable(ball, in: app))
+        ball.tap()
+        let stealSecond = app.buttons["offense.baseRunning.first.stolenBase"]
+        XCTAssertTrue(scrollUntilHittable(stealSecond, in: app))
+        stealSecond.tap()
+
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        let steal = app.buttons["history.entry.3"]
+        XCTAssertTrue(steal.waitForExistence(timeout: 3))
+        XCTAssertTrue(steal.label.contains("Player 01"))
+        XCTAssertTrue(steal.label.contains("SB · 1B to 2B"))
+        steal.tap()
+        app.buttons["history.editTrackedBaseRunning.3"].tap()
+
+        XCTAssertTrue(app.navigationBars["Edit Base Running"].waitForExistence(timeout: 3))
+        let form = app.collectionViews.firstMatch
+        let save = app.buttons["trackedBaseRunningEdit.save"]
+        let result = app.buttons["trackedBaseRunningEdit.resultPicker"]
+        XCTAssertTrue(swipeWithinUntilHittable(result, in: form, above: save))
+        result.tap()
+        app.buttons["CS"].tap()
+        app.buttons["trackedBaseRunningEdit.preview"].tap()
+
+        let proposed = app.staticTexts["trackedBaseRunningEdit.proposed"]
+        XCTAssertTrue(swipeWithinUntilHittable(proposed, in: form, above: save))
+        XCTAssertTrue(proposed.label.contains("Player 01 · CS · 1B to Out"))
+        XCTAssertTrue(proposed.label.contains("Outs 1"))
+        XCTAssertTrue(proposed.label.contains("Bases empty"))
+        XCTAssertTrue(proposed.label.contains("Batter 2 · Count 1–0"))
+        XCTAssertTrue(proposed.label.contains("R 0 · RBI 0 · SB 0 · CS 1"))
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["history.entry.3"].label.contains("CS · 1B to Out"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertEqual(currentBatter.label, "Player 02")
+        XCTAssertEqual(count.label, "Count 1 and 0")
+        XCTAssertEqual(count.value as? String, "1 out, bases empty")
+        returnToGames(from: "UI Opponent", in: app)
+    }
+
+    private func repairLockedHistoryAndResumeScoring(in app: XCUIApplication) {
+        openGame(named: "UI Chained Repair Opponent", in: app)
+        let scoringLocked = app.descendants(matching: .any)["game.scoringLocked"]
+        XCTAssertTrue(scoringLocked.waitForExistence(timeout: 3))
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["history.entry.2"].exists)
+        XCTAssertTrue(app.buttons["history.entry.6"].exists)
+        XCTAssertTrue(app.buttons["history.entry.7"].exists)
+
+        let repair = app.buttons["history.repairLockedHistory"]
+        XCTAssertTrue(repair.waitForExistence(timeout: 3))
+        XCTAssertGreaterThanOrEqual(repair.frame.height, 44)
+        repair.tap()
+        XCTAssertTrue(app.navigationBars["Repair Locked History"].waitForExistence(timeout: 3))
+
+        let save = app.buttons["lockedRepair.save"]
+        XCTAssertFalse(save.isEnabled)
+        app.buttons["correction.problem.2"].tap()
+        let deleteExactRecord = app.buttons["correction.repair.deleteProblemRecord"]
+        XCTAssertTrue(deleteExactRecord.waitForExistence(timeout: 3))
+        deleteExactRecord.tap()
+
+        XCTAssertFalse(save.isEnabled)
+        app.buttons["correction.problem.6"].tap()
+        let deleteRejectedPitch = app.buttons["correction.repair.delete"]
+        XCTAssertTrue(deleteRejectedPitch.waitForExistence(timeout: 3))
+        deleteRejectedPitch.tap()
+
+        XCTAssertFalse(save.isEnabled)
+        app.buttons["correction.problem.7"].tap()
+        XCTAssertTrue(deleteExactRecord.waitForExistence(timeout: 3))
+        deleteExactRecord.tap()
+
+        XCTAssertTrue(save.isEnabled)
+        XCTAssertGreaterThanOrEqual(save.frame.height, 44)
+        XCTAssertTrue(app.staticTexts["Candidate timeline replays cleanly"].exists)
+        save.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["history.entry.2"].exists)
+        XCTAssertFalse(app.buttons["history.entry.6"].exists)
+        XCTAssertFalse(app.buttons["history.entry.7"].exists)
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        XCTAssertFalse(scoringLocked.exists)
+        let calledStrike = app.buttons["Called Strike"]
+        XCTAssertTrue(scrollUntilHittable(calledStrike, in: app))
+        calledStrike.tap()
+        XCTAssertEqual(app.staticTexts["game.count"].label, "Count 0 and 2")
+        returnToGames(from: "UI Chained Repair Opponent", in: app)
+    }
+
+    private func captureRecoveryJourneyExpectations(
+        in app: XCUIApplication
+    ) -> RecoveryJourneyExpectations {
+        let games = [
+            "UI Chained Repair Opponent",
+            "UI Opponent",
+            "UI Ball In Play Undo Opponent",
+            "UI Multi Correction Opponent",
+            "UI Defense Opponent"
+        ]
+        var timelinesByGame: [String: [String]] = [:]
+
+        for game in games {
+            openGame(named: game, in: app)
+            timelinesByGame[game] = captureExpandedHistoryTimeline(in: app)
+            app.navigationBars["Play History"].buttons.firstMatch.tap()
+            returnToGames(from: game, in: app)
+        }
+
+        return RecoveryJourneyExpectations(timelinesByGame: timelinesByGame)
+    }
+
+    private func verifyRecoveryJourneyAfterColdRelaunch(
+        _ expectations: RecoveryJourneyExpectations,
+        in app: XCUIApplication
+    ) {
+        app.tabBars.buttons["Games"].tap()
+        openGame(named: "UI Chained Repair Opponent", in: app)
+        let scoringLocked = app.descendants(matching: .any)["game.scoringLocked"]
+        XCTAssertFalse(scoringLocked.exists)
+        XCTAssertEqual(app.staticTexts["game.count"].label, "0 – 2")
+        assertExpandedHistoryTimelineMatches(
+            expectations,
+            game: "UI Chained Repair Opponent",
+            in: app
+        )
+        XCTAssertFalse(app.buttons["history.repairLockedHistory"].exists)
+        let repairedHistory = app.buttons["history.entry.1"]
+        XCTAssertTrue(repairedHistory.waitForExistence(timeout: 3))
+        XCTAssertTrue(repairedHistory.label.contains("Top of inning 1"))
+        XCTAssertGreaterThanOrEqual(repairedHistory.frame.height, 44)
+        captureScreenshot(named: "slice6-accessibility-xl-repaired-history", from: app)
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        returnToGames(from: "UI Chained Repair Opponent", in: app)
+
+        openGame(named: "UI Opponent", in: app)
+        XCTAssertEqual(app.staticTexts["offense.currentBatter"].label, "Player 02")
+        XCTAssertEqual(app.staticTexts["game.count"].label, "1 – 0")
+        XCTAssertEqual(app.staticTexts["game.count"].value as? String, "1 out, bases empty")
+        assertExpandedHistoryTimelineMatches(expectations, game: "UI Opponent", in: app)
+        XCTAssertTrue(app.buttons["history.entry.1"].label.contains("1B · Batter to 1B"))
+        XCTAssertTrue(app.buttons["history.entry.3"].label.contains("CS · 1B to Out"))
+
+        let trackedPlayEntry = app.buttons["history.entry.1"]
+        XCTAssertTrue(scrollFromTopUntilHittable(trackedPlayEntry, in: app))
+        trackedPlayEntry.tap()
+        let editTrackedPlay = app.buttons["history.editTrackedPlay.1"]
+        XCTAssertTrue(scrollUntilHittable(editTrackedPlay, in: app))
+        editTrackedPlay.tap()
+        let trackedPlay = app.staticTexts["trackedPlayEdit.current"]
+        XCTAssertTrue(trackedPlay.waitForExistence(timeout: 3))
+        XCTAssertTrue(trackedPlay.label.contains("Batting PA 1 · AB 1 · H 1"))
+        app.buttons["trackedPlayEdit.cancel"].tap()
+
+        let trackedBaseRunningEntry = app.buttons["history.entry.3"]
+        XCTAssertTrue(scrollUntilHittable(trackedBaseRunningEntry, in: app))
+        trackedBaseRunningEntry.tap()
+        let editBaseRunning = app.buttons["history.editTrackedBaseRunning.3"]
+        XCTAssertTrue(scrollUntilHittable(editBaseRunning, in: app))
+        editBaseRunning.tap()
+        let trackedBaseRunning = app.staticTexts["trackedBaseRunningEdit.current"]
+        XCTAssertTrue(trackedBaseRunning.waitForExistence(timeout: 3))
+        XCTAssertTrue(trackedBaseRunning.label.contains("SB 0 · CS 1"))
+        app.buttons["trackedBaseRunningEdit.cancel"].tap()
+
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        returnToGames(from: "UI Opponent", in: app)
+
+        openGame(named: "UI Ball In Play Undo Opponent", in: app)
+        XCTAssertEqual(app.staticTexts["game.count"].value as? String, "0 outs, on 1B")
+        XCTAssertTrue(app.staticTexts["Pitching · 3 pitches · Opp batter 2"].exists)
+        assertExpandedHistoryTimelineMatches(
+            expectations,
+            game: "UI Ball In Play Undo Opponent",
+            in: app
+        )
+        let correctedPlay = app.buttons["history.entry.1"]
+        XCTAssertTrue(correctedPlay.waitForExistence(timeout: 3))
+        XCTAssertTrue(correctedPlay.label.contains("E · Batter to 1B"))
+        XCTAssertTrue(correctedPlay.label.contains("Pitch total plus 2"))
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        returnToGames(from: "UI Ball In Play Undo Opponent", in: app)
+
+        openGame(named: "UI Multi Correction Opponent", in: app)
+        XCTAssertEqual(app.staticTexts["game.count"].label, "3 – 0")
+        XCTAssertTrue(app.staticTexts["Pitching · 3 pitches · Opp batter 1"].exists)
+        assertExpandedHistoryTimelineMatches(
+            expectations,
+            game: "UI Multi Correction Opponent",
+            in: app
+        )
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+        returnToGames(from: "UI Multi Correction Opponent", in: app)
+
+        openGame(named: "UI Defense Opponent", in: app)
+        XCTAssertEqual(app.staticTexts["offense.currentBatter"].label, "Player 01")
+        XCTAssertEqual(
+            app.descendants(matching: .any)["game.score"].label,
+            "Bottom of inning 1. UI Defense Opponent 0, Us 0"
+        )
+        XCTAssertEqual(app.staticTexts["game.count"].value as? String, "0 outs, bases empty")
+        assertExpandedHistoryTimelineMatches(
+            expectations,
+            game: "UI Defense Opponent",
+            in: app
+        )
+        XCTAssertTrue(app.staticTexts["TOP 1"].exists)
+        XCTAssertFalse(app.staticTexts["BOTTOM 1"].exists)
+        XCTAssertTrue(app.buttons["history.entry.1"].label.contains("K · Batter out"))
+        XCTAssertFalse(app.buttons["history.entry.10"].exists)
+    }
+
+    private func assertExpandedHistoryTimelineMatches(
+        _ expectations: RecoveryJourneyExpectations,
+        game: String,
+        in app: XCUIApplication
+    ) {
+        let actual = captureExpandedHistoryTimeline(in: app)
+        guard let expected = expectations.timelinesByGame[game] else {
+            XCTFail("Missing pre-relaunch timeline for \(game)")
+            return
+        }
+        XCTAssertEqual(actual, expected, "\(game) durable timeline changed after relaunch")
+    }
+
+    private func captureExpandedHistoryTimeline(in app: XCUIApplication) -> [String] {
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+
+        let entryIdentifiers = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "history.entry.")
+        ).allElementsBoundByIndex.map(\.identifier).sorted()
+        XCTAssertFalse(entryIdentifiers.isEmpty)
+        var components: [String] = []
+        for identifier in entryIdentifiers {
+            let entry = app.buttons[identifier]
+            XCTAssertTrue(scrollUntilHittable(entry, in: app))
+            entry.tap()
+            let entryComponents = app.descendants(matching: .any).matching(
+                NSPredicate(format: "label BEGINSWITH %@", "Event ")
+            ).allElementsBoundByIndex.map(\.label)
+            XCTAssertFalse(entryComponents.isEmpty)
+            components.append(contentsOf: entryComponents)
+            XCTAssertTrue(scrollUntilHittable(entry, in: app))
+            entry.tap()
+        }
+
+        XCTAssertFalse(components.isEmpty)
+        // Accessibility layouts may expose the same component through both disclosure containers;
+        // the durable contract being compared is the unique sequence-and-summary set.
+        return Array(Set(components)).sorted()
+    }
+
+    private func openGame(named opponentName: String, in app: XCUIApplication) {
+        let game = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", opponentName)
+        ).firstMatch
+        if !game.isHittable {
+            for _ in 0..<6 { app.swipeDown() }
+        }
+        XCTAssertTrue(scrollUntilHittable(game, in: app), "\(opponentName) was not reachable")
+        game.tap()
+        XCTAssertTrue(app.navigationBars[opponentName].waitForExistence(timeout: 3))
+    }
+
+    private func returnToGames(from opponentName: String, in app: XCUIApplication) {
+        let back = app.navigationBars[opponentName].buttons.firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 3))
+        back.tap()
+        XCTAssertTrue(app.navigationBars["Games"].waitForExistence(timeout: 3))
+    }
+
+    private func relaunchAtAccessibilityXL(_ app: XCUIApplication) {
+        app.terminate()
+        guard let categoryIndex = app.launchArguments.firstIndex(
+            of: "-UIPreferredContentSizeCategoryName"
+        ) else {
+            XCTFail("Missing preferred content-size launch argument")
+            return
+        }
+        app.launchArguments[categoryIndex + 1] = "UICTContentSizeCategoryAccessibilityXL"
+        app.launch()
     }
 
     private func addStartingLineup(in app: XCUIApplication) {
