@@ -3513,7 +3513,8 @@ enum GameEventCorrection {
             let adjustmentRemainsValid = entry.stateBefore
                 .pitchCount(for: reconciliation.pitcherID)
                 .reconciling(reconciliation) != nil
-            canRepairPitchCountReconciliation = adjustmentRemainsValid
+            canRepairPitchCountReconciliation = entry.rejection != .invalidSequence
+                && adjustmentRemainsValid
                 && reconciliation.relatedPlay != nil
             canDeletePitchCountReconciliation = entry.rejection != .invalidSequence
                 && originalReplay.entries.contains(where: {

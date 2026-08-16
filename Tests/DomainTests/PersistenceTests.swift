@@ -11151,6 +11151,56 @@ extension PersistenceTests {
         #expect(repaired.snapshot.records.isEmpty)
     }
 
+    @Test func duplicateSequenceReconciliationAllowsOnlyExactRecordDeletion() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let timestamp = Date(timeIntervalSince1970: 200)
+        let pitch = try GameEventRecord(
+            id: #require(UUID(uuidString: "00000000-0000-0000-0000-000000000011")),
+            gameID: game.id,
+            sequenceNumber: 1,
+            timestamp: timestamp,
+            body: .pitch(.init(
+                result: .ball,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        let duplicate = try GameEventRecord(
+            id: #require(UUID(uuidString: "00000000-0000-0000-0000-000000000012")),
+            gameID: game.id,
+            sequenceNumber: 1,
+            timestamp: timestamp,
+            body: .pitchCountReconciliation(.init(
+                pitcherID: pitcherID,
+                adjustment: .init(total: 1, balls: 0, strikes: 0),
+                relatedPlay: pitch.relatedDefensivePlayReference
+            ))
+        )
+        [duplicate, pitch].forEach(context.insert)
+        try context.save()
+
+        let session = try GameEventCorrection.beginGameEventCorrection(
+            game: game,
+            modelContext: context
+        )
+        #expect(session.firstInvalidRecord?.id == duplicate.id)
+        #expect(session.firstInvalidRecord?.canRepairPitchCountReconciliation == false)
+        #expect(session.firstInvalidRecord?.canDeletePitchCountReconciliation == false)
+        #expect(session.firstInvalidRecord?.canDeleteProblemRecord == true)
+
+        let repaired = try GameEventCorrection.stageProblemRecordDeletion(
+            recordID: duplicate.id,
+            in: session,
+            game: game,
+            modelContext: context
+        )
+        #expect(repaired.canSave)
+        #expect(repaired.snapshot.records.map(\.id) == [pitch.id])
+    }
+
     @Test func initiallyRejectedReconciliationCanBeExplicitlyDeleted() throws {
         let container = try AppModelContainer.make(inMemory: true)
         let context = container.mainContext
