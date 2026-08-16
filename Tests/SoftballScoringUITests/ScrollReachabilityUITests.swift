@@ -2739,11 +2739,25 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(trackedPlay.label.contains("Batting PA 1 · AB 1 · H 1"))
         app.buttons["trackedPlayEdit.cancel"].tap()
 
+        let historyPage = app.scrollViews["history.page"]
+        XCTAssertTrue(historyPage.waitForExistence(timeout: 3))
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(scrollHistoryEntryHeaderUntilHittable(
+            trackedPlayEntry,
+            in: historyPage,
+            above: tabBar
+        ))
+        trackedPlayEntry.tap()
+
         let trackedBaseRunningEntry = app.buttons["history.entry.3"]
-        XCTAssertTrue(scrollUntilHittable(trackedBaseRunningEntry, in: app))
+        XCTAssertTrue(scrollHistoryEntryHeaderUntilHittable(
+            trackedBaseRunningEntry,
+            in: historyPage,
+            above: tabBar
+        ))
         trackedBaseRunningEntry.tap()
         let editBaseRunning = app.buttons["history.editTrackedBaseRunning.3"]
-        XCTAssertTrue(scrollFromTopUntilHittable(editBaseRunning, in: app))
+        XCTAssertTrue(scrollUntilHittable(editBaseRunning, in: app))
         editBaseRunning.tap()
         let trackedBaseRunning = app.staticTexts["trackedBaseRunningEdit.current"]
         XCTAssertTrue(trackedBaseRunning.waitForExistence(timeout: 3))
