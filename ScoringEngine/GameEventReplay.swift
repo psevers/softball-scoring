@@ -8,11 +8,12 @@ enum GameEventReplay {
         case unknownKind
         case malformedPayload
         case semanticallyRejected
+        case projectionRejected
 
         var allowsDeletionOnlyRecovery: Bool {
             switch self {
             case .unknownKind, .malformedPayload: true
-            case .invalidSequence, .semanticallyRejected: false
+            case .invalidSequence, .semanticallyRejected, .projectionRejected: false
             }
         }
     }
@@ -70,8 +71,13 @@ enum GameEventReplay {
         var completedDefensivePlayReferences: [UUID: RelatedDefensivePlayReference] = [:]
 
         let ordered = records.sorted { lhs, rhs in
-            if lhs.sequenceNumber == rhs.sequenceNumber { return lhs.timestamp < rhs.timestamp }
-            return lhs.sequenceNumber < rhs.sequenceNumber
+            if lhs.sequenceNumber != rhs.sequenceNumber {
+                return lhs.sequenceNumber < rhs.sequenceNumber
+            }
+            if lhs.timestamp != rhs.timestamp {
+                return lhs.timestamp < rhs.timestamp
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
         }
 
         for record in ordered {
@@ -83,7 +89,7 @@ enum GameEventReplay {
                     recordID: record.id,
                     sequenceNumber: record.sequenceNumber,
                     timestamp: record.timestamp,
-                    body: nil,
+                    body: try? record.decoded().body,
                     stateBefore: stateBefore,
                     stateAfter: state,
                     rejection: .invalidSequence

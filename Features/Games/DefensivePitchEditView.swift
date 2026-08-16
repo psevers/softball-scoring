@@ -1063,8 +1063,14 @@ struct UnreadableRecordDeletionView: View {
                         GameEventCorrectionSections(
                             correctionSession: correctionSession,
                             homeAway: HomeAway(rawValue: game.homeAwayRawValue),
-                            allowsProblemRepair: false,
-                            stageChange: { _, _ in }
+                            stageChange: { problem, action in
+                                correction.stageRepair(
+                                    recordID: problem.id,
+                                    action: action,
+                                    game: game,
+                                    modelContext: modelContext
+                                )
+                            }
                         )
                     } else if correction.errorMessage == nil {
                         Section("Candidate replay") {
@@ -1127,6 +1133,96 @@ struct UnreadableRecordDeletionView: View {
             )
         } catch {
             correction.present(error)
+        }
+    }
+
+    private func save() {
+        if correction.save(
+            liveSession: liveSession,
+            game: game,
+            modelContext: modelContext
+        ) {
+            dismiss()
+        }
+    }
+}
+
+struct LockedHistoryCorrectionView: View {
+    let game: Game
+    let liveSession: LiveGameSession
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @State private var correction: GameEventCorrectionCoordinator
+
+    init(
+        game: Game,
+        correctionSession: GameEventCorrectionSession,
+        liveSession: LiveGameSession
+    ) {
+        self.game = game
+        self.liveSession = liveSession
+        _correction = State(initialValue: GameEventCorrectionCoordinator(
+            session: correctionSession
+        ))
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Form {
+                    if let correctionSession = correction.session {
+                        GameEventCorrectionSections(
+                            correctionSession: correctionSession,
+                            homeAway: HomeAway(rawValue: game.homeAwayRawValue),
+                            stageChange: { problem, action in
+                                correction.stageRepair(
+                                    recordID: problem.id,
+                                    action: action,
+                                    game: game,
+                                    modelContext: modelContext
+                                )
+                            }
+                        )
+                    }
+                }
+
+                Divider()
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    Button("Cancel") { dismiss() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("lockedRepair.cancel")
+
+                    Button("Save All Repairs") { save() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .disabled(correction.session?.canSave != true)
+                        .accessibilityIdentifier("lockedRepair.save")
+                }
+                .padding(.horizontal, AppTheme.Spacing.md)
+                .padding(.vertical, AppTheme.Spacing.sm)
+                .background(.bar)
+            }
+            .navigationTitle("Repair Locked History")
+            .navigationBarTitleDisplayMode(.inline)
+            .alert("History Repair Failed", isPresented: Binding(
+                get: { correction.errorMessage != nil },
+                set: { if !$0 { correction.errorMessage = nil } }
+            )) {
+                if correction.requiresReopen {
+                    Button("Return to Play History") {
+                        correction.errorMessage = nil
+                        dismiss()
+                    }
+                } else {
+                    Button("OK", role: .cancel) { correction.errorMessage = nil }
+                }
+            } message: {
+                Text(correction.errorMessage ?? "The repair could not be replayed safely.")
+            }
         }
     }
 
@@ -1495,6 +1591,7 @@ private enum GameEventRepairAction {
     case editOffensivePlateAppearance(OffensivePlateAppearanceEvent)
     case repairPitchCountReconciliation(UUID?)
     case deletePitchCountReconciliation
+    case deleteProblemRecord
 }
 
 @MainActor
@@ -1503,6 +1600,10 @@ private final class GameEventCorrectionCoordinator {
     var session: GameEventCorrectionSession?
     var errorMessage: String?
     var requiresReopen = false
+
+    init(session: GameEventCorrectionSession? = nil) {
+        self.session = session
+    }
 
     func present(_ error: Error) {
         if let correctionError = error as? GameEventCorrectionError,
@@ -1611,6 +1712,13 @@ private final class GameEventCorrectionCoordinator {
                 )
             case .deletePitchCountReconciliation:
                 self.session = try GameEventCorrection.stagePitchCountReconciliationDeletion(
+                    recordID: recordID,
+                    in: session,
+                    game: game,
+                    modelContext: modelContext
+                )
+            case .deleteProblemRecord:
+                self.session = try GameEventCorrection.stageProblemRecordDeletion(
                     recordID: recordID,
                     in: session,
                     game: game,
@@ -2071,6 +2179,17 @@ private struct GameEventCorrectionProblemView: View {
                     .accessibilityIdentifier("correction.repair.reconciliation.delete")
                 }
 
+                if problem.canDeleteProblemRecord {
+                    Button(role: .destructive) {
+                        stageChange(.deleteProblemRecord)
+                        dismiss()
+                    } label: {
+                        Label("Delete Exact Problem Record", systemImage: "trash")
+                            .frame(minHeight: AppTheme.TouchTarget.minimum)
+                    }
+                    .accessibilityIdentifier("correction.repair.deleteProblemRecord")
+                }
+
                 if !problem.canEditPitch
                             && !problem.canEditOffensivePitch
                             && !problem.canDeleteOffensivePitch
@@ -2081,6 +2200,7 @@ private struct GameEventCorrectionProblemView: View {
                             && !problem.canDeleteOffensiveBaseRunning
                             && !problem.canRepairPitchCountReconciliation
                             && !problem.canDeletePitchCountReconciliation
+                            && !problem.canDeleteProblemRecord
                             && problem.logicalPlayDeletion == nil {
                     Text("This event does not support another change in this correction session.")
                         .foregroundStyle(AppTheme.graphite.opacity(0.68))

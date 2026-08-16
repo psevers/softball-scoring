@@ -233,6 +233,81 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(app.buttons["game.history"].isHittable)
     }
 
+    func testLockedHistoryStagesThreeRepairsSavesOnceAndResumesScoring() {
+        let app = launchApp(
+            persistentStoreName: "chained-history-repair-\(UUID().uuidString)"
+        )
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Chained Repair Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let scoringLocked = app.descendants(matching: .any)["game.scoringLocked"]
+        XCTAssertTrue(scoringLocked.waitForExistence(timeout: 3))
+        app.buttons["game.history"].tap()
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["history.entry.2"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["history.entry.6"].exists)
+        XCTAssertTrue(app.buttons["history.entry.7"].exists)
+
+        let repairLockedHistory = app.buttons["history.repairLockedHistory"]
+        XCTAssertTrue(repairLockedHistory.waitForExistence(timeout: 3))
+        repairLockedHistory.tap()
+        XCTAssertTrue(app.navigationBars["Repair Locked History"].waitForExistence(timeout: 3))
+
+        let save = app.buttons["lockedRepair.save"]
+        XCTAssertFalse(save.isEnabled)
+        app.buttons["correction.problem.2"].tap()
+        let deleteExactRecord = app.buttons["correction.repair.deleteProblemRecord"]
+        XCTAssertTrue(deleteExactRecord.waitForExistence(timeout: 3))
+        deleteExactRecord.tap()
+
+        XCTAssertFalse(save.isEnabled)
+        let rejectedPitch = app.buttons["correction.problem.6"]
+        XCTAssertTrue(rejectedPitch.waitForExistence(timeout: 3))
+        rejectedPitch.tap()
+        let deleteAffectedPitch = app.buttons["correction.repair.delete"]
+        XCTAssertTrue(deleteAffectedPitch.waitForExistence(timeout: 3))
+        deleteAffectedPitch.tap()
+
+        XCTAssertFalse(save.isEnabled)
+        let malformedRecord = app.buttons["correction.problem.7"]
+        XCTAssertTrue(malformedRecord.waitForExistence(timeout: 3))
+        malformedRecord.tap()
+        XCTAssertTrue(deleteExactRecord.waitForExistence(timeout: 3))
+        deleteExactRecord.tap()
+
+        XCTAssertTrue(save.isEnabled)
+        XCTAssertTrue(app.staticTexts["Candidate timeline replays cleanly"].exists)
+        save.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["history.entry.2"].exists)
+        XCTAssertFalse(app.buttons["history.entry.6"].exists)
+        XCTAssertFalse(app.buttons["history.entry.7"].exists)
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+
+        let count = app.staticTexts["game.count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 3))
+        XCTAssertEqual(count.label, "Count 0 and 1")
+        XCTAssertFalse(scoringLocked.exists)
+        let calledStrike = app.buttons["Called Strike"]
+        XCTAssertTrue(scrollUntilHittable(calledStrike, in: app))
+        calledStrike.tap()
+        XCTAssertEqual(count.label, "Count 0 and 2")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Games"].tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertTrue(count.waitForExistence(timeout: 3))
+        XCTAssertEqual(count.label, "Count 0 and 2")
+        XCTAssertFalse(scoringLocked.exists)
+    }
+
     func testPitchCountReconciliationSupportsSignedAdjustmentsUndoAndRelaunch() {
         let app = launchApp(
             persistentStoreName: "pitch-reconciliation-\(UUID().uuidString)"

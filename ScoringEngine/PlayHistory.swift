@@ -419,6 +419,9 @@ enum PlayHistoryProjector {
         case .semanticallyRejected:
             summary = "Play conflicts with earlier history"
             detail = "The play is readable but invalid at this point in the game"
+        case .projectionRejected:
+            summary = "Batting projection conflict"
+            detail = "The play is readable but cannot produce a valid batting line"
         }
         let actor = "Saved event \(trace.sequenceNumber)"
         let component = PlayHistoryComponent(
