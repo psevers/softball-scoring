@@ -53,6 +53,13 @@ Must be scheduled before declaring game-complete MVP:
 - Manual advance / score / out on basepaths.
 - Dropped third strike.
 
+## Maintenance follow-up awaiting issue publication
+
+- Replace `GameEventCorrectionSession`'s parallel staged-mutation arrays and duplicated preview/save interpreters with one typed mutation collection consumed by both paths.
+- Split the multi-workflow `DefensivePitchEditView.swift` correction UI by workflow family around its existing coordinator and section seams.
+
+These P3 review findings are non-blocking for Slice 6. Publish them as GitHub issues before merge once external publication is explicitly authorized.
+
 ## Post-MVP / field-evidence candidates
 
 - DP/FLEX.

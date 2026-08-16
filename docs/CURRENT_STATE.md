@@ -142,7 +142,7 @@ Result: **PASS**.
 
 ## Adversarial review
 
-See `docs/reviews/SLICE4_ADVERSARIAL_REVIEW.md` and `docs/reviews/SLICE5_ADVERSARIAL_REVIEW.md`.
+See `docs/reviews/SLICE4_ADVERSARIAL_REVIEW.md`, `docs/reviews/SLICE5_ADVERSARIAL_REVIEW.md`, and `docs/reviews/SLICE6_ADVERSARIAL_REVIEW.md`.
 
 No unresolved P0/P1 findings. Important fixes discovered during review include:
 
@@ -170,6 +170,8 @@ Keep ticket #25 local until explicitly authorized to push. Before merge, publish
 - No dedicated triple-play result yet.
 - A time-limit expiration is informational until game-ending rules are implemented; the scorekeeper finalizes play manually.
 - `LiveGameView` remains a broad composition root for scoring UI; further extraction is maintenance work rather than a missing Slice 6 recovery behavior.
+- `GameEventCorrectionSession` should eventually replace its parallel staged-mutation arrays and duplicated preview/save interpreters with one typed mutation collection shared by both paths.
+- `DefensivePitchEditView.swift` should eventually be split by correction workflow family around its existing coordinator and section seams.
 
 ## Current vertical slice
 
