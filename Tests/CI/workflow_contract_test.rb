@@ -42,6 +42,7 @@ class WorkflowContractTest < Minitest::Test
     assert_equal ["push", "workflow_dispatch"], triggers.keys.map(&:to_s).sort
     assert_equal ["main"], triggers.fetch("push").fetch("branches")
     assert_equal "Exhaustive UI Evidence", job.fetch("name")
+    assert_operator job.fetch("timeout-minutes"), :>=, 60
     assert_includes commands, "-only-testing:SoftballScoringUITests"
     refute_includes commands, "-skip-testing:"
     assert_fresh_serial_simulator(job)

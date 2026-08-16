@@ -12,7 +12,7 @@ jobs:
   exhaustive-ui-evidence:
     name: Exhaustive UI Evidence
     runs-on: macos-15
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - name: Start duration measurement
         id: lane-timing

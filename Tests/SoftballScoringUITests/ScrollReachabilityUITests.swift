@@ -2743,7 +2743,7 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(scrollUntilHittable(trackedBaseRunningEntry, in: app))
         trackedBaseRunningEntry.tap()
         let editBaseRunning = app.buttons["history.editTrackedBaseRunning.3"]
-        XCTAssertTrue(scrollUntilHittable(editBaseRunning, in: app))
+        XCTAssertTrue(scrollFromTopUntilHittable(editBaseRunning, in: app))
         editBaseRunning.tap()
         let trackedBaseRunning = app.staticTexts["trackedBaseRunningEdit.current"]
         XCTAssertTrue(trackedBaseRunning.waitForExistence(timeout: 3))
