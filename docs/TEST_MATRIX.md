@@ -126,7 +126,7 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Cancel and every intermediate stage preserve the durable timeline. After each explicit repair, the first remaining problem is surfaced and Save stays disabled until full decode, semantic validation, replay, History, and batting projection are clean.
 - Multiple staged changes remain reviewable by original identity and sequence. No survivor is skipped, rewritten, reordered, renumbered, detached, or cascade-deleted.
 - One valid Save atomically applies the batch; stale-timeline, projection, and simulated save-failure paths preserve every original record. Survivors retain ID, body, sequence, timestamp, and gaps, and the next write uses the authoritative maximum sequence plus one.
-- Focused persistence coverage repairs an unknown kind, semantic pitch rejection, and malformed payload in one session, covers duplicate sequence and projection problem context, fails a whole-batch save atomically, and verifies a fresh context. Focused UI coverage repeats Save gating across three repairs, saves once, resumes scoring, then terminates and relaunches to reproduce the repaired state.
+- Focused persistence coverage repairs an unknown kind, semantic pitch rejection, and malformed payload in one session; proves stable ID tie-breaking for equal-sequence/equal-timestamp duplicates; repairs initially stranded Ball In Play and reconciliation shapes; surfaces projection problem context; fails a whole-batch save atomically; and verifies a fresh context. Focused UI coverage repeats Save gating across three repairs, saves once, resumes scoring, then terminates and relaunches to reproduce the repaired state.
 
 ## Multiple staged corrections
 

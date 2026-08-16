@@ -33,7 +33,8 @@ enum LiveGameSnapshotLoader {
             predicate: #Predicate { $0.gameID == gameID },
             sortBy: [
                 SortDescriptor(\GameEventRecord.sequenceNumber),
-                SortDescriptor(\GameEventRecord.timestamp)
+                SortDescriptor(\GameEventRecord.timestamp),
+                SortDescriptor(\GameEventRecord.id)
             ]
         )
         let records = try modelContext.fetch(descriptor)

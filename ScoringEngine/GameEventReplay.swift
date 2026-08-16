@@ -71,8 +71,13 @@ enum GameEventReplay {
         var completedDefensivePlayReferences: [UUID: RelatedDefensivePlayReference] = [:]
 
         let ordered = records.sorted { lhs, rhs in
-            if lhs.sequenceNumber == rhs.sequenceNumber { return lhs.timestamp < rhs.timestamp }
-            return lhs.sequenceNumber < rhs.sequenceNumber
+            if lhs.sequenceNumber != rhs.sequenceNumber {
+                return lhs.sequenceNumber < rhs.sequenceNumber
+            }
+            if lhs.timestamp != rhs.timestamp {
+                return lhs.timestamp < rhs.timestamp
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
         }
 
         for record in ordered {

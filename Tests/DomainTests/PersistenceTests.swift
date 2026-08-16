@@ -11058,10 +11058,14 @@ extension PersistenceTests {
         let context = container.mainContext
         let game = makeGame()
         let pitcherID = try #require(game.startingPitcherID)
+        let firstID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
+        let duplicateID = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
+        let sharedTimestamp = Date(timeIntervalSince1970: 100)
         let first = try GameEventRecord(
+            id: firstID,
             gameID: game.id,
             sequenceNumber: 1,
-            timestamp: Date(timeIntervalSince1970: 100),
+            timestamp: sharedTimestamp,
             body: .pitch(.init(
                 result: .ball,
                 pitcherID: pitcherID,
@@ -11069,16 +11073,17 @@ extension PersistenceTests {
             ))
         )
         let duplicate = try GameEventRecord(
+            id: duplicateID,
             gameID: game.id,
             sequenceNumber: 1,
-            timestamp: Date(timeIntervalSince1970: 200),
+            timestamp: sharedTimestamp,
             body: .pitch(.init(
                 result: .calledStrike,
                 pitcherID: pitcherID,
                 opponentBatterSlot: 1
             ))
         )
-        [first, duplicate].forEach(context.insert)
+        [duplicate, first].forEach(context.insert)
         try context.save()
 
         let session = try GameEventCorrection.beginGameEventCorrection(
@@ -11088,9 +11093,17 @@ extension PersistenceTests {
         #expect(session.firstInvalidRecord?.id == duplicate.id)
         #expect(session.firstInvalidRecord?.context.contains("Called Strike") == true)
         #expect(session.firstInvalidRecord?.canDeleteProblemRecord == true)
+        #expect(session.snapshot.records.map(\.id) == [firstID, duplicateID])
         #expect(session.snapshot.history.sections.flatMap(\.entries).contains(where: {
             $0.id == duplicate.id && $0.summary == "Invalid event sequence"
         }))
+
+        let freshSession = try GameEventCorrection.beginGameEventCorrection(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        #expect(freshSession.snapshot.records.map(\.id) == [firstID, duplicateID])
+        #expect(freshSession.firstInvalidRecord?.id == duplicateID)
 
         let repaired = try GameEventCorrection.stageProblemRecordDeletion(
             recordID: duplicate.id,
@@ -11100,6 +11113,76 @@ extension PersistenceTests {
         )
         #expect(repaired.canSave)
         #expect(repaired.snapshot.records.map(\.id) == [first.id])
+    }
+
+    @Test func standaloneRejectedBallInPlayCanBeDeletedExactly() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let play = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 1,
+            body: .ballInPlay(.init(
+                outcome: .single,
+                opponentBatterSlot: 1,
+                movements: [.init(source: .batter, destination: .first)],
+                rbi: 0,
+                thirdOutRunsCounted: nil
+            ))
+        )
+        context.insert(play)
+        try context.save()
+
+        let session = try GameEventCorrection.beginGameEventCorrection(
+            game: game,
+            modelContext: context
+        )
+        #expect(session.firstInvalidRecord?.id == play.id)
+        #expect(session.firstInvalidRecord?.canDeleteProblemRecord == true)
+        #expect(session.firstInvalidRecord?.logicalPlayDeletion == nil)
+
+        let repaired = try GameEventCorrection.stageProblemRecordDeletion(
+            recordID: play.id,
+            in: session,
+            game: game,
+            modelContext: context
+        )
+        #expect(repaired.canSave)
+        #expect(repaired.snapshot.records.isEmpty)
+    }
+
+    @Test func initiallyRejectedReconciliationCanBeExplicitlyDeleted() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let reconciliation = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 1,
+            body: .pitchCountReconciliation(.init(
+                pitcherID: pitcherID,
+                adjustment: .init(total: -1, balls: 0, strikes: 0)
+            ))
+        )
+        context.insert(reconciliation)
+        try context.save()
+
+        let session = try GameEventCorrection.beginGameEventCorrection(
+            game: game,
+            modelContext: context
+        )
+        #expect(session.firstInvalidRecord?.id == reconciliation.id)
+        #expect(session.firstInvalidRecord?.canRepairPitchCountReconciliation == false)
+        #expect(session.firstInvalidRecord?.canDeletePitchCountReconciliation == true)
+
+        let repaired = try GameEventCorrection.stagePitchCountReconciliationDeletion(
+            recordID: reconciliation.id,
+            in: session,
+            game: game,
+            modelContext: context
+        )
+        #expect(repaired.canSave)
+        #expect(repaired.snapshot.records.isEmpty)
     }
 
     @Test func battingProjectionFailureBecomesARepairableProblemEntry() throws {

@@ -1135,10 +1135,10 @@ enum GameEventCorrection {
             throw GameEventCorrectionError.staleTimeline
         }
         guard session.firstInvalidRecord?.id == recordID,
+              session.firstInvalidRecord?.canDeleteProblemRecord == true,
               let entry = session.snapshot.replay.entries.first(where: {
                   $0.recordID == recordID
               }),
-              [.invalidSequence, .unknownKind, .malformedPayload].contains(entry.rejection),
               !session.stagedProblemRecordDeletions.contains(where: {
                   $0.recordID == recordID
               }) else {
@@ -3351,10 +3351,9 @@ enum GameEventCorrection {
             if case .offensiveBaseRunning = $0.body { return true }
             return false
         })
-        let logicalPlayDeletion = completedPlayRepairDeletion(
-            containing: entry.recordID,
-            in: originalReplay
-        )
+        let logicalPlayDeletion = entry.rejection == .invalidSequence
+            ? nil
+            : completedPlayRepairDeletion(containing: entry.recordID, in: originalReplay)
         let offensiveBaseRunningRunners: [OffensiveBaseRunningRunner]
         let offensiveRunnerIdentities: [TrackedBatterIdentity]
         let isProjectionFailure = entry.rejection == .projectionRejected
@@ -3371,7 +3370,7 @@ enum GameEventCorrection {
                 && !completesPlateAppearance(pitch.result, stateBefore: entry.stateBefore)
             canEditOffensivePitch = false
             canDeleteOffensivePitch = false
-            canDeletePitch = true
+            canDeletePitch = entry.rejection != .invalidSequence
             canEditBallInPlay = false
             canEditOffensiveBaseRunning = false
             canEditOffensivePlateAppearance = false
@@ -3391,7 +3390,8 @@ enum GameEventCorrection {
                 $0.recordID == entry.recordID
             }),
                case .ballInPlay(let originalPlay) = originalEntry.body {
-                canEditBallInPlay = BallInPlayValidator.supportsCorrection(
+                canEditBallInPlay = entry.rejection != .invalidSequence
+                    && BallInPlayValidator.supportsCorrection(
                     originalPlay,
                     stateBefore: originalEntry.stateBefore
                 ) && BallInPlayValidator.supportsCorrection(
@@ -3414,8 +3414,8 @@ enum GameEventCorrection {
                 + "\(entry.stateBefore.balls)–\(entry.stateBefore.strikes) count "
                 + "before rejecting this pitch for its event-time batter."
             canEditPitch = false
-            canEditOffensivePitch = true
-            canDeleteOffensivePitch = true
+            canEditOffensivePitch = entry.rejection != .invalidSequence
+            canDeleteOffensivePitch = entry.rejection != .invalidSequence
             canDeletePitch = false
             canEditBallInPlay = false
             canEditOffensiveBaseRunning = false
@@ -3445,7 +3445,8 @@ enum GameEventCorrection {
             } else {
                 false
             }
-            canEditOffensiveBaseRunning = resolvedRunners?.isEmpty == false
+            canEditOffensiveBaseRunning = entry.rejection != .invalidSequence
+                && resolvedRunners?.isEmpty == false
                 && originalWasBaseRunning
             offensiveBaseRunningRunners = canEditOffensiveBaseRunning ? resolvedRunners ?? [] : []
             offensiveRunnerIdentities = []
@@ -3493,7 +3494,8 @@ enum GameEventCorrection {
                 $0.recordID == entry.recordID
             }),
                case .offensivePlateAppearance(let originalPlateAppearance) = originalEntry.body {
-                canEditOffensivePlateAppearance = OffensivePlateAppearanceValidator.supportsCorrection(
+                canEditOffensivePlateAppearance = entry.rejection != .invalidSequence
+                    && OffensivePlateAppearanceValidator.supportsCorrection(
                     originalPlateAppearance,
                     stateBefore: originalEntry.stateBefore
                 ) && OffensivePlateAppearanceValidator.supportsCorrection(
@@ -3513,11 +3515,12 @@ enum GameEventCorrection {
                 .reconciling(reconciliation) != nil
             canRepairPitchCountReconciliation = adjustmentRemainsValid
                 && reconciliation.relatedPlay != nil
-            canDeletePitchCountReconciliation = originalReplay.entries.contains(where: {
-                guard $0.recordID == entry.recordID, $0.rejection == nil else { return false }
-                if case .pitchCountReconciliation = $0.body { return true }
-                return false
-            })
+            canDeletePitchCountReconciliation = entry.rejection != .invalidSequence
+                && originalReplay.entries.contains(where: {
+                    guard $0.recordID == entry.recordID else { return false }
+                    if case .pitchCountReconciliation = $0.body { return true }
+                    return false
+                })
             explanation = if canRepairPitchCountReconciliation {
                 "The saved related-play reference no longer matches a completed defensive "
                     + "play in this timeline. Re-associate it with an eligible play or "
@@ -3558,6 +3561,19 @@ enum GameEventCorrection {
             ? "Batting projection rejected this readable event at its original chronological position. "
                 + "Use the event's supported correction controls before saving."
             : explanation
+        let canDeleteProblemRecord = if [
+            GameEventReplay.Rejection.invalidSequence,
+            .unknownKind,
+            .malformedPayload
+        ].contains(entry.rejection) {
+            true
+        } else if entry.rejection == .semanticallyRejected,
+                  case .ballInPlay = entry.body,
+                  logicalPlayDeletion == nil {
+            true
+        } else {
+            false
+        }
         return GameEventCorrectionProblem(
             id: entry.recordID,
             sequenceNumber: entry.sequenceNumber,
@@ -3573,8 +3589,7 @@ enum GameEventCorrection {
             canDeleteOffensiveBaseRunning: canDeleteOffensiveBaseRunning,
             canRepairPitchCountReconciliation: canRepairPitchCountReconciliation,
             canDeletePitchCountReconciliation: canDeletePitchCountReconciliation,
-            canDeleteProblemRecord: [.invalidSequence, .unknownKind, .malformedPayload]
-                .contains(entry.rejection),
+            canDeleteProblemRecord: canDeleteProblemRecord,
             relatedDefensivePlays: relatedDefensivePlays,
             logicalPlayDeletion: logicalPlayDeletion,
             offensiveBaseRunningRunners: offensiveBaseRunningRunners,
@@ -3741,7 +3756,8 @@ enum GameEventCorrection {
             predicate: #Predicate { $0.gameID == gameID },
             sortBy: [
                 SortDescriptor(\GameEventRecord.sequenceNumber),
-                SortDescriptor(\GameEventRecord.timestamp)
+                SortDescriptor(\GameEventRecord.timestamp),
+                SortDescriptor(\GameEventRecord.id)
             ]
         )
         return try modelContext.fetch(descriptor)
