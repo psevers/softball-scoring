@@ -3,7 +3,20 @@ import XCTest
 @MainActor
 final class ScrollReachabilityUITests: XCTestCase {
     private struct RecoveryJourneyExpectations {
-        let timelinesByGame: [String: [String]]
+        let historyComponentsByGame: [String: [String]]
+    }
+
+    func testRecoveryHistoryCapturePreservesFirstSeenComponentOrder() {
+        let components = [
+            "Event 2. Called Strike",
+            "Event 1. Ball",
+            "Event 2. Called Strike"
+        ]
+
+        XCTAssertEqual(
+            orderedUniqueHistoryComponents(components),
+            ["Event 2. Called Strike", "Event 1. Ball"]
+        )
     }
 
     func testSliceSixRecoveryJourneySurvivesColdRelaunch() {
@@ -2659,16 +2672,16 @@ final class ScrollReachabilityUITests: XCTestCase {
             "UI Multi Correction Opponent",
             "UI Defense Opponent"
         ]
-        var timelinesByGame: [String: [String]] = [:]
+        var historyComponentsByGame: [String: [String]] = [:]
 
         for game in games {
             openGame(named: game, in: app)
-            timelinesByGame[game] = captureExpandedHistoryTimeline(in: app)
+            historyComponentsByGame[game] = captureExpandedHistoryComponents(in: app)
             app.navigationBars["Play History"].buttons.firstMatch.tap()
             returnToGames(from: game, in: app)
         }
 
-        return RecoveryJourneyExpectations(timelinesByGame: timelinesByGame)
+        return RecoveryJourneyExpectations(historyComponentsByGame: historyComponentsByGame)
     }
 
     private func verifyRecoveryJourneyAfterColdRelaunch(
@@ -2700,7 +2713,10 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["game.count"].value as? String, "1 out, bases empty")
         assertExpandedHistoryTimelineMatches(expectations, game: "UI Opponent", in: app)
         XCTAssertTrue(app.buttons["history.entry.1"].label.contains("1B · Batter to 1B"))
+        XCTAssertTrue(app.buttons["history.entry.1"].label.contains("Batting 1 of 14"))
+        XCTAssertGreaterThanOrEqual(app.buttons["history.entry.1"].frame.height, 44)
         XCTAssertTrue(app.buttons["history.entry.3"].label.contains("CS · 1B to Out"))
+        XCTAssertTrue(app.buttons["history.entry.3"].label.contains("Batting 1 of 14"))
 
         let trackedPlayEntry = app.buttons["history.entry.1"]
         XCTAssertTrue(scrollFromTopUntilHittable(trackedPlayEntry, in: app))
@@ -2776,17 +2792,19 @@ final class ScrollReachabilityUITests: XCTestCase {
         game: String,
         in app: XCUIApplication
     ) {
-        let actual = captureExpandedHistoryTimeline(in: app)
-        guard let expected = expectations.timelinesByGame[game] else {
-            XCTFail("Missing pre-relaunch timeline for \(game)")
+        let actual = captureExpandedHistoryComponents(in: app)
+        guard let expected = expectations.historyComponentsByGame[game] else {
+            XCTFail("Missing pre-relaunch Play History for \(game)")
             return
         }
-        XCTAssertEqual(actual, expected, "\(game) durable timeline changed after relaunch")
+        XCTAssertEqual(actual, expected, "\(game) rendered Play History changed after relaunch")
     }
 
-    private func captureExpandedHistoryTimeline(in app: XCUIApplication) -> [String] {
+    private func captureExpandedHistoryComponents(in app: XCUIApplication) -> [String] {
         app.buttons["game.history"].tap()
-        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        let historyPage = app.scrollViews["history.page"]
+        XCTAssertTrue(historyPage.waitForExistence(timeout: 3))
+        let tabBar = app.tabBars.firstMatch
 
         let entryIdentifiers = app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "history.entry.")
@@ -2795,21 +2813,60 @@ final class ScrollReachabilityUITests: XCTestCase {
         var components: [String] = []
         for identifier in entryIdentifiers {
             let entry = app.buttons[identifier]
-            XCTAssertTrue(scrollUntilHittable(entry, in: app))
+            XCTAssertTrue(scrollHistoryEntryHeaderUntilHittable(
+                entry,
+                in: historyPage,
+                above: tabBar
+            ))
             entry.tap()
             let entryComponents = app.descendants(matching: .any).matching(
                 NSPredicate(format: "label BEGINSWITH %@", "Event ")
             ).allElementsBoundByIndex.map(\.label)
-            XCTAssertFalse(entryComponents.isEmpty)
+            XCTAssertFalse(entryComponents.isEmpty, "\(identifier) did not expand above the tab bar")
             components.append(contentsOf: entryComponents)
+            // Once open, XCTest reports a disclosure frame that includes its expanded content.
+            // The header remains directly tappable even when the combined frame crosses the tab bar.
             XCTAssertTrue(scrollUntilHittable(entry, in: app))
             entry.tap()
         }
 
         XCTAssertFalse(components.isEmpty)
-        // Accessibility layouts may expose the same component through both disclosure containers;
-        // the durable contract being compared is the unique sequence-and-summary set.
-        return Array(Set(components)).sorted()
+        // Accessibility layouts may expose the same component through both disclosure containers.
+        // Remove duplicates without changing the rendered event order.
+        return orderedUniqueHistoryComponents(components)
+    }
+
+    private func scrollHistoryEntryHeaderUntilHittable(
+        _ entry: XCUIElement,
+        in historyPage: XCUIElement,
+        above tabBar: XCUIElement
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(20)
+        while !isHistoryEntryHeaderHittable(entry, in: historyPage, above: tabBar),
+              Date() < deadline {
+            if entry.exists && entry.frame.minY < historyPage.frame.minY {
+                historyPage.swipeDown()
+            } else {
+                historyPage.swipeUp()
+            }
+        }
+        return isHistoryEntryHeaderHittable(entry, in: historyPage, above: tabBar)
+    }
+
+    private func isHistoryEntryHeaderHittable(
+        _ entry: XCUIElement,
+        in historyPage: XCUIElement,
+        above tabBar: XCUIElement
+    ) -> Bool {
+        guard entry.isHittable, entry.frame.minY >= historyPage.frame.minY else { return false }
+        // Accessibility XL rows can be taller than the viewport. Only the disclosure header's
+        // minimum touch region must clear the persistent tab bar for the expansion tap to land.
+        return entry.frame.minY + 44 < tabBar.frame.minY
+    }
+
+    private func orderedUniqueHistoryComponents(_ components: [String]) -> [String] {
+        var seen = Set<String>()
+        return components.filter { seen.insert($0).inserted }
     }
 
     private func openGame(named opponentName: String, in app: XCUIApplication) {

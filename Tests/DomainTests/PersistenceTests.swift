@@ -59,6 +59,24 @@ private struct OffensiveScoringRemovalScenario: Sendable {
     let expectedBaseSources: [RunnerSource?]
 }
 
+private struct DurableEventRecordSnapshot: Equatable {
+    let id: UUID
+    let gameID: UUID
+    let sequenceNumber: Int
+    let timestamp: Date
+    let kindRawValue: String
+    let payload: Data
+
+    init(_ record: GameEventRecord) {
+        id = record.id
+        gameID = record.gameID
+        sequenceNumber = record.sequenceNumber
+        timestamp = record.timestamp
+        kindRawValue = record.kindRawValue
+        payload = record.payload
+    }
+}
+
 private let offensivePlateAppearanceCorrectionScenarios: [OffensivePlateAppearanceCorrectionScenario] = [
     .init(
         result: .walk,
@@ -8231,6 +8249,102 @@ extension PersistenceTests {
             strikes: 1
         ))
         #expect(reloaded.history.sections[0].entries[0].summary == "GO · Batter to Out · 1 out")
+    }
+
+    @Test func correctedTimelineRetainsEveryOrderedDurableRevisionAfterColdStoreReload() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appending(path: "softball-scoring-timeline-reload-\(UUID().uuidString).store")
+        let gameID = UUID()
+        let pitcherID = UUID()
+        let timestamps = (1...3).map {
+            Date(timeIntervalSince1970: 1_786_900_000 + Double($0 * 10))
+        }
+        var expectedTimeline: [DurableEventRecordSnapshot] = []
+        var expectedState = GameState()
+        var expectedBattingLines: [UUID: BattingLine] = [:]
+        var expectedHistory = PlayHistory(sections: [])
+
+        do {
+            let container = try AppModelContainer.make(storeURL: storeURL)
+            let context = container.mainContext
+            let game = Game(
+                id: gameID,
+                seasonID: UUID(),
+                opponentName: "Thunder",
+                homeAway: .home,
+                status: .inProgress,
+                startingPitcherID: pitcherID
+            )
+            let records = try [
+                GameEventRecord(
+                    gameID: gameID,
+                    sequenceNumber: 1,
+                    timestamp: timestamps[0],
+                    body: .pitch(.init(
+                        result: .ball,
+                        pitcherID: pitcherID,
+                        opponentBatterSlot: 1
+                    ))
+                ),
+                GameEventRecord(
+                    gameID: gameID,
+                    sequenceNumber: 2,
+                    timestamp: timestamps[1],
+                    body: .pitch(.init(
+                        result: .calledStrike,
+                        pitcherID: pitcherID,
+                        opponentBatterSlot: 1
+                    ))
+                ),
+                GameEventRecord(
+                    gameID: gameID,
+                    sequenceNumber: 3,
+                    timestamp: timestamps[2],
+                    body: .pitch(.init(
+                        result: .foul,
+                        pitcherID: pitcherID,
+                        opponentBatterSlot: 1
+                    ))
+                )
+            ]
+            context.insert(game)
+            records.reversed().forEach(context.insert)
+            try context.save()
+
+            let edit = try GameEventCorrection.prepareDefensivePitchEdit(
+                recordID: records[1].id,
+                game: game,
+                modelContext: context
+            )
+            let preview = try GameEventCorrection.stageDefensivePitchEdit(
+                .ball,
+                in: edit,
+                game: game,
+                modelContext: context
+            )
+            let saved = try GameEventCorrection.saveDefensivePitchEdit(
+                preview,
+                game: game,
+                modelContext: context
+            )
+            expectedTimeline = saved.records.map(DurableEventRecordSnapshot.init)
+            expectedState = saved.replay.state
+            expectedBattingLines = saved.battingLines
+            expectedHistory = saved.history
+        }
+
+        let reloadedContainer = try AppModelContainer.make(storeURL: storeURL)
+        let reloadedContext = ModelContext(reloadedContainer)
+        let reloadedGame = try #require(reloadedContext.fetch(FetchDescriptor<Game>()).first)
+        let reloaded = try LiveGameSnapshotLoader.load(
+            game: reloadedGame,
+            modelContext: reloadedContext
+        )
+
+        #expect(reloaded.records.map(DurableEventRecordSnapshot.init) == expectedTimeline)
+        #expect(reloaded.replay.state == expectedState)
+        #expect(reloaded.battingLines == expectedBattingLines)
+        #expect(reloaded.history == expectedHistory)
     }
 
     @Test func rejectedPitchEditInputsAndSaveFailurePreserveEveryOriginalRecord() throws {
