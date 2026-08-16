@@ -119,19 +119,19 @@ every run, including failed runs. These per-run measurements are the CI-time reg
 - Fresh-context and cold-store reload reproduce corrected count, pitcher totals, later game state, and History.
 - Accessibility XXXL UI coverage verifies exact confirmation, Cancel, replay preview, Save, refreshed live state, and reopen persistence.
 
-## Unreadable problem-record deletion
+## Locked and chained problem-record repair
 
-- Locked Play History remains reachable and offers deletion only for unknown-kind and malformed-payload problem records; invalid-sequence and semantically rejected records do not expose this recovery action.
-- Confirmation identifies the exact record sequence, stable ID, saved kind, and problem summary and states that missing event meaning will not be guessed or edited.
-- Cancel and staging preserve the durable timeline. The candidate removes exactly one record in memory and passes full decode, semantic validation, replay, History, and batting projection before Save becomes available.
-- A remaining rejected record is surfaced first and disables Save. Wrong-game, stale-timeline, projection-failure, and save-failure paths preserve every original record.
-- Valid Save atomically removes only the confirmed record; every survivor retains its ID, sequence, timestamp, and sequence gap. Fresh-context replay matches the preview, and the next write uses a non-colliding authoritative sequence.
-- Focused UI coverage cancels once, previews and saves the exact deletion, verifies that valid history survives and scoring unlocks, records the next pitch, then terminates and relaunches to reproduce the repaired state.
+- Locked Play History remains reachable and explicitly lists unknown-kind, malformed-payload, invalid or duplicate-sequence, semantic-replay, and event-addressable batting-projection problems in chronological position.
+- Known decodable events retain context and expose only their supported editor or deletion control. Sequence and codec problems identify the exact stable record and permit only exact-record deletion without guessing meaning.
+- Cancel and every intermediate stage preserve the durable timeline. After each explicit repair, the first remaining problem is surfaced and Save stays disabled until full decode, semantic validation, replay, History, and batting projection are clean.
+- Multiple staged changes remain reviewable by original identity and sequence. No survivor is skipped, rewritten, reordered, renumbered, detached, or cascade-deleted.
+- One valid Save atomically applies the batch; stale-timeline, projection, and simulated save-failure paths preserve every original record. Survivors retain ID, body, sequence, timestamp, and gaps, and the next write uses the authoritative maximum sequence plus one.
+- Focused persistence coverage repairs an unknown kind, semantic pitch rejection, and malformed payload in one session, covers duplicate sequence and projection problem context, fails a whole-batch save atomically, and verifies a fresh context. Focused UI coverage repeats Save gating across three repairs, saves once, resumes scoring, then terminates and relaunches to reproduce the repaired state.
 
 ## Multiple staged corrections
 
 - An invalidating first edit or deletion exposes the first rejected record with stable sequence, decoded event context, and the count/batter state reached by full replay.
-- The problem summary navigates to the affected Play History entry and offers only supported pitch repair actions.
+- The problem summary navigates to the affected Play History entry and offers only the event's supported repair actions.
 - Every additional edit or deletion rebuilds the complete candidate without skipping, reordering, rewriting, or cascade-deleting unrelated records.
 - Staged changes remain reviewable by original record identity and sequence; Cancel leaves the durable timeline untouched.
 - Save is unavailable for rejected replay or failed batting projection and becomes available only for a changed, clean candidate.

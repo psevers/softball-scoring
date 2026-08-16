@@ -477,6 +477,7 @@ struct GameEventCorrectionProblem: Equatable {
     let canDeleteOffensiveBaseRunning: Bool
     let canRepairPitchCountReconciliation: Bool
     let canDeletePitchCountReconciliation: Bool
+    let canDeleteProblemRecord: Bool
     let relatedDefensivePlays: [RelatedDefensivePlayRepairOption]
     let logicalPlayDeletion: CompletedPlayRepairDeletion?
     let offensiveBaseRunningRunners: [OffensiveBaseRunningRunner]
@@ -516,7 +517,9 @@ struct ProblemRecordStagedDeletion: Identifiable, Equatable {
     }
 }
 
-struct GameEventCorrectionSession {
+struct GameEventCorrectionSession: Identifiable {
+    var id: UUID { gameID }
+
     let gameID: UUID
     let stagedChanges: [DefensivePitchStagedChange]
     let stagedOffensivePitchChanges: [OffensivePitchStagedChange]
@@ -1033,11 +1036,16 @@ enum GameEventCorrection {
 
     static func beginGameEventCorrection(
         game: Game,
-        modelContext: ModelContext
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
     ) throws -> GameEventCorrectionSession {
         let correctionContext = freshContext(from: modelContext)
         let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
-        let snapshot = try validatedSnapshot(game: game, records: records)
+        let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
+            game: game,
+            records: records,
+            projectBattingLines: projectBattingLines
+        )
         return GameEventCorrectionSession(
             gameID: game.id,
             stagedChanges: [],
@@ -1048,7 +1056,10 @@ enum GameEventCorrection {
             stagedPitchCountReconciliationChanges: [],
             stagedLogicalPlayDeletions: [],
             snapshot: snapshot,
-            firstInvalidRecord: nil,
+            firstInvalidRecord: firstCorrectionProblem(
+                in: snapshot.replay,
+                originalReplay: snapshot.replay
+            ),
             expectedTimeline: records.map(GameEventRecordRevision.init)
         )
     }
@@ -1083,37 +1094,76 @@ enum GameEventCorrection {
         modelContext: ModelContext,
         projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
     ) throws -> GameEventCorrectionSession {
+        let session = try beginGameEventCorrection(
+            game: game,
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines
+        )
         guard deletion.gameID == game.id else {
+            throw GameEventCorrectionError.gameMismatch
+        }
+        guard session.expectedTimeline == deletion.expectedTimeline else {
+            throw GameEventCorrectionError.staleTimeline
+        }
+        guard let entry = session.snapshot.replay.entries.first(where: {
+            $0.recordID == deletion.recordID
+        }), entry.rejection?.allowsDeletionOnlyRecovery == true else {
+            throw GameEventCorrectionError.unreadableRecordNotDeletable
+        }
+        return try stageProblemRecordDeletion(
+            recordID: deletion.recordID,
+            in: session,
+            game: game,
+            modelContext: modelContext,
+            projectBattingLines: projectBattingLines
+        )
+    }
+
+    static func stageProblemRecordDeletion(
+        recordID: UUID,
+        in session: GameEventCorrectionSession,
+        game: Game,
+        modelContext: ModelContext,
+        projectBattingLines: LiveGameSnapshotLoader.ProjectBattingLines = BattingStatProjector.project
+    ) throws -> GameEventCorrectionSession {
+        guard session.gameID == game.id else {
             throw GameEventCorrectionError.gameMismatch
         }
         let correctionContext = freshContext(from: modelContext)
         let records = try fetchRecords(gameID: game.id, modelContext: correctionContext)
-        guard records.map(GameEventRecordRevision.init) == deletion.expectedTimeline else {
+        guard records.map(GameEventRecordRevision.init) == session.expectedTimeline else {
             throw GameEventCorrectionError.staleTimeline
+        }
+        guard session.firstInvalidRecord?.id == recordID,
+              let entry = session.snapshot.replay.entries.first(where: {
+                  $0.recordID == recordID
+              }),
+              [.invalidSequence, .unknownKind, .malformedPayload].contains(entry.rejection),
+              !session.stagedProblemRecordDeletions.contains(where: {
+                  $0.recordID == recordID
+              }) else {
+            throw GameEventCorrectionError.unreadableRecordNotDeletable
         }
         let originalSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
             game: game,
             records: records,
             projectBattingLines: projectBattingLines
         )
-        guard let entry = originalSnapshot.replay.entries.first(where: {
-            $0.recordID == deletion.recordID
-        }), entry.rejection?.allowsDeletionOnlyRecovery == true else {
-            throw GameEventCorrectionError.unreadableRecordNotDeletable
-        }
         let stagedDeletion = ProblemRecordStagedDeletion(
-            recordID: deletion.recordID,
-            sequenceNumber: deletion.sequenceNumber,
-            problemSummary: deletion.problemSummary
+            recordID: recordID,
+            sequenceNumber: entry.sequenceNumber,
+            problemSummary: invalidSummary(for: entry.rejection)
         )
+        let problemRecordDeletions = session.stagedProblemRecordDeletions + [stagedDeletion]
         let candidateRecords = try applying(
-            [],
-            offensivePitchChanges: [],
-            offensiveBaseRunningChanges: [],
-            offensivePlateAppearanceChanges: [],
-            ballInPlayChanges: [],
-            pitchCountReconciliationChanges: [],
-            problemRecordDeletions: [stagedDeletion],
+            session.stagedChanges,
+            offensivePitchChanges: session.stagedOffensivePitchChanges,
+            offensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
+            offensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
+            ballInPlayChanges: session.stagedBallInPlayChanges,
+            pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
+            logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            problemRecordDeletions: problemRecordDeletions,
             to: records
         )
         let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
@@ -1123,20 +1173,20 @@ enum GameEventCorrection {
         )
         return GameEventCorrectionSession(
             gameID: game.id,
-            stagedChanges: [],
-            stagedOffensivePitchChanges: [],
-            stagedOffensiveBaseRunningChanges: [],
-            stagedOffensivePlateAppearanceChanges: [],
-            stagedBallInPlayChanges: [],
-            stagedPitchCountReconciliationChanges: [],
-            stagedLogicalPlayDeletions: [],
-            stagedProblemRecordDeletions: [stagedDeletion],
+            stagedChanges: session.stagedChanges,
+            stagedOffensivePitchChanges: session.stagedOffensivePitchChanges,
+            stagedOffensiveBaseRunningChanges: session.stagedOffensiveBaseRunningChanges,
+            stagedOffensivePlateAppearanceChanges: session.stagedOffensivePlateAppearanceChanges,
+            stagedBallInPlayChanges: session.stagedBallInPlayChanges,
+            stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
+            stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            stagedProblemRecordDeletions: problemRecordDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
                 in: snapshot.replay,
                 originalReplay: originalSnapshot.replay
             ),
-            expectedTimeline: deletion.expectedTimeline
+            expectedTimeline: session.expectedTimeline
         )
     }
 
@@ -1229,7 +1279,7 @@ enum GameEventCorrection {
         guard records.map(GameEventRecordRevision.init) == session.expectedTimeline else {
             throw GameEventCorrectionError.staleTimeline
         }
-        let originalSnapshot = try validatedSnapshot(
+        let originalSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
             game: game,
             records: records,
             projectBattingLines: projectBattingLines
@@ -1247,6 +1297,7 @@ enum GameEventCorrection {
             ballInPlayChanges: session.stagedBallInPlayChanges,
             pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            problemRecordDeletions: session.stagedProblemRecordDeletions,
             to: records
         )
         let relatedPlay: RelatedDefensivePlayReference?
@@ -1303,7 +1354,7 @@ enum GameEventCorrection {
         guard records.map(GameEventRecordRevision.init) == session.expectedTimeline else {
             throw GameEventCorrectionError.staleTimeline
         }
-        let originalSnapshot = try validatedSnapshot(
+        let originalSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
             game: game,
             records: records,
             projectBattingLines: projectBattingLines
@@ -2065,14 +2116,25 @@ enum GameEventCorrection {
         guard session.gameID == game.id else {
             throw GameEventCorrectionError.gameMismatch
         }
-        let deletionSession = try prepareDefensiveLogicalPlayDeletion(
-            resultRecordID: resultRecordID,
-            game: game,
-            modelContext: modelContext
-        )
+        let stagedDeletion: CompletedPlayStagedDeletion
+        let expectedTimeline: [GameEventRecordRevision]
+        if let repair = session.firstInvalidRecord?.logicalPlayDeletion,
+           repair.kind == .defensive,
+           repair.resultRecordID == resultRecordID {
+            stagedDeletion = try stagedLogicalPlayDeletion(from: repair)
+            expectedTimeline = session.expectedTimeline
+        } else {
+            let deletionSession = try prepareDefensiveLogicalPlayDeletion(
+                resultRecordID: resultRecordID,
+                game: game,
+                modelContext: modelContext
+            )
+            stagedDeletion = deletionSession.stagedDeletion
+            expectedTimeline = deletionSession.expectedTimeline
+        }
         return try addingLogicalPlayDeletion(
-            deletionSession.stagedDeletion,
-            expectedTimeline: deletionSession.expectedTimeline,
+            stagedDeletion,
+            expectedTimeline: expectedTimeline,
             to: session,
             game: game,
             modelContext: modelContext,
@@ -2205,14 +2267,25 @@ enum GameEventCorrection {
         guard session.gameID == game.id else {
             throw GameEventCorrectionError.gameMismatch
         }
-        let deletionSession = try prepareOffensiveLogicalPlayDeletion(
-            resultRecordID: resultRecordID,
-            game: game,
-            modelContext: modelContext
-        )
+        let stagedDeletion: CompletedPlayStagedDeletion
+        let expectedTimeline: [GameEventRecordRevision]
+        if let repair = session.firstInvalidRecord?.logicalPlayDeletion,
+           repair.kind == .offensive,
+           repair.resultRecordID == resultRecordID {
+            stagedDeletion = try stagedLogicalPlayDeletion(from: repair)
+            expectedTimeline = session.expectedTimeline
+        } else {
+            let deletionSession = try prepareOffensiveLogicalPlayDeletion(
+                resultRecordID: resultRecordID,
+                game: game,
+                modelContext: modelContext
+            )
+            stagedDeletion = deletionSession.stagedDeletion
+            expectedTimeline = deletionSession.expectedTimeline
+        }
         return try addingLogicalPlayDeletion(
-            deletionSession.stagedDeletion,
-            expectedTimeline: deletionSession.expectedTimeline,
+            stagedDeletion,
+            expectedTimeline: expectedTimeline,
             to: session,
             game: game,
             modelContext: modelContext,
@@ -2242,7 +2315,7 @@ enum GameEventCorrection {
         }) else {
             throw GameEventCorrectionError.invalidCandidate
         }
-        let originalSnapshot = try validatedSnapshot(
+        let originalSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
             game: game,
             records: records,
             projectBattingLines: projectBattingLines
@@ -2272,6 +2345,7 @@ enum GameEventCorrection {
             ballInPlayChanges: ballInPlayChanges,
             pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: deletions,
+            problemRecordDeletions: session.stagedProblemRecordDeletions,
             to: records
         )
         let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
@@ -2292,12 +2366,31 @@ enum GameEventCorrection {
             stagedBallInPlayChanges: ballInPlayChanges,
             stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             stagedLogicalPlayDeletions: deletions,
+            stagedProblemRecordDeletions: session.stagedProblemRecordDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
                 in: snapshot.replay,
                 originalReplay: originalSnapshot.replay
             ),
             expectedTimeline: session.expectedTimeline
+        )
+    }
+
+    private static func stagedLogicalPlayDeletion(
+        from repair: CompletedPlayRepairDeletion
+    ) throws -> CompletedPlayStagedDeletion {
+        guard let resultComponent = repair.components.last,
+              resultComponent.recordID == repair.resultRecordID else {
+            throw GameEventCorrectionError.invalidTimeline
+        }
+        let resultSuffix = " result"
+        let resultLabel = resultComponent.summary.hasSuffix(resultSuffix)
+            ? String(resultComponent.summary.dropLast(resultSuffix.count))
+            : resultComponent.summary
+        return CompletedPlayStagedDeletion(
+            pitchComponents: Array(repair.components.dropLast()),
+            resultComponent: resultComponent,
+            resultLabel: resultLabel
         )
     }
 
@@ -2380,6 +2473,7 @@ enum GameEventCorrection {
             stagedBallInPlayChanges: [change],
             stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            stagedProblemRecordDeletions: session.stagedProblemRecordDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
                 in: snapshot.replay,
@@ -2444,7 +2538,7 @@ enum GameEventCorrection {
               case .ballInPlay(let persistedPlay) = try record.decoded().body else {
             throw GameEventCorrectionError.ballInPlayNotEditable
         }
-        let originalSnapshot = try validatedSnapshot(
+        let originalSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
             game: game,
             records: records,
             projectBattingLines: projectBattingLines
@@ -2467,6 +2561,7 @@ enum GameEventCorrection {
             ballInPlayChanges: session.stagedBallInPlayChanges,
             pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            problemRecordDeletions: session.stagedProblemRecordDeletions,
             to: records
         )
         let currentSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
@@ -2509,6 +2604,7 @@ enum GameEventCorrection {
             ballInPlayChanges: ballInPlayChanges,
             pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            problemRecordDeletions: session.stagedProblemRecordDeletions,
             to: records
         )
         let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
@@ -2525,6 +2621,7 @@ enum GameEventCorrection {
             stagedBallInPlayChanges: ballInPlayChanges,
             stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            stagedProblemRecordDeletions: session.stagedProblemRecordDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
                 in: snapshot.replay,
@@ -2592,18 +2689,14 @@ enum GameEventCorrection {
             throw GameEventCorrectionError.offensiveBaseRunningNotEditable
         }
 
-        let originalSnapshot = try validatedSnapshot(
+        let originalSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
             game: game,
             records: records,
             projectBattingLines: projectBattingLines
         )
-        guard let originalEntry = originalSnapshot.replay.entries.first(where: {
+        guard originalSnapshot.replay.entries.contains(where: {
             $0.recordID == recordID
-        }), OffensiveBaseRunningValidator.isValid(
-            persistedEvent,
-            state: originalEntry.stateBefore,
-            trackedTeamHomeAway: homeAway
-        ) else {
+        }) else {
             throw GameEventCorrectionError.offensiveBaseRunningNotEditable
         }
 
@@ -2616,6 +2709,7 @@ enum GameEventCorrection {
                 ballInPlayChanges: session.stagedBallInPlayChanges,
                 pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
                 logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+                problemRecordDeletions: session.stagedProblemRecordDeletions,
                 to: records
             )
             let currentSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
@@ -2659,6 +2753,7 @@ enum GameEventCorrection {
             ballInPlayChanges: session.stagedBallInPlayChanges,
             pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            problemRecordDeletions: session.stagedProblemRecordDeletions,
             to: records
         )
         let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
@@ -2675,6 +2770,7 @@ enum GameEventCorrection {
             stagedBallInPlayChanges: session.stagedBallInPlayChanges,
             stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            stagedProblemRecordDeletions: session.stagedProblemRecordDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
                 in: snapshot.replay,
@@ -2707,7 +2803,7 @@ enum GameEventCorrection {
             throw GameEventCorrectionError.offensivePlateAppearanceNotEditable
         }
 
-        let originalSnapshot = try validatedSnapshot(
+        let originalSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
             game: game,
             records: records,
             projectBattingLines: projectBattingLines
@@ -2715,10 +2811,9 @@ enum GameEventCorrection {
         guard let originalEntry = originalSnapshot.replay.entries.first(where: {
             $0.recordID == recordID
         }),
-              isCorrectableOffensivePlateAppearance(
+              OffensivePlateAppearanceValidator.supportsCorrection(
                 persistedPlateAppearance,
-                stateBefore: originalEntry.stateBefore,
-                trackedTeamHomeAway: homeAway
+                stateBefore: originalEntry.stateBefore
               ) else {
             throw GameEventCorrectionError.offensivePlateAppearanceNotEditable
         }
@@ -2731,6 +2826,7 @@ enum GameEventCorrection {
             ballInPlayChanges: session.stagedBallInPlayChanges,
             pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            problemRecordDeletions: session.stagedProblemRecordDeletions,
             to: records
         )
         let existingChangedRecordIDs = Set(
@@ -2782,6 +2878,7 @@ enum GameEventCorrection {
             ballInPlayChanges: session.stagedBallInPlayChanges,
             pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            problemRecordDeletions: session.stagedProblemRecordDeletions,
             to: records
         )
         let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
@@ -2802,6 +2899,7 @@ enum GameEventCorrection {
             stagedBallInPlayChanges: session.stagedBallInPlayChanges,
             stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            stagedProblemRecordDeletions: session.stagedProblemRecordDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
                 in: snapshot.replay,
@@ -2835,7 +2933,7 @@ enum GameEventCorrection {
             case .delete: throw GameEventCorrectionError.pitchNotDeletable
             }
         }
-        let originalSnapshot = try validatedSnapshot(
+        let originalSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
             game: game,
             records: records,
             projectBattingLines: projectBattingLines
@@ -2849,6 +2947,7 @@ enum GameEventCorrection {
             ballInPlayChanges: session.stagedBallInPlayChanges,
             pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            problemRecordDeletions: session.stagedProblemRecordDeletions,
             to: records
         )
         let currentSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
@@ -2893,6 +2992,7 @@ enum GameEventCorrection {
             ballInPlayChanges: session.stagedBallInPlayChanges,
             pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            problemRecordDeletions: session.stagedProblemRecordDeletions,
             to: records
         )
         let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
@@ -2909,6 +3009,7 @@ enum GameEventCorrection {
             stagedBallInPlayChanges: session.stagedBallInPlayChanges,
             stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            stagedProblemRecordDeletions: session.stagedProblemRecordDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
                 in: snapshot.replay,
@@ -2940,7 +3041,7 @@ enum GameEventCorrection {
               let homeAway = HomeAway(rawValue: game.homeAwayRawValue) else {
             throw GameEventCorrectionError.offensivePitchNotEditable
         }
-        let originalSnapshot = try validatedSnapshot(
+        let originalSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
             game: game,
             records: records,
             projectBattingLines: projectBattingLines
@@ -2954,6 +3055,7 @@ enum GameEventCorrection {
             ballInPlayChanges: session.stagedBallInPlayChanges,
             pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            problemRecordDeletions: session.stagedProblemRecordDeletions,
             to: records
         )
         let currentSnapshot = try LiveGameSnapshotLoader.makeSnapshot(
@@ -3010,6 +3112,7 @@ enum GameEventCorrection {
             ballInPlayChanges: session.stagedBallInPlayChanges,
             pitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            problemRecordDeletions: session.stagedProblemRecordDeletions,
             to: records
         )
         let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
@@ -3027,6 +3130,7 @@ enum GameEventCorrection {
             stagedBallInPlayChanges: session.stagedBallInPlayChanges,
             stagedPitchCountReconciliationChanges: session.stagedPitchCountReconciliationChanges,
             stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            stagedProblemRecordDeletions: session.stagedProblemRecordDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
                 in: snapshot.replay,
@@ -3066,6 +3170,7 @@ enum GameEventCorrection {
             ballInPlayChanges: session.stagedBallInPlayChanges,
             pitchCountReconciliationChanges: reconciliationChanges,
             logicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            problemRecordDeletions: session.stagedProblemRecordDeletions,
             to: records
         )
         let snapshot = try LiveGameSnapshotLoader.makeSnapshot(
@@ -3088,6 +3193,7 @@ enum GameEventCorrection {
             stagedBallInPlayChanges: session.stagedBallInPlayChanges,
             stagedPitchCountReconciliationChanges: reconciliationChanges,
             stagedLogicalPlayDeletions: session.stagedLogicalPlayDeletions,
+            stagedProblemRecordDeletions: session.stagedProblemRecordDeletions,
             snapshot: snapshot,
             firstInvalidRecord: firstCorrectionProblem(
                 in: snapshot.replay,
@@ -3251,6 +3357,7 @@ enum GameEventCorrection {
         )
         let offensiveBaseRunningRunners: [OffensiveBaseRunningRunner]
         let offensiveRunnerIdentities: [TrackedBatterIdentity]
+        let isProjectionFailure = entry.rejection == .projectionRejected
         switch entry.body {
         case .pitch(let pitch):
             context = "\(entry.stateBefore.half.displayName) \(entry.stateBefore.inning) · "
@@ -3259,7 +3366,8 @@ enum GameEventCorrection {
                 + "\(entry.stateBefore.currentOpponentBatterSlot) with a "
                 + "\(entry.stateBefore.balls)–\(entry.stateBefore.strikes) count "
                 + "before rejecting this pitch."
-            canEditPitch = isEditablePitch(pitch.result)
+            canEditPitch = entry.rejection != .invalidSequence
+                && isEditablePitch(pitch.result)
                 && !completesPlateAppearance(pitch.result, stateBefore: entry.stateBefore)
             canEditOffensivePitch = false
             canDeleteOffensivePitch = false
@@ -3331,7 +3439,7 @@ enum GameEventCorrection {
                 $0.recordID == entry.recordID
             }).flatMap { Self.offensiveBaseRunningRunners(at: $0, in: replay) }
             let originalWasBaseRunning = if let originalEntry = originalReplay.entries.first(where: {
-                $0.recordID == entry.recordID && $0.rejection == nil
+                $0.recordID == entry.recordID
             }), case .offensiveBaseRunning = originalEntry.body {
                 true
             } else {
@@ -3446,11 +3554,15 @@ enum GameEventCorrection {
             offensiveBaseRunningRunners = []
             offensiveRunnerIdentities = []
         }
+        let presentedExplanation = isProjectionFailure
+            ? "Batting projection rejected this readable event at its original chronological position. "
+                + "Use the event's supported correction controls before saving."
+            : explanation
         return GameEventCorrectionProblem(
             id: entry.recordID,
             sequenceNumber: entry.sequenceNumber,
             context: context,
-            explanation: explanation,
+            explanation: presentedExplanation,
             canEditPitch: canEditPitch,
             canEditOffensivePitch: canEditOffensivePitch,
             canDeleteOffensivePitch: canDeleteOffensivePitch,
@@ -3461,6 +3573,8 @@ enum GameEventCorrection {
             canDeleteOffensiveBaseRunning: canDeleteOffensiveBaseRunning,
             canRepairPitchCountReconciliation: canRepairPitchCountReconciliation,
             canDeletePitchCountReconciliation: canDeletePitchCountReconciliation,
+            canDeleteProblemRecord: [.invalidSequence, .unknownKind, .malformedPayload]
+                .contains(entry.rejection),
             relatedDefensivePlays: relatedDefensivePlays,
             logicalPlayDeletion: logicalPlayDeletion,
             offensiveBaseRunningRunners: offensiveBaseRunningRunners,
@@ -3683,6 +3797,7 @@ enum GameEventCorrection {
         case .unknownKind: "Unsupported saved event"
         case .malformedPayload: "Unreadable saved event"
         case .semanticallyRejected: "Play conflicts with the proposed pitch"
+        case .projectionRejected: "Batting projection conflict"
         case nil: "Invalid saved event"
         }
     }

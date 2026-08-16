@@ -52,17 +52,66 @@ enum LiveGameSnapshotLoader {
         guard let homeAway = HomeAway(rawValue: game.homeAwayRawValue) else {
             throw LiveGameSnapshotError.invalidGameSide
         }
-        let replay = GameEventReplay.replay(
-            records: records,
-            homeAway: homeAway,
-            startingPitcherID: game.startingPitcherID,
-            validateEvent: validateEvent
-        )
-        return LiveGameSnapshot(
-            records: records,
-            replay: replay,
-            battingLines: try projectBattingLines(replay.acceptedEvents),
-            history: PlayHistoryProjector.project(replay: replay)
+        var projectionRejectedRecordIDs = Set<UUID>()
+        while true {
+            let replay = GameEventReplay.replay(
+                records: records,
+                homeAway: homeAway,
+                startingPitcherID: game.startingPitcherID,
+                validateEvent: { record, event, state in
+                    !projectionRejectedRecordIDs.contains(record.id)
+                        && validateEvent(record, event, state)
+                }
+            )
+            do {
+                let battingLines = try projectBattingLines(replay.acceptedEvents)
+                let annotatedReplay = annotatingProjectionRejections(
+                    replay,
+                    recordIDs: projectionRejectedRecordIDs
+                )
+                return LiveGameSnapshot(
+                    records: records,
+                    replay: annotatedReplay,
+                    battingLines: battingLines,
+                    history: PlayHistoryProjector.project(replay: annotatedReplay)
+                )
+            } catch BattingStatProjectionError.missingRunnerIdentity(
+                let sequenceNumber,
+                let source
+            ) {
+                guard let recordID = replay.entries.first(where: {
+                    $0.sequenceNumber == sequenceNumber && $0.rejection == nil
+                })?.recordID,
+                      projectionRejectedRecordIDs.insert(recordID).inserted else {
+                    throw BattingStatProjectionError.missingRunnerIdentity(
+                        sequenceNumber: sequenceNumber,
+                        source: source
+                    )
+                }
+            }
+        }
+    }
+
+    private static func annotatingProjectionRejections(
+        _ replay: GameEventReplay.Result,
+        recordIDs: Set<UUID>
+    ) -> GameEventReplay.Result {
+        guard !recordIDs.isEmpty else { return replay }
+        return GameEventReplay.Result(
+            state: replay.state,
+            rejectedRecordIDs: replay.rejectedRecordIDs,
+            entries: replay.entries.map { entry in
+                guard recordIDs.contains(entry.recordID) else { return entry }
+                return GameEventReplay.Entry(
+                    recordID: entry.recordID,
+                    sequenceNumber: entry.sequenceNumber,
+                    timestamp: entry.timestamp,
+                    body: entry.body,
+                    stateBefore: entry.stateBefore,
+                    stateAfter: entry.stateAfter,
+                    rejection: .projectionRejected
+                )
+            }
         )
     }
 }

@@ -50,7 +50,7 @@ A read-only scorebook projection over the authoritative event timeline. It group
 
 ## Problem entry
 
-A visible Play History entry for an unknown kind, malformed payload, invalid sequence, or semantically rejected record. Problem entries preserve the record's chronological position instead of crashing or disappearing.
+A visible Play History entry for an unknown kind, malformed payload, invalid or duplicate sequence, semantic replay rejection, or event-addressable batting-projection failure. Problem entries preserve the record's chronological position and decoded context when available instead of crashing or disappearing.
 
 ## Undo candidate
 
@@ -62,7 +62,11 @@ The main-actor persistence boundary that freshly fetches one game's event record
 
 ## Correction session
 
-An in-memory candidate timeline tied to an exact durable record revision. It retains every staged edit or deletion by record identity, replays the complete candidate after each change, identifies the first invalid downstream record, and can save only when the whole timeline and batting projection are clean.
+An in-memory candidate timeline tied to an exact durable record revision. It may begin from already-locked history, retains every staged edit or deletion by record identity, replays the complete candidate after each change, identifies the first remaining invalid record, and can save only when the whole timeline and batting projection are clean.
+
+## Locked-history repair
+
+An explicit correction session for one or more existing Play History problems. Known decodable events use their supported event editor or deletion control; unknown kinds, malformed payloads, and invalid or duplicate sequence records allow deletion of only the exact problem record. Each staged repair preserves durable history until one clean atomic save, without rewriting, reordering, renumbering, detaching, or cascade-deleting survivors.
 
 ## Unreadable record deletion
 

@@ -8,11 +8,12 @@ enum GameEventReplay {
         case unknownKind
         case malformedPayload
         case semanticallyRejected
+        case projectionRejected
 
         var allowsDeletionOnlyRecovery: Bool {
             switch self {
             case .unknownKind, .malformedPayload: true
-            case .invalidSequence, .semanticallyRejected: false
+            case .invalidSequence, .semanticallyRejected, .projectionRejected: false
             }
         }
     }
@@ -83,7 +84,7 @@ enum GameEventReplay {
                     recordID: record.id,
                     sequenceNumber: record.sequenceNumber,
                     timestamp: record.timestamp,
-                    body: nil,
+                    body: try? record.decoded().body,
                     stateBefore: stateBefore,
                     stateAfter: state,
                     rejection: .invalidSequence

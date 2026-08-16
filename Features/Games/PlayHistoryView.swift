@@ -25,6 +25,7 @@ struct PlayHistoryView: View {
     @State private var offensiveLogicalPlayDeletionSession: OffensiveLogicalPlayDeletionSession?
     @State private var pendingUnreadableRecordDeletionSession: UnreadableRecordDeletionSession?
     @State private var unreadableRecordDeletionSession: UnreadableRecordDeletionSession?
+    @State private var lockedHistoryCorrectionSession: GameEventCorrectionSession?
     @State private var pitchCountReconciliationSession: PitchCountReconciliationSession?
 
     var body: some View {
@@ -45,6 +46,17 @@ struct PlayHistoryView: View {
 
                     if session.undoCandidate != nil {
                         undoLatestActionButton
+                    }
+
+                    if session.snapshot?.replay.rejectedRecordIDs.isEmpty == false {
+                        Button {
+                            beginLockedHistoryCorrection()
+                        } label: {
+                            Label("Repair Locked History", systemImage: "wrench.and.screwdriver")
+                                .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("history.repairLockedHistory")
                     }
 
                     historyContent
@@ -269,6 +281,13 @@ struct PlayHistoryView: View {
             UnreadableRecordDeletionView(
                 game: game,
                 deletionSession: deletionSession,
+                liveSession: session
+            )
+        }
+        .sheet(item: $lockedHistoryCorrectionSession) { correctionSession in
+            LockedHistoryCorrectionView(
+                game: game,
+                correctionSession: correctionSession,
                 liveSession: session
             )
         }
@@ -747,6 +766,18 @@ struct PlayHistoryView: View {
                     game: game,
                     modelContext: modelContext
                 )
+        } catch {
+            session.refresh(game: game, modelContext: modelContext)
+            correctionError = error.localizedDescription
+        }
+    }
+
+    private func beginLockedHistoryCorrection() {
+        do {
+            lockedHistoryCorrectionSession = try GameEventCorrection.beginGameEventCorrection(
+                game: game,
+                modelContext: modelContext
+            )
         } catch {
             session.refresh(game: game, modelContext: modelContext)
             correctionError = error.localizedDescription

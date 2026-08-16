@@ -235,6 +235,110 @@ enum UITestData {
         unknownRecord.kindRawValue = "future-event"
         context.insert(unknownRecord)
 
+        let chainedRepairGame = Game(
+            seasonID: season.id,
+            opponentName: "UI Chained Repair Opponent",
+            gameDate: Date(timeIntervalSince1970: 1_786_369_000),
+            homeAway: .home,
+            status: .inProgress,
+            startingPitcherID: activePlayers[0].id,
+            startedAt: Date(timeIntervalSince1970: 1_786_369_000)
+        )
+        context.insert(chainedRepairGame)
+        for (index, player) in activePlayers.enumerated() {
+            context.insert(LineupEntry(
+                playerID: player.id,
+                battingOrder: index + 1,
+                startingPosition: positions[index],
+                gameID: chainedRepairGame.id
+            ))
+        }
+        let chainedRecords = try [
+            GameEventRecord(
+                gameID: chainedRepairGame.id,
+                sequenceNumber: 1,
+                timestamp: Date(timeIntervalSince1970: 1_786_369_100),
+                body: .pitch(.init(
+                    result: .ball,
+                    pitcherID: activePlayers[0].id,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: chainedRepairGame.id,
+                sequenceNumber: 2,
+                timestamp: Date(timeIntervalSince1970: 1_786_369_200),
+                body: .pitch(.init(
+                    result: .foul,
+                    pitcherID: activePlayers[0].id,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: chainedRepairGame.id,
+                sequenceNumber: 3,
+                timestamp: Date(timeIntervalSince1970: 1_786_369_300),
+                body: .pitch(.init(
+                    result: .ball,
+                    pitcherID: activePlayers[0].id,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: chainedRepairGame.id,
+                sequenceNumber: 4,
+                timestamp: Date(timeIntervalSince1970: 1_786_369_400),
+                body: .pitch(.init(
+                    result: .ball,
+                    pitcherID: activePlayers[0].id,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: chainedRepairGame.id,
+                sequenceNumber: 5,
+                timestamp: Date(timeIntervalSince1970: 1_786_369_500),
+                body: .pitch(.init(
+                    result: .ball,
+                    pitcherID: activePlayers[0].id,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: chainedRepairGame.id,
+                sequenceNumber: 6,
+                timestamp: Date(timeIntervalSince1970: 1_786_369_600),
+                body: .pitch(.init(
+                    result: .calledStrike,
+                    pitcherID: activePlayers[0].id,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: chainedRepairGame.id,
+                sequenceNumber: 7,
+                timestamp: Date(timeIntervalSince1970: 1_786_369_700),
+                body: .pitch(.init(
+                    result: .foul,
+                    pitcherID: activePlayers[0].id,
+                    opponentBatterSlot: 2
+                ))
+            ),
+            GameEventRecord(
+                gameID: chainedRepairGame.id,
+                sequenceNumber: 10,
+                timestamp: Date(timeIntervalSince1970: 1_786_370_000),
+                body: .pitch(.init(
+                    result: .calledStrike,
+                    pitcherID: activePlayers[0].id,
+                    opponentBatterSlot: 2
+                ))
+            )
+        ]
+        chainedRecords[1].kindRawValue = "future-event"
+        chainedRecords[6].payload = Data("not-json".utf8)
+        chainedRecords.forEach(context.insert)
+
         let ballInPlayUndoGame = Game(
             seasonID: season.id,
             opponentName: "UI Ball In Play Undo Opponent",

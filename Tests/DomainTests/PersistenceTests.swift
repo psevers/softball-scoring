@@ -10851,6 +10851,309 @@ extension PersistenceTests {
         #expect(stored.map(\.id) == [valid.id, unreadable.id, newer.id])
     }
 
+    @Test func lockedTimelineStagesEachProblemUntilTheWholeBatchCanSave() throws {
+        struct SaveFailure: Error {}
+
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let timestamps = (1...8).map {
+            Date(timeIntervalSince1970: 1_786_900_000 + Double($0 * 10))
+        }
+        let records = try [
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 1,
+                timestamp: timestamps[0],
+                body: .pitch(.init(
+                    result: .ball,
+                    pitcherID: pitcherID,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 2,
+                timestamp: timestamps[1],
+                body: .pitch(.init(
+                    result: .foul,
+                    pitcherID: pitcherID,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 3,
+                timestamp: timestamps[2],
+                body: .pitch(.init(
+                    result: .ball,
+                    pitcherID: pitcherID,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 4,
+                timestamp: timestamps[3],
+                body: .pitch(.init(
+                    result: .ball,
+                    pitcherID: pitcherID,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 5,
+                timestamp: timestamps[4],
+                body: .pitch(.init(
+                    result: .ball,
+                    pitcherID: pitcherID,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 6,
+                timestamp: timestamps[5],
+                body: .pitch(.init(
+                    result: .calledStrike,
+                    pitcherID: pitcherID,
+                    opponentBatterSlot: 1
+                ))
+            ),
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 7,
+                timestamp: timestamps[6],
+                body: .pitch(.init(
+                    result: .foul,
+                    pitcherID: pitcherID,
+                    opponentBatterSlot: 2
+                ))
+            ),
+            GameEventRecord(
+                gameID: game.id,
+                sequenceNumber: 10,
+                timestamp: timestamps[7],
+                body: .pitch(.init(
+                    result: .calledStrike,
+                    pitcherID: pitcherID,
+                    opponentBatterSlot: 2
+                ))
+            )
+        ]
+        records[1].kindRawValue = "future-event"
+        records[6].payload = Data("not-json".utf8)
+        records.forEach(context.insert)
+        try context.save()
+
+        let started = try GameEventCorrection.beginGameEventCorrection(
+            game: game,
+            modelContext: context
+        )
+        #expect(!started.canSave)
+        #expect(started.firstInvalidRecord?.id == records[1].id)
+        #expect(started.firstInvalidRecord?.canDeleteProblemRecord == true)
+
+        let withoutUnknown = try GameEventCorrection.stageProblemRecordDeletion(
+            recordID: records[1].id,
+            in: started,
+            game: game,
+            modelContext: context
+        )
+        #expect(!withoutUnknown.canSave)
+        #expect(withoutUnknown.firstInvalidRecord?.id == records[5].id)
+        #expect(withoutUnknown.firstInvalidRecord?.canDeletePitch == true)
+        #expect(withoutUnknown.stagedProblemRecordDeletions.map(\.recordID) == [records[1].id])
+
+        let withoutRejectedPitch = try GameEventCorrection.stagePitchDeletion(
+            recordID: records[5].id,
+            in: withoutUnknown,
+            game: game,
+            modelContext: context
+        )
+        #expect(!withoutRejectedPitch.canSave)
+        #expect(withoutRejectedPitch.firstInvalidRecord?.id == records[6].id)
+        #expect(withoutRejectedPitch.firstInvalidRecord?.canDeleteProblemRecord == true)
+        #expect(withoutRejectedPitch.stagedProblemRecordDeletions.map(\.recordID) == [records[1].id])
+
+        let repaired = try GameEventCorrection.stageProblemRecordDeletion(
+            recordID: records[6].id,
+            in: withoutRejectedPitch,
+            game: game,
+            modelContext: context
+        )
+        #expect(repaired.canSave)
+        #expect(repaired.firstInvalidRecord == nil)
+        #expect(repaired.stagedProblemRecordDeletions.map(\.recordID) == [
+            records[1].id,
+            records[6].id
+        ])
+        #expect(repaired.stagedChanges.map(\.recordID) == [records[5].id])
+
+        let storedBeforeSave = try ModelContext(container).fetch(FetchDescriptor<GameEventRecord>(
+            sortBy: [SortDescriptor(\.sequenceNumber), SortDescriptor(\.timestamp)]
+        ))
+        #expect(storedBeforeSave.map(\.id) == records.map(\.id))
+
+        #expect(throws: SaveFailure.self) {
+            _ = try GameEventCorrection.saveGameEventCorrection(
+                repaired,
+                game: game,
+                modelContext: context,
+                save: { _ in throw SaveFailure() }
+            )
+        }
+        let storedAfterFailedSave = try ModelContext(container).fetch(
+            FetchDescriptor<GameEventRecord>(
+                sortBy: [SortDescriptor(\.sequenceNumber), SortDescriptor(\.timestamp)]
+            )
+        )
+        #expect(storedAfterFailedSave.map(\.id) == records.map(\.id))
+        #expect(storedAfterFailedSave.map(\.sequenceNumber) == records.map(\.sequenceNumber))
+        #expect(storedAfterFailedSave.map(\.timestamp) == records.map(\.timestamp))
+
+        let saved = try GameEventCorrection.saveGameEventCorrection(
+            repaired,
+            game: game,
+            modelContext: context
+        )
+        let freshContext = ModelContext(container)
+        let stored = try freshContext.fetch(FetchDescriptor<GameEventRecord>(
+            sortBy: [SortDescriptor(\.sequenceNumber), SortDescriptor(\.timestamp)]
+        ))
+        let surviving = [records[0], records[2], records[3], records[4], records[7]]
+        #expect(stored.map(\.id) == surviving.map(\.id))
+        #expect(stored.map(\.sequenceNumber) == [1, 3, 4, 5, 10])
+        #expect(stored.map(\.timestamp) == surviving.map(\.timestamp))
+        #expect(saved.replay.rejectedRecordIDs.isEmpty)
+        #expect(saved.replay.state.currentOpponentBatterSlot == 2)
+        #expect(saved.replay.state.strikes == 1)
+        #expect(saved.replay.state.pitchCount(for: pitcherID) == PitchCount(
+            total: 5,
+            balls: 4,
+            strikes: 1
+        ))
+
+        try GameEventRecorder.recordPitch(
+            result: .foul,
+            game: game,
+            existingRecords: stored,
+            modelContext: freshContext
+        )
+        let relaunched = try LiveGameSnapshotLoader.load(
+            game: game,
+            modelContext: ModelContext(container)
+        )
+        #expect(relaunched.records.map(\.sequenceNumber) == [1, 3, 4, 5, 10, 11])
+        #expect(relaunched.replay.rejectedRecordIDs.isEmpty)
+        #expect(relaunched.replay.state.strikes == 2)
+        #expect(relaunched.replay.state.pitchCount(for: pitcherID).total == 6)
+        #expect(relaunched.battingLines == saved.battingLines)
+    }
+
+    @Test func duplicateSequenceProblemRetainsDecodedContextAndStagesExactDeletion() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let first = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 1,
+            timestamp: Date(timeIntervalSince1970: 100),
+            body: .pitch(.init(
+                result: .ball,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        let duplicate = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 1,
+            timestamp: Date(timeIntervalSince1970: 200),
+            body: .pitch(.init(
+                result: .calledStrike,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        [first, duplicate].forEach(context.insert)
+        try context.save()
+
+        let session = try GameEventCorrection.beginGameEventCorrection(
+            game: game,
+            modelContext: context
+        )
+        #expect(session.firstInvalidRecord?.id == duplicate.id)
+        #expect(session.firstInvalidRecord?.context.contains("Called Strike") == true)
+        #expect(session.firstInvalidRecord?.canDeleteProblemRecord == true)
+        #expect(session.snapshot.history.sections.flatMap(\.entries).contains(where: {
+            $0.id == duplicate.id && $0.summary == "Invalid event sequence"
+        }))
+
+        let repaired = try GameEventCorrection.stageProblemRecordDeletion(
+            recordID: duplicate.id,
+            in: session,
+            game: game,
+            modelContext: context
+        )
+        #expect(repaired.canSave)
+        #expect(repaired.snapshot.records.map(\.id) == [first.id])
+    }
+
+    @Test func battingProjectionFailureBecomesARepairableProblemEntry() throws {
+        let container = try AppModelContainer.make(inMemory: true)
+        let context = container.mainContext
+        let game = makeGame()
+        let pitcherID = try #require(game.startingPitcherID)
+        let record = try GameEventRecord(
+            gameID: game.id,
+            sequenceNumber: 4,
+            body: .pitch(.init(
+                result: .ball,
+                pitcherID: pitcherID,
+                opponentBatterSlot: 1
+            ))
+        )
+        context.insert(record)
+        try context.save()
+        let rejectingProjection: LiveGameSnapshotLoader.ProjectBattingLines = { events in
+            if events.contains(where: { $0.sequenceNumber == 4 }) {
+                throw BattingStatProjectionError.missingRunnerIdentity(
+                    sequenceNumber: 4,
+                    source: .first
+                )
+            }
+            return [:]
+        }
+
+        let session = try GameEventCorrection.beginGameEventCorrection(
+            game: game,
+            modelContext: context,
+            projectBattingLines: rejectingProjection
+        )
+        #expect(session.snapshot.replay.entries.first?.rejection == .projectionRejected)
+        #expect(session.firstInvalidRecord?.id == record.id)
+        #expect(session.firstInvalidRecord?.explanation.localizedCaseInsensitiveContains(
+            "batting projection"
+        ) == true)
+        #expect(session.firstInvalidRecord?.canDeletePitch == true)
+        #expect(session.snapshot.history.sections.flatMap(\.entries).contains(where: {
+            $0.id == record.id && $0.summary == "Batting projection conflict"
+        }))
+
+        let repaired = try GameEventCorrection.stagePitchDeletion(
+            recordID: record.id,
+            in: session,
+            game: game,
+            modelContext: context,
+            projectBattingLines: rejectingProjection
+        )
+        #expect(repaired.canSave)
+        #expect(repaired.firstInvalidRecord == nil)
+    }
+
     private func twoConsecutiveSingles(pitcherID: UUID) -> [GameEventBody] {
         [
             .pitch(.init(result: .ballInPlay, pitcherID: pitcherID, opponentBatterSlot: 1)),
