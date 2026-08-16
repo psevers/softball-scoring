@@ -17,6 +17,16 @@ final class ScrollReachabilityUITests: XCTestCase {
             orderedUniqueHistoryComponents(components),
             ["Event 2. Called Strike", "Event 1. Ball"]
         )
+
+        let renderedEntryIdentifiers = [
+            "history.entry.1",
+            "history.entry.2",
+            "history.entry.10"
+        ]
+        XCTAssertEqual(
+            orderedHistoryEntryIdentifiers(renderedEntryIdentifiers),
+            renderedEntryIdentifiers
+        )
     }
 
     func testSliceSixRecoveryJourneySurvivesColdRelaunch() {
@@ -2806,9 +2816,9 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(historyPage.waitForExistence(timeout: 3))
         let tabBar = app.tabBars.firstMatch
 
-        let entryIdentifiers = app.buttons.matching(
+        let entryIdentifiers = orderedHistoryEntryIdentifiers(app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "history.entry.")
-        ).allElementsBoundByIndex.map(\.identifier).sorted()
+        ).allElementsBoundByIndex.map(\.identifier))
         XCTAssertFalse(entryIdentifiers.isEmpty)
         var components: [String] = []
         for identifier in entryIdentifiers {
@@ -2867,6 +2877,11 @@ final class ScrollReachabilityUITests: XCTestCase {
     private func orderedUniqueHistoryComponents(_ components: [String]) -> [String] {
         var seen = Set<String>()
         return components.filter { seen.insert($0).inserted }
+    }
+
+    private func orderedHistoryEntryIdentifiers(_ identifiers: [String]) -> [String] {
+        var seen = Set<String>()
+        return identifiers.filter { seen.insert($0).inserted }
     }
 
     private func openGame(named opponentName: String, in app: XCUIApplication) {

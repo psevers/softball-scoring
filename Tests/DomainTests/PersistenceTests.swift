@@ -8256,12 +8256,113 @@ extension PersistenceTests {
             .appending(path: "softball-scoring-timeline-reload-\(UUID().uuidString).store")
         let gameID = UUID()
         let pitcherID = UUID()
+        let recordIDs = (1...3).map { _ in UUID() }
         let timestamps = (1...3).map {
             Date(timeIntervalSince1970: 1_786_900_000 + Double($0 * 10))
         }
+        let firstBatter = makeTrackedBatter(
+            displayName: "Avery Stone",
+            jerseyNumber: "8",
+            position: .shortstop,
+            lineupSlot: 1
+        )
+        let secondBatter = makeTrackedBatter(
+            displayName: "Jordan Lee",
+            jerseyNumber: "12",
+            position: .centerField,
+            lineupSlot: 2
+        )
+        let thirdBatter = makeTrackedBatter(
+            displayName: "Morgan Cruz",
+            jerseyNumber: "4",
+            position: .catcher,
+            lineupSlot: 3
+        )
+        let firstBody = GameEventBody.offensivePlateAppearance(.init(
+            batter: firstBatter,
+            battingOrderSize: 10,
+            result: .homeRun,
+            movements: [.init(source: .batter, destination: .home)],
+            rbi: 1,
+            countedRunSources: [.batter],
+            thirdOutClassification: nil
+        ))
+        let originalSecondBody = GameEventBody.offensivePlateAppearance(.init(
+            batter: secondBatter,
+            battingOrderSize: 10,
+            result: .reachedOnError,
+            movements: [.init(source: .batter, destination: .first)],
+            rbi: 0,
+            countedRunSources: [],
+            thirdOutClassification: nil
+        ))
+        let correctedSecondEvent = OffensivePlateAppearanceEvent(
+            batter: secondBatter,
+            battingOrderSize: 10,
+            result: .single,
+            movements: [.init(source: .batter, destination: .first)],
+            rbi: 0,
+            countedRunSources: [],
+            thirdOutClassification: nil
+        )
+        let correctedSecondBody = GameEventBody.offensivePlateAppearance(correctedSecondEvent)
+        let thirdBody = GameEventBody.offensivePlateAppearance(.init(
+            batter: thirdBatter,
+            battingOrderSize: 10,
+            result: .homeRun,
+            movements: [
+                .init(source: .first, destination: .home),
+                .init(source: .batter, destination: .home)
+            ],
+            rbi: 2,
+            countedRunSources: [.first, .batter],
+            thirdOutClassification: nil
+        ))
+        let expectedBodies = [firstBody, correctedSecondBody, thirdBody]
+        let expectedRecords = try zip(recordIDs.indices, expectedBodies).map { index, body in
+            try GameEventRecord(
+                id: recordIDs[index],
+                gameID: gameID,
+                sequenceNumber: index + 1,
+                timestamp: timestamps[index],
+                body: body
+            )
+        }
+        let canonicalPayload: (Data) throws -> Data = { payload in
+            let object = try JSONSerialization.jsonObject(with: payload)
+            return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        }
+        let expectedCanonicalPayloads = try expectedRecords.map {
+            try canonicalPayload($0.payload)
+        }
         var expectedTimeline: [DurableEventRecordSnapshot] = []
+        var firstLine = BattingLine()
+        firstLine.plateAppearances = 1
+        firstLine.atBats = 1
+        firstLine.runs = 1
+        firstLine.hits = 1
+        firstLine.homeRuns = 1
+        firstLine.runsBattedIn = 1
+        var secondLine = BattingLine()
+        secondLine.plateAppearances = 1
+        secondLine.atBats = 1
+        secondLine.runs = 1
+        secondLine.hits = 1
+        var thirdLine = BattingLine()
+        thirdLine.plateAppearances = 1
+        thirdLine.atBats = 1
+        thirdLine.runs = 1
+        thirdLine.hits = 1
+        thirdLine.homeRuns = 1
+        thirdLine.runsBattedIn = 2
+        let expectedBattingLines = [
+            firstBatter.playerID: firstLine,
+            secondBatter.playerID: secondLine,
+            thirdBatter.playerID: thirdLine
+        ]
         var expectedState = GameState()
-        var expectedBattingLines: [UUID: BattingLine] = [:]
+        expectedState.awayScore = 3
+        expectedState.currentTrackedBatterSlot = 4
         var expectedHistory = PlayHistory(sections: [])
 
         do {
@@ -8271,66 +8372,118 @@ extension PersistenceTests {
                 id: gameID,
                 seasonID: UUID(),
                 opponentName: "Thunder",
-                homeAway: .home,
+                homeAway: .away,
                 status: .inProgress,
                 startingPitcherID: pitcherID
             )
             let records = try [
                 GameEventRecord(
+                    id: recordIDs[0],
                     gameID: gameID,
                     sequenceNumber: 1,
                     timestamp: timestamps[0],
-                    body: .pitch(.init(
-                        result: .ball,
-                        pitcherID: pitcherID,
-                        opponentBatterSlot: 1
-                    ))
+                    body: firstBody
                 ),
                 GameEventRecord(
+                    id: recordIDs[1],
                     gameID: gameID,
                     sequenceNumber: 2,
                     timestamp: timestamps[1],
-                    body: .pitch(.init(
-                        result: .calledStrike,
-                        pitcherID: pitcherID,
-                        opponentBatterSlot: 1
-                    ))
+                    body: originalSecondBody
                 ),
                 GameEventRecord(
+                    id: recordIDs[2],
                     gameID: gameID,
                     sequenceNumber: 3,
                     timestamp: timestamps[2],
-                    body: .pitch(.init(
-                        result: .foul,
-                        pitcherID: pitcherID,
-                        opponentBatterSlot: 1
-                    ))
+                    body: thirdBody
                 )
             ]
+            let originalReplay = GameEventReplay.replay(
+                records: records,
+                homeAway: .away,
+                startingPitcherID: pitcherID
+            )
+            #expect(originalReplay.rejectedRecordIDs.isEmpty)
             context.insert(game)
             records.reversed().forEach(context.insert)
             try context.save()
 
-            let edit = try GameEventCorrection.prepareDefensivePitchEdit(
+            let persistedBeforeEdit = try LiveGameSnapshotLoader.load(
+                game: game,
+                modelContext: ModelContext(container)
+            )
+            #expect(persistedBeforeEdit.replay.rejectedRecordIDs.isEmpty)
+            let edit = try GameEventCorrection.prepareOffensivePlateAppearanceEdit(
                 recordID: records[1].id,
                 game: game,
                 modelContext: context
             )
-            let preview = try GameEventCorrection.stageDefensivePitchEdit(
-                .ball,
+            let preview = try GameEventCorrection.stageOffensivePlateAppearanceEdit(
+                correctedSecondEvent,
                 in: edit,
                 game: game,
                 modelContext: context
             )
-            let saved = try GameEventCorrection.saveDefensivePitchEdit(
+            let saved = try GameEventCorrection.saveGameEventCorrection(
                 preview,
                 game: game,
                 modelContext: context
             )
-            expectedTimeline = saved.records.map(DurableEventRecordSnapshot.init)
-            expectedState = saved.replay.state
-            expectedBattingLines = saved.battingLines
-            expectedHistory = saved.history
+
+            #expect(saved.records.count == 3)
+            #expect(saved.records.map(\.id) == recordIDs)
+            #expect(saved.records.map(\.sequenceNumber) == [1, 2, 3])
+            #expect(saved.records.map(\.timestamp) == timestamps)
+            #expect(saved.records.map(\.kindRawValue) == Array(
+                repeating: GameEventKind.offensivePlateAppearance.rawValue,
+                count: 3
+            ))
+            #expect(try saved.records.map { try canonicalPayload($0.payload) }
+                == expectedCanonicalPayloads)
+            #expect(try saved.records.map { try $0.decoded().body } == expectedBodies)
+            #expect(saved.replay.rejectedRecordIDs.isEmpty)
+            #expect(saved.replay.state == expectedState)
+            #expect(saved.battingLines == expectedBattingLines)
+            #expect(saved.history.sections.count == 1)
+            #expect(saved.history.sections[0].title == "Top 1")
+            #expect(saved.history.sections[0].entries.map(\.id) == recordIDs)
+            #expect(saved.history.sections[0].entries.map(\.actor) == [
+                "Avery Stone", "Jordan Lee", "Morgan Cruz"
+            ])
+            #expect(saved.history.sections[0].entries.map(\.actorContext) == [
+                "Batting 1 of 10 · #8 · SS",
+                "Batting 2 of 10 · #12 · CF",
+                "Batting 3 of 10 · #4 · C"
+            ])
+            #expect(saved.history.sections[0].entries.map(\.summary) == [
+                "HR · Batter to Home · 1 run · 1 RBI",
+                "1B · Batter to 1B",
+                "HR · Runner 1B to Home · Batter to Home · 2 runs · 2 RBI"
+            ])
+            let savedComponents = saved.history.sections[0].entries.flatMap(\.components)
+            #expect(savedComponents.map(\.recordID) == recordIDs)
+            #expect(savedComponents.map(\.sequenceNumber) == [1, 2, 3])
+
+            let persistedAfterSave = try LiveGameSnapshotLoader.load(
+                game: game,
+                modelContext: ModelContext(container)
+            )
+            #expect(persistedAfterSave.records.map(\.id) == recordIDs)
+            #expect(persistedAfterSave.records.map(\.sequenceNumber) == [1, 2, 3])
+            #expect(persistedAfterSave.records.map(\.timestamp) == timestamps)
+            #expect(persistedAfterSave.records.map(\.kindRawValue) == Array(
+                repeating: GameEventKind.offensivePlateAppearance.rawValue,
+                count: 3
+            ))
+            #expect(try persistedAfterSave.records.map { try canonicalPayload($0.payload) }
+                == expectedCanonicalPayloads)
+            #expect(try persistedAfterSave.records.map { try $0.decoded().body } == expectedBodies)
+            #expect(persistedAfterSave.replay.state == expectedState)
+            #expect(persistedAfterSave.battingLines == expectedBattingLines)
+            #expect(persistedAfterSave.history == saved.history)
+            expectedTimeline = persistedAfterSave.records.map(DurableEventRecordSnapshot.init)
+            expectedHistory = persistedAfterSave.history
         }
 
         let reloadedContainer = try AppModelContainer.make(storeURL: storeURL)
