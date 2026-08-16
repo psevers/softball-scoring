@@ -392,6 +392,7 @@ enum PlayHistoryProjector {
                 inning: pending.inning,
                 half: pending.half,
                 actor: pending.actor,
+                actorContext: pending.actorContext,
                 summary: summary,
                 detail: detail
             ),
@@ -474,6 +475,7 @@ enum PlayHistoryProjector {
                 inning: trace.stateBefore.inning,
                 half: trace.stateBefore.half,
                 actor: actor,
+                actorContext: actorContext,
                 summary: summary,
                 detail: detail
             ),
@@ -690,10 +692,12 @@ enum PlayHistoryProjector {
         inning: Int,
         half: InningHalf,
         actor: String,
+        actorContext: String? = nil,
         summary: String,
         detail: String
     ) -> String {
-        "\(half.displayName) of inning \(inning). \(actor). \(summary). \(detail)."
+        let describedActor = actorContext.map { "\(actor). \($0)" } ?? actor
+        return "\(half.displayName) of inning \(inning). \(describedActor). \(summary). \(detail)."
     }
 
     private static func spokenSigned(_ value: Int) -> String {

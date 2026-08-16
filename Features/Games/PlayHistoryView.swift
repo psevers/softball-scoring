@@ -546,6 +546,7 @@ struct PlayHistoryView: View {
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
                         actorLabel(entry)
+                        actorContextLabel(entry)
                         summaryLabel(entry)
                         detailLabel(entry)
                     }
@@ -553,9 +554,7 @@ struct PlayHistoryView: View {
                     HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.md) {
                         VStack(alignment: .leading, spacing: 2) {
                             actorLabel(entry)
-                            Text(entry.actorContext)
-                                .font(AppTheme.Typography.metadata)
-                                .foregroundStyle(AppTheme.graphite.opacity(0.62))
+                            actorContextLabel(entry)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -580,6 +579,12 @@ struct PlayHistoryView: View {
         Text(entry.actor)
             .font(entry.isProblem ? .headline : AppTheme.Typography.playerName)
             .foregroundStyle(componentColor(entry))
+    }
+
+    private func actorContextLabel(_ entry: PlayHistoryEntry) -> some View {
+        Text(entry.actorContext)
+            .font(AppTheme.Typography.metadata)
+            .foregroundStyle(AppTheme.graphite.opacity(0.62))
     }
 
     private func summaryLabel(_ entry: PlayHistoryEntry) -> some View {

@@ -220,8 +220,10 @@ struct PlayHistoryTests {
 
         #expect(history.sections[0].entries.map(\.actor) == ["Historic Batter", "Historic Batter"])
         #expect(history.sections[0].entries[0].actorContext == "Batting 1 of 10 · #8 · SS")
+        #expect(history.sections[0].entries[0].accessibilityDescription.contains("Batting 1 of 10"))
         #expect(history.sections[0].entries[1].summary == "SB · 1B to 2B")
         #expect(history.sections[0].entries[1].accessibilityDescription.contains("Historic Batter"))
+        #expect(history.sections[0].entries[1].accessibilityDescription.contains("Batting 1 of 10"))
         let editableEvent = history.sections[0].entries[1]
             .components[0].editableOffensiveBaseRunningEvent
         #expect(editableEvent?.runnerID == playerID)

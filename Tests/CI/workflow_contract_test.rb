@@ -19,6 +19,7 @@ class WorkflowContractTest < Minitest::Test
     assert_equal "iOS PR Fast Verification", workflow.fetch("name")
     assert_equal ["pull_request"], triggers.keys.map(&:to_s).sort
     assert_equal "PR Fast Verification", job.fetch("name")
+    assert_operator job.fetch("timeout-minutes"), :>=, 30
     assert_includes job.fetch("steps").map { |step| step["uses"] }.compact, "actions/checkout@v4"
     assert_includes commands, "ruby Tests/CI/workflow_contract_test.rb"
     assert_includes commands, "xcodegen generate"
@@ -42,6 +43,7 @@ class WorkflowContractTest < Minitest::Test
     assert_equal ["push", "workflow_dispatch"], triggers.keys.map(&:to_s).sort
     assert_equal ["main"], triggers.fetch("push").fetch("branches")
     assert_equal "Exhaustive UI Evidence", job.fetch("name")
+    assert_operator job.fetch("timeout-minutes"), :>=, 60
     assert_includes commands, "-only-testing:SoftballScoringUITests"
     refute_includes commands, "-skip-testing:"
     assert_fresh_serial_simulator(job)
