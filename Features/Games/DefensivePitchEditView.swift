@@ -1030,6 +1030,117 @@ struct OffensivePitchEditView: View {
     }
 }
 
+struct UnreadableRecordDeletionView: View {
+    let game: Game
+    let deletionSession: UnreadableRecordDeletionSession
+    let liveSession: LiveGameSession
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @State private var correction = GameEventCorrectionCoordinator()
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Form {
+                    Section("Problem record") {
+                        Text(
+                            "Sequence \(deletionSession.sequenceNumber) · Record "
+                                + deletionSession.recordID.uuidString
+                        )
+                        .font(.body.monospacedDigit())
+                        Text(deletionSession.problemSummary)
+                            .foregroundStyle(AppTheme.destructive)
+                        Text("Saved kind: \(deletionSession.kindRawValue)")
+                            .font(.body.monospaced())
+                        Text(
+                            "Deletion only. The app will not guess or edit meaning that is "
+                                + "missing from this saved event."
+                        )
+                    }
+
+                    if let correctionSession = correction.session {
+                        GameEventCorrectionSections(
+                            correctionSession: correctionSession,
+                            homeAway: HomeAway(rawValue: game.homeAwayRawValue),
+                            allowsProblemRepair: false,
+                            stageChange: { _, _ in }
+                        )
+                    } else if correction.errorMessage == nil {
+                        Section("Candidate replay") {
+                            ProgressView("Replaying complete history…")
+                        }
+                    }
+                }
+
+                Divider()
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    Button("Cancel") { dismiss() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .accessibilityIdentifier("unreadableDelete.cancel")
+
+                    Button("Save") { save() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: AppTheme.TouchTarget.minimum)
+                        .disabled(correction.session?.canSave != true)
+                        .accessibilityIdentifier("unreadableDelete.save")
+                }
+                .padding(.horizontal, AppTheme.Spacing.md)
+                .padding(.vertical, AppTheme.Spacing.sm)
+                .background(.bar)
+            }
+            .navigationTitle("Delete Unreadable Event")
+            .navigationBarTitleDisplayMode(.inline)
+            .task { stage() }
+            .alert("Unreadable Event Deletion Failed", isPresented: Binding(
+                get: { correction.errorMessage != nil },
+                set: { if !$0 { correction.errorMessage = nil } }
+            )) {
+                if correction.requiresReopen {
+                    Button("Return to Play History") {
+                        correction.errorMessage = nil
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("unreadableDelete.reopen")
+                } else {
+                    Button("OK", role: .cancel) { correction.errorMessage = nil }
+                }
+            } message: {
+                Text(
+                    correction.errorMessage
+                        ?? "The unreadable event deletion could not be replayed safely."
+                )
+            }
+        }
+    }
+
+    private func stage() {
+        guard correction.session == nil else { return }
+        do {
+            correction.session = try GameEventCorrection.stageUnreadableRecordDeletion(
+                deletionSession,
+                game: game,
+                modelContext: modelContext
+            )
+        } catch {
+            correction.present(error)
+        }
+    }
+
+    private func save() {
+        if correction.save(
+            liveSession: liveSession,
+            game: game,
+            modelContext: modelContext
+        ) {
+            dismiss()
+        }
+    }
+}
+
 struct OffensivePitchDeletionView: View {
     let game: Game
     let deletionSession: OffensivePitchDeletionSession
@@ -1544,6 +1655,7 @@ private struct GameEventCorrectionSections: View {
     let homeAway: HomeAway?
     let proposedSummary: String?
     let proposedIdentifier: String?
+    let allowsProblemRepair: Bool
     let stageChange: (GameEventCorrectionProblem, GameEventRepairAction) -> Void
 
     init(
@@ -1551,6 +1663,7 @@ private struct GameEventCorrectionSections: View {
         homeAway: HomeAway?,
         proposedSummary: String? = nil,
         proposedIdentifier: String? = nil,
+        allowsProblemRepair: Bool = true,
         stageChange: @escaping (
             GameEventCorrectionProblem,
             GameEventRepairAction
@@ -1560,6 +1673,7 @@ private struct GameEventCorrectionSections: View {
         self.homeAway = homeAway
         self.proposedSummary = proposedSummary
         self.proposedIdentifier = proposedIdentifier
+        self.allowsProblemRepair = allowsProblemRepair
         self.stageChange = stageChange
     }
 
@@ -1614,6 +1728,7 @@ private struct GameEventCorrectionSections: View {
                     .foregroundStyle(AppTheme.destructive)
                 }
                 .accessibilityIdentifier("correction.problem.\(invalid.sequenceNumber)")
+                .disabled(!allowsProblemRepair)
             } else {
                 Label(
                     "Candidate timeline replays cleanly",
@@ -1623,6 +1738,13 @@ private struct GameEventCorrectionSections: View {
         }
 
         Section("Staged changes") {
+            ForEach(correctionSession.stagedProblemRecordDeletions) { deletion in
+                Text(deletion.summary)
+                    .font(.body.monospacedDigit())
+                    .accessibilityIdentifier(
+                        "correction.problemDeletion.\(deletion.sequenceNumber)"
+                    )
+            }
             ForEach(correctionSession.stagedLogicalPlayDeletions) { deletion in
                 Text(deletion.summary)
                     .font(.body.monospacedDigit())

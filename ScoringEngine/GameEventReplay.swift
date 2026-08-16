@@ -8,6 +8,13 @@ enum GameEventReplay {
         case unknownKind
         case malformedPayload
         case semanticallyRejected
+
+        var allowsDeletionOnlyRecovery: Bool {
+            switch self {
+            case .unknownKind, .malformedPayload: true
+            case .invalidSequence, .semanticallyRejected: false
+            }
+        }
     }
 
     struct Entry: Equatable {

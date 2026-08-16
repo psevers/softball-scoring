@@ -154,6 +154,85 @@ final class ScrollReachabilityUITests: XCTestCase {
         XCTAssertTrue(app.buttons["game.history"].isHittable)
     }
 
+    func testLockedHistoryDeletesUnreadableRecordResumesScoringAndPersists() {
+        let app = launchApp(
+            persistentStoreName: "unreadable-history-repair-\(UUID().uuidString)"
+        )
+        app.tabBars.buttons["Games"].tap()
+        let liveGame = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "UI Locked History Opponent")
+        ).firstMatch
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+
+        let scoringLocked = app.descendants(matching: .any)["game.scoringLocked"]
+        XCTAssertTrue(scoringLocked.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["game.history"].isHittable)
+        app.buttons["game.history"].tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        let problem = app.buttons["history.entry.2"]
+        XCTAssertTrue(problem.waitForExistence(timeout: 3))
+        XCTAssertTrue(problem.label.contains("Saved event 2"))
+        XCTAssertTrue(problem.label.contains("Unsupported saved event"))
+        problem.tap()
+
+        let deleteUnreadable = app.buttons["history.deleteUnreadable.2"]
+        XCTAssertTrue(deleteUnreadable.waitForExistence(timeout: 3))
+        XCTAssertEqual(deleteUnreadable.label, "Delete unsupported saved event, sequence 2")
+        XCTAssertGreaterThanOrEqual(deleteUnreadable.frame.height, 44)
+        deleteUnreadable.tap()
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Only this exact record will be staged")
+        ).firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "will not be guessed or edited")
+        ).firstMatch.exists)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["history.entry.2"].exists)
+
+        app.buttons["history.deleteUnreadable.2"].tap()
+        XCTAssertTrue(app.buttons["Preview Deletion"].waitForExistence(timeout: 3))
+        app.buttons["Preview Deletion"].tap()
+
+        XCTAssertTrue(app.navigationBars["Delete Unreadable Event"].waitForExistence(timeout: 3))
+        let form = app.collectionViews.firstMatch
+        XCTAssertTrue(form.waitForExistence(timeout: 3))
+        XCTAssertTrue(swipeWithinUntilHittable(
+            app.staticTexts["Candidate timeline replays cleanly"],
+            in: form
+        ))
+        XCTAssertTrue(app.staticTexts["correction.problemDeletion.2"].exists)
+        let save = app.buttons["unreadableDelete.save"]
+        XCTAssertTrue(save.isEnabled)
+        XCTAssertGreaterThanOrEqual(save.frame.height, 44)
+        save.tap()
+
+        XCTAssertTrue(app.scrollViews["history.page"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["history.entry.2"].exists)
+        XCTAssertTrue(app.buttons["history.entry.1"].exists)
+        app.navigationBars["Play History"].buttons.firstMatch.tap()
+
+        let count = app.staticTexts["game.count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 3))
+        XCTAssertEqual(count.label, "Count 1 and 0")
+        XCTAssertFalse(scoringLocked.exists)
+        let calledStrike = app.buttons["Called Strike"]
+        XCTAssertTrue(scrollUntilHittable(calledStrike, in: app))
+        calledStrike.tap()
+        XCTAssertEqual(count.label, "Count 1 and 1")
+
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Games"].tap()
+        XCTAssertTrue(liveGame.waitForExistence(timeout: 3))
+        liveGame.tap()
+        XCTAssertTrue(count.waitForExistence(timeout: 3))
+        XCTAssertEqual(count.label, "Count 1 and 1")
+        XCTAssertFalse(scoringLocked.exists)
+        XCTAssertTrue(app.buttons["game.history"].isHittable)
+    }
+
     func testPitchCountReconciliationSupportsSignedAdjustmentsUndoAndRelaunch() {
         let app = launchApp(
             persistentStoreName: "pitch-reconciliation-\(UUID().uuidString)"

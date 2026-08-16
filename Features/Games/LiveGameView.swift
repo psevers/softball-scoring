@@ -497,6 +497,7 @@ struct LiveGameView: View {
             message: "Saved game data is unreadable. New scoring is disabled to avoid compounding the problem.",
             systemImage: "exclamationmark.triangle.fill"
         )
+        .accessibilityIdentifier("game.scoringLocked")
     }
 
     private func warningSection(title: String, message: String, systemImage: String) -> some View {

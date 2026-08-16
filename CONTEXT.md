@@ -64,6 +64,10 @@ The main-actor persistence boundary that freshly fetches one game's event record
 
 An in-memory candidate timeline tied to an exact durable record revision. It retains every staged edit or deletion by record identity, replays the complete candidate after each change, identifies the first invalid downstream record, and can save only when the whole timeline and batting projection are clean.
 
+## Unreadable record deletion
+
+A deletion-only recovery for one Play History problem entry whose event kind is unknown or whose payload cannot decode. Confirmation identifies the exact record and explicitly refuses to guess or edit its missing meaning. Staging removes only that record from an in-memory candidate; a valid atomic save preserves every survivor envelope and sequence gap, while any remaining replay or projection rejection keeps Save unavailable.
+
 ## Pitch-count reconciliation
 
 An appended authoritative event that applies signed total, ball, and strike adjustments to one stable pitcher identity. The difference between the total adjustment and its ball-plus-strike adjustments is unclassified. It may carry a related-play reference to one earlier completed defensive plate appearance in the same game. Replay changes only that pitcher's derived totals; the live count and every non-pitch game value remain unchanged.

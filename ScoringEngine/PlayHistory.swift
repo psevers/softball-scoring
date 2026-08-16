@@ -60,6 +60,7 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
     let editableOffensiveBaseRunningEvent: OffensiveBaseRunningEvent?
     let editableOffensivePlateAppearanceResult: OffensivePlateAppearanceResult?
     let editableDefensiveBallInPlayOutcome: BallInPlayOutcome?
+    let allowsUnreadableDeletion: Bool
 
     init(
         recordID: UUID,
@@ -73,7 +74,8 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
         editableOffensivePitchResult: OffensivePitchResult? = nil,
         editableOffensiveBaseRunningEvent: OffensiveBaseRunningEvent? = nil,
         editableOffensivePlateAppearanceResult: OffensivePlateAppearanceResult? = nil,
-        editableDefensiveBallInPlayOutcome: BallInPlayOutcome? = nil
+        editableDefensiveBallInPlayOutcome: BallInPlayOutcome? = nil,
+        allowsUnreadableDeletion: Bool = false
     ) {
         self.recordID = recordID
         self.sequenceNumber = sequenceNumber
@@ -87,6 +89,7 @@ struct PlayHistoryComponent: Identifiable, Equatable, Sendable {
         self.editableOffensiveBaseRunningEvent = editableOffensiveBaseRunningEvent
         self.editableOffensivePlateAppearanceResult = editableOffensivePlateAppearanceResult
         self.editableDefensiveBallInPlayOutcome = editableDefensiveBallInPlayOutcome
+        self.allowsUnreadableDeletion = allowsUnreadableDeletion
     }
 }
 
@@ -424,7 +427,8 @@ enum PlayHistoryProjector {
             summary: summary,
             detail: detail,
             accessibilityDescription: "Problem. \(summary). \(detail).",
-            isPitch: false
+            isPitch: false,
+            allowsUnreadableDeletion: rejection.allowsDeletionOnlyRecovery
         )
         return PlayHistoryEntry(
             id: trace.recordID,

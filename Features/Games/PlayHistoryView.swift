@@ -23,6 +23,8 @@ struct PlayHistoryView: View {
     @State private var logicalPlayDeletionSession: DefensiveLogicalPlayDeletionSession?
     @State private var pendingOffensiveLogicalPlayDeletionSession: OffensiveLogicalPlayDeletionSession?
     @State private var offensiveLogicalPlayDeletionSession: OffensiveLogicalPlayDeletionSession?
+    @State private var pendingUnreadableRecordDeletionSession: UnreadableRecordDeletionSession?
+    @State private var unreadableRecordDeletionSession: UnreadableRecordDeletionSession?
     @State private var pitchCountReconciliationSession: PitchCountReconciliationSession?
 
     var body: some View {
@@ -177,6 +179,25 @@ struct PlayHistoryView: View {
         } message: { deletionSession in
             Text(deletionSession.confirmationDetail)
         }
+        .alert(
+            pendingUnreadableRecordDeletionSession?.confirmationTitle
+                ?? "Delete unreadable event?",
+            isPresented: Binding(
+                get: { pendingUnreadableRecordDeletionSession != nil },
+                set: { if !$0 { pendingUnreadableRecordDeletionSession = nil } }
+            ),
+            presenting: pendingUnreadableRecordDeletionSession
+        ) { deletionSession in
+            Button("Preview Deletion", role: .destructive) {
+                unreadableRecordDeletionSession = deletionSession
+                pendingUnreadableRecordDeletionSession = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingUnreadableRecordDeletionSession = nil
+            }
+        } message: { deletionSession in
+            Text(deletionSession.confirmationDetail)
+        }
     }
 
     private var presentedHistoryPage: some View {
@@ -239,6 +260,13 @@ struct PlayHistoryView: View {
         }
         .sheet(item: $offensiveLogicalPlayDeletionSession) { deletionSession in
             OffensiveLogicalPlayDeletionView(
+                game: game,
+                deletionSession: deletionSession,
+                liveSession: session
+            )
+        }
+        .sheet(item: $unreadableRecordDeletionSession) { deletionSession in
+            UnreadableRecordDeletionView(
                 game: game,
                 deletionSession: deletionSession,
                 liveSession: session
@@ -433,6 +461,23 @@ struct PlayHistoryView: View {
                                 "Edit \(outcome.label) result, sequence \(component.sequenceNumber)"
                             )
                             .accessibilityIdentifier("history.editPlay.\(component.sequenceNumber)")
+                        }
+
+                        if component.allowsUnreadableDeletion {
+                            Button(role: .destructive) {
+                                beginUnreadableRecordDeletion(recordID: component.recordID)
+                            } label: {
+                                Label("Delete Unreadable Event", systemImage: "trash")
+                                    .frame(minHeight: AppTheme.TouchTarget.minimum)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel(
+                                "Delete \(component.summary.lowercased()), sequence "
+                                    + "\(component.sequenceNumber)"
+                            )
+                            .accessibilityIdentifier(
+                                "history.deleteUnreadable.\(component.sequenceNumber)"
+                            )
                         }
                     }
                 }
@@ -685,6 +730,20 @@ struct PlayHistoryView: View {
         do {
             pitchCountReconciliationSession = try GameEventCorrection
                 .preparePitchCountReconciliation(
+                    game: game,
+                    modelContext: modelContext
+                )
+        } catch {
+            session.refresh(game: game, modelContext: modelContext)
+            correctionError = error.localizedDescription
+        }
+    }
+
+    private func beginUnreadableRecordDeletion(recordID: UUID) {
+        do {
+            pendingUnreadableRecordDeletionSession = try GameEventCorrection
+                .prepareUnreadableRecordDeletion(
+                    recordID: recordID,
                     game: game,
                     modelContext: modelContext
                 )
