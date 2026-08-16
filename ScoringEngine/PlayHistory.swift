@@ -428,7 +428,7 @@ enum PlayHistoryProjector {
             detail: detail,
             accessibilityDescription: "Problem. \(summary). \(detail).",
             isPitch: false,
-            allowsUnreadableDeletion: rejection == .unknownKind || rejection == .malformedPayload
+            allowsUnreadableDeletion: rejection.allowsDeletionOnlyRecovery
         )
         return PlayHistoryEntry(
             id: trace.recordID,

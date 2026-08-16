@@ -1063,7 +1063,7 @@ enum GameEventCorrection {
         let snapshot = try LiveGameSnapshotLoader.makeSnapshot(game: game, records: records)
         guard let record = records.first(where: { $0.id == recordID }),
               let entry = snapshot.replay.entries.first(where: { $0.recordID == recordID }),
-              isDeletionOnlyRejection(entry.rejection) else {
+              entry.rejection?.allowsDeletionOnlyRecovery == true else {
             throw GameEventCorrectionError.unreadableRecordNotDeletable
         }
         return UnreadableRecordDeletionSession(
@@ -1098,7 +1098,7 @@ enum GameEventCorrection {
         )
         guard let entry = originalSnapshot.replay.entries.first(where: {
             $0.recordID == deletion.recordID
-        }), isDeletionOnlyRejection(entry.rejection) else {
+        }), entry.rejection?.allowsDeletionOnlyRecovery == true else {
             throw GameEventCorrectionError.unreadableRecordNotDeletable
         }
         let stagedDeletion = ProblemRecordStagedDeletion(
@@ -3684,15 +3684,6 @@ enum GameEventCorrection {
         case .malformedPayload: "Unreadable saved event"
         case .semanticallyRejected: "Play conflicts with the proposed pitch"
         case nil: "Invalid saved event"
-        }
-    }
-
-    private static func isDeletionOnlyRejection(
-        _ rejection: GameEventReplay.Rejection?
-    ) -> Bool {
-        switch rejection {
-        case .unknownKind, .malformedPayload: true
-        case .invalidSequence, .semanticallyRejected, nil: false
         }
     }
 
